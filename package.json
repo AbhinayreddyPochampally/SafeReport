@@ -1,0 +1,55 @@
+{
+  "name": "safereport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workplace safety reporting system for ABFRL — Team Alpha, IIM Mumbai",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:guardrails": "node scripts/lint-guardrails.mjs",
+    "typecheck": "tsc --noEmit",
+    "gen-types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/lib/supabase/types.ts",
+    "gen-vapid": "web-push generate-vapid-keys",
+    "seed:reports": "tsx scripts/generate-dummy-reports.ts",
+    "seed:ho-user": "tsx scripts/create-ho-user.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "framer-motion": "^11.5.4",
+    "jose": "^5.9.3",
+    "lucide-react": "^0.447.0",
+    "next": "14.2.13",
+    "next-pwa": "^5.6.0",
+    "openai": "^4.67.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "resend": "^4.0.0",
+    "tailwind-merge": "^2.5.2",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/web-push": "^3.6.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.13",
+    "postcss": "^8.4.47",
+    "supabase": "^2.6.8",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
