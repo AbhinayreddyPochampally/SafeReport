@@ -227,6 +227,26 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Fire-and-forget notification dispatch. Per-pilot decision the HO
+  // email is audit-only for now; the dispatcher handles that internally.
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    new URL(req.url).origin
+  void fetch(`${origin}/api/notifications/dispatch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event: "resolution_filed",
+      report_id,
+      sap_code: reportRow.store_code,
+    }),
+  }).catch((err) => {
+    console.warn("[api/resolutions] dispatch kickoff failed", {
+      report_id,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  })
+
   return NextResponse.json({
     ok: true,
     resolution_id: inserted.id,

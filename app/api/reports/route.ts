@@ -249,6 +249,49 @@ export async function POST(req: Request) {
     return fail("Could not save the report.", 500)
   }
 
+  // Fire-and-forget: kick off Whisper transcription for the voice note, and
+  // notify the manager(s) assigned to this store. Both are best-effort —
+  // we never block the reporter's confirmation on them, and failures are
+  // logged but don't surface to the reporter.
+  //
+  // We construct absolute URLs off `origin` so these hops survive any
+  // reverse-proxy hosting quirks. If NEXT_PUBLIC_APP_URL is set we prefer
+  // that (handy in production where `req.url` might be http-scheme behind
+  // an https-terminating proxy).
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    new URL(req.url).origin
+
+  if (audio_url) {
+    void fetch(`${origin}/api/transcribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_id: inserted.id }),
+    }).catch((err) => {
+      console.warn("[api/reports] transcribe kickoff failed", {
+        id: inserted.id,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }
+
+  void fetch(`${origin}/api/notifications/dispatch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event: "new_report",
+      report_id: inserted.id,
+      sap_code,
+      category,
+      type,
+    }),
+  }).catch((err) => {
+    console.warn("[api/reports] notification kickoff failed", {
+      id: inserted.id,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  })
+
   return NextResponse.json({ id: inserted.id, status: inserted.status }, { status: 201 })
 }
 

@@ -15,6 +15,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CATEGORIES, type CategoryDef } from "@/lib/categories"
+import { ensurePushSubscription, clearPushSubscription } from "@/lib/push-client"
 
 /**
  * Manager inbox.
@@ -162,6 +163,20 @@ export function ManagerInbox({ store }: { store: Store }) {
     void fetchReports()
   }, [filter, fetchReports])
 
+  // Register the web-push subscription right after the inbox mounts,
+  // which in practice is right after successful PIN unlock (the server
+  // component only hands us this inbox when the cookie is valid).
+  //
+  // `ensurePushSubscription` is defensive — it no-ops if the browser
+  // doesn't support push, permission was previously denied, or the
+  // server has no VAPID keys configured. We fire it once per mount.
+  useEffect(() => {
+    void ensurePushSubscription({
+      role: "manager",
+      sap_code: store.sap_code,
+    })
+  }, [store.sap_code])
+
   // Poll every 30 s while visible; pause while hidden; refetch on return.
   useEffect(() => {
     let timer: number | null = null
@@ -200,6 +215,10 @@ export function ManagerInbox({ store }: { store: Store }) {
   async function signOut() {
     setSigningOut(true)
     try {
+      // Unsubscribe push before we drop the cookie, so the dispatcher
+      // stops buzzing a device that no longer has a session. Best-effort —
+      // never blocks the actual sign-out on it.
+      await clearPushSubscription()
       await fetch("/api/auth/manager", { method: "DELETE" })
       router.refresh()
     } finally {

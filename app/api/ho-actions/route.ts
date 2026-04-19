@@ -197,6 +197,30 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Fire-and-forget notification to the store manager so they see the
+  // outcome on their device within seconds (rather than waiting for the
+  // 30-second inbox poll). Gated by VAPID env on the dispatcher side —
+  // safe to call unconditionally.
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    new URL(req.url).origin
+  const dispatchEvent =
+    action === "approve" ? "approved" : action === "return" ? "returned" : "voided"
+  void fetch(`${origin}/api/notifications/dispatch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event: dispatchEvent,
+      report_id,
+      ho_comment: commentRaw || undefined,
+    }),
+  }).catch((err) => {
+    console.warn("[api/ho-actions] dispatch kickoff failed", {
+      report_id,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  })
+
   return NextResponse.json({
     ok: true,
     report_id,
