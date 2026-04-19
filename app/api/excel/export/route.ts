@@ -386,17 +386,25 @@ export async function GET(req: NextRequest) {
     type: "buffer",
   }) as Buffer
 
+  // Cast to Uint8Array so NextResponse accepts it as a standard BodyInit.
+  // Node Buffer IS a Uint8Array underneath; this is a zero-copy view change.
+  const body = new Uint8Array(
+    buf.buffer,
+    buf.byteOffset,
+    buf.byteLength,
+  )
+
   const stamp = new Date().toISOString().slice(0, 10)
   const fileName = `safereport-${stamp}.xlsx`
 
-  return new NextResponse(buf, {
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${fileName}"`,
       "Cache-Control": "no-store",
-      "Content-Length": String(buf.byteLength),
+      "Content-Length": String(body.byteLength),
     },
   })
 }
