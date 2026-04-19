@@ -381,20 +381,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const buf = XLSX.write(workbook, {
+  // Ask SheetJS for an ArrayBuffer directly — skips the Node Buffer hop so
+  // the stricter TS lib doesn't flag buf.buffer as possibly SharedArrayBuffer.
+  const ab = XLSX.write(workbook, {
     bookType: "xlsx",
-    type: "buffer",
-  }) as Buffer
+    type: "array",
+  }) as ArrayBuffer
 
-  // Wrap in a Blob — NextResponse accepts Blob as BodyInit across all of
-  // the type libs Next 14 ships against, which a raw Buffer / Uint8Array
-  // doesn't satisfy under stricter build-time checks.
-  const body = new Blob(
-    [new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)],
-    {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    },
-  )
+  const body = new Blob([ab], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
 
   const stamp = new Date().toISOString().slice(0, 10)
   const fileName = `safereport-${stamp}.xlsx`
