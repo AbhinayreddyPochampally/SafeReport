@@ -13,7 +13,8 @@
     "gen-types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/lib/supabase/types.ts",
     "gen-vapid": "web-push generate-vapid-keys",
     "seed:reports": "tsx scripts/generate-dummy-reports.ts",
-    "seed:ho-user": "tsx scripts/create-ho-user.ts"
+    "seed:ho-user": "tsx scripts/create-ho-user.ts",
+    "generate-qrs": "tsx scripts/generate-qrs.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -21,12 +22,15 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.4.2",
     "framer-motion": "^11.5.4",
     "jose": "^5.9.3",
     "lucide-react": "^0.447.0",
     "next": "14.2.13",
     "next-pwa": "^5.6.0",
     "openai": "^4.67.0",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
@@ -38,6 +42,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/web-push": "^3.6.3",
