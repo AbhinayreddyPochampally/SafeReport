@@ -85,9 +85,12 @@ export async function ensurePushSubscription(
       if (decision !== "granted") return "permission_denied"
     }
 
+    // Cast to BufferSource — TS lib.dom widens our Uint8Array's buffer to
+    // ArrayBufferLike, which doesn't fit the BufferSource union under
+    // stricter builds. Runtime value is fine; the cast is type-only.
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(public_key),
+      applicationServerKey: urlBase64ToUint8Array(public_key) as BufferSource,
     })
 
     await registerWithServer(subscription, opts)
