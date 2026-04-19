@@ -29,13 +29,20 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
   CREATE TYPE report_status AS ENUM (
-    'new', 'in_progress', 'awaiting_ho', 'returned', 'closed'
+    'new', 'in_progress', 'awaiting_ho', 'returned', 'closed', 'voided'
   );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
+-- For DBs created before the D0 migration, add 'voided' if it's missing.
+-- ALTER TYPE ... ADD VALUE can't run inside a transaction, so this is a
+-- standalone statement rather than a DO block.
+ALTER TYPE report_status ADD VALUE IF NOT EXISTS 'voided' AFTER 'closed';
+
 DO $$ BEGIN
-  CREATE TYPE ho_action_type AS ENUM ('approve', 'return');
+  CREATE TYPE ho_action_type AS ENUM ('approve', 'return', 'void');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+ALTER TYPE ho_action_type ADD VALUE IF NOT EXISTS 'void' AFTER 'return';
 
 DO $$ BEGIN
   CREATE TYPE notif_channel AS ENUM ('push', 'sms', 'email', 'inapp');

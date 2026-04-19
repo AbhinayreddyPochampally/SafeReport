@@ -41,43 +41,43 @@ INSERT INTO stores
 VALUES
   ('PNT-MUM-047','Pantaloons Andheri West','Plot 12, Veera Desai Road','Mumbai','Maharashtra','Pantaloons',
    'Rakesh Mehra','+919820011234',
-   '$2a$10$KIXO8j4mE5HqF7vLW3xYQe8eT4Q6wMZ6ZXJZgYQKr7jE8rV4P0UCy','active','2019-03-15'),
+   '$2a$10$/bAyZyx3QryTw6nld3rKBexmA.8Isfpvek26LpmADh8LK8hChwJg2','active','2019-03-15'),
 
   ('PNT-MUM-112','Pantaloons Powai','Hiranandani Galleria, Central Ave','Mumbai','Maharashtra','Pantaloons',
    'Priya Nair','+919833045611',
-   '$2a$10$pDHZ4sG5mK9aL2nC3qT8euYbPxXk5vJQ7hR0zG1fEdA9uC6iO3NzS','active','2020-07-01'),
+   '$2a$10$.sklKvpEUe7CMVVWglbyXOKaFKQ4KTFoX.6GNN6zkNw/xp5Gp2rZG','active','2020-07-01'),
 
   ('PNT-DEL-023','Pantaloons Karol Bagh','Ajmal Khan Road','Delhi','Delhi','Pantaloons',
    'Vikram Singh','+919810088456',
-   '$2a$10$jKR5yN8wQ1bM4xP7rS2gAueT9iL3cW0vFY6hJ8oDpG5nX4kZ7BsRu','active','2018-11-22'),
+   '$2a$10$O9r1.HfYuOXJftiFGqskNOP7d6ENBP88RDTYne/AjUz0uXNC/Gfba','active','2018-11-22'),
 
   ('PNT-BLR-089','Pantaloons Koramangala','80 Feet Road, 4th Block','Bangalore','Karnataka','Pantaloons',
    'Lakshmi Rao','+919845112233',
-   '$2a$10$WpE7qY3mR9fH8kN4tL5sWu2dB6vC0xZ1aJ7iO5gK8rS3pM9uXvLtC','active','2021-02-14'),
+   '$2a$10$mHEZdzN.QpINQMvn16LsZOy8SieFT6Dr.7RNad.hWZ7i5FKjCGRkW','active','2021-02-14'),
 
   ('ALS-MUM-015','Allen Solly Bandra','Linking Road, Bandra West','Mumbai','Maharashtra','Allen Solly',
    'Ashish Kapoor','+919820055789',
-   '$2a$10$mN4oP2qR7sT9uV3wX5yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV','active','2017-08-10'),
+   '$2a$10$vM78e4BHQX58DQilDdrA.ONEtH4r6gATlXJ2yCYOK19Aot83xo1cC','active','2017-08-10'),
 
   ('ALS-CHN-042','Allen Solly T. Nagar','Panagal Park','Chennai','Tamil Nadu','Allen Solly',
    'Suresh Iyer','+919840033221',
-   '$2a$10$qR7sT9uV3wX5yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV7wX9yZ','active','2019-06-25'),
+   '$2a$10$Nc2mR6LTg33GJl7SyhJxwusbMR/9pYlV9iMacxfAykvUzmTS8RxYi','active','2019-06-25'),
 
   ('VH-DEL-067','Van Heusen Connaught Place','Block A, Connaught Place','Delhi','Delhi','Van Heusen',
    'Deepak Verma','+919811077889',
-   '$2a$10$sT9uV3wX5yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV7wX9yZ1a','active','2016-04-18'),
+   '$2a$10$Cde5Nnw02qCIz13.hhT6..6GUDcw.X4mJChlvqGhBmy73AzRuNSF.','active','2016-04-18'),
 
   ('VH-BLR-031','Van Heusen MG Road','Brigade Gateway','Bangalore','Karnataka','Van Heusen',
    'Kavitha Menon','+919845078923',
-   '$2a$10$uV3wX5yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV7wX9yZ1aB3c','active','2020-10-05'),
+   '$2a$10$iXu4gsSPHvX1R5e8E6m7h.D07lpzAA/Jmrr5DzZwYyVEJYVD/e71u','active','2020-10-05'),
 
   ('PE-CHN-018','Peter England Anna Nagar','Second Avenue, Anna Nagar','Chennai','Tamil Nadu','Peter England',
    'Balaji Subramanian','+919840066554',
-   '$2a$10$wX5yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV7wX9yZ1aB3cD5e','active','2018-02-28'),
+   '$2a$10$/8fWkbIVArgy4xyxKadJPem37L4wP8tj.u3KJX34PdJeqUwRqJLOu','active','2018-02-28'),
 
   ('PE-HYD-052','Peter England Jubilee Hills','Road No. 36, Jubilee Hills','Hyderabad','Telangana','Peter England',
    'Ravi Teja','+919849033445',
-   '$2a$10$yZ1aB8cD6eF0gH2iJ4kL6mN8oP0qR2sT4uV7wX9yZ1aB3cD5eF7g','active','2022-01-12')
+   '$2a$10$8yhLk/zLwDRAk9GcCBBz/eCUpkhJdEJ/pZ/KPse4izWfOLT6gfDX2','active','2022-01-12')
 ON CONFLICT (sap_code) DO NOTHING;
 
 -- =========================
