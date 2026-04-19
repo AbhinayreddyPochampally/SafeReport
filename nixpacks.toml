@@ -3,7 +3,9 @@
 # fall back to a generic Node detector that misses `next build`.
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "npm"]
+# npm ships with nodejs_20 — listing it separately fails because there
+# is no standalone `npm` derivation in nixpkgs.
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = ["npm ci --prefer-offline --no-audit --no-fund"]
