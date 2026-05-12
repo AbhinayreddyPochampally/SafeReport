@@ -7,8 +7,13 @@
 # is no standalone `npm` derivation in nixpkgs.
 nixPkgs = ["nodejs_20"]
 
+# Nixpacks defaults NODE_ENV=production, which makes `npm ci` skip
+# devDependencies — but tailwindcss / postcss / autoprefixer / typescript
+# all live in devDependencies and `next build` needs every one of them.
+# Force dev installs so the build phase has the toolchain. The runtime
+# image stays slim because `next start` only ships the compiled output.
 [phases.install]
-cmds = ["npm ci --prefer-offline --no-audit --no-fund"]
+cmds = ["npm ci --include=dev --prefer-offline --no-audit --no-fund"]
 
 [phases.build]
 cmds = ["npm run build"]
