@@ -314,18 +314,49 @@ async function drawPoster(
 
   // Optional store-name caption above the chip — only if a name was passed
   // in. Helps the printer know which physical store gets which poster.
+  // The standard PDF Helvetica font we embed only covers Latin-1; any
+  // Devanagari/Tamil/Kannada/Telugu glyphs would render as empty boxes
+  // (or pdf-lib would throw, depending on version). We strip non-WinAnsi
+  // characters and truncate to ~70 chars so the line stays inside the
+  // page. If a store name is non-Latin in production, the operator
+  // should add a Latin transliteration in HO before printing.
   if (store.name) {
-    const nameText = store.name
-    const nameSize = 8.5
-    const nameWidth = helv.widthOfTextAtSize(nameText, nameSize)
-    page.drawText(nameText, {
-      x: PAGE_W - MARGIN - nameWidth,
-      y: footerY + 18,
-      size: nameSize,
-      font: helv,
-      color: SLATE_400,
-    })
+    const nameText = sanitizeForHelvetica(store.name).slice(0, 70)
+    if (nameText.length > 0) {
+      const nameSize = 8.5
+      const nameWidth = helv.widthOfTextAtSize(nameText, nameSize)
+      page.drawText(nameText, {
+        x: Math.max(MARGIN, PAGE_W - MARGIN - nameWidth),
+        y: footerY + 18,
+        size: nameSize,
+        font: helv,
+        color: SLATE_400,
+      })
+    }
   }
+}
+
+/**
+ * Strip characters that the standard PDF Helvetica font can't render
+ * (anything outside Latin-1) and replace runs of them with a single
+ * space. Whitespace at the ends is trimmed afterwards. Empty input
+ * returns an empty string so the caller can short-circuit.
+ */
+function sanitizeForHelvetica(text: string): string {
+  let out = ""
+  let lastWasGap = false
+  for (const ch of text) {
+    const code = ch.charCodeAt(0)
+    // ASCII printable + Latin-1 supplement = Helvetica's reliable range.
+    if (code >= 32 && code <= 255 && code !== 127) {
+      out += ch
+      lastWasGap = false
+    } else if (!lastWasGap) {
+      out += " "
+      lastWasGap = true
+    }
+  }
+  return out.trim()
 }
 
 /* ------------------------------- Step tile ------------------------------- */
