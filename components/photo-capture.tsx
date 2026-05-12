@@ -25,6 +25,7 @@
 
 import { Camera, ImageIcon, RefreshCcw } from "lucide-react"
 import { useCallback, useRef, useState } from "react"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 const MAX_EDGE = 1600 // pixels
 const JPEG_QUALITY = 0.8
@@ -37,6 +38,7 @@ type Props = {
 }
 
 export function PhotoCapture({ value, onChange, tone }: Props) {
+  const locale = useReporterLocale()
   const cameraRef = useRef<HTMLInputElement | null>(null)
   const galleryRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
@@ -63,13 +65,13 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
         onChange(compressed)
       } catch (err) {
         console.error("Photo compress failed:", err)
-        setError("Couldn't process that photo — please try again.")
+        setError(t(locale, "photo.error_compress"))
         onChange(null)
       } finally {
         setBusy(false)
       }
     },
-    [onChange, previewUrl],
+    [onChange, previewUrl, locale],
   )
 
   const borderTone =
@@ -121,7 +123,7 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
               className="inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-[12px] font-medium text-slate-900 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
             >
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-              Gallery
+              {t(locale, "photo.gallery_btn")}
             </button>
             <button
               type="button"
@@ -129,7 +131,7 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
               className="inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-[12px] font-medium text-slate-900 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
             >
               <RefreshCcw className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-              Retake
+              {t(locale, "photo.retake")}
             </button>
           </div>
         </div>
@@ -140,7 +142,7 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
             onClick={openCamera}
             disabled={busy}
             className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${borderTone} bg-white transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60`}
-            aria-label="Take a photo with the camera"
+            aria-label={t(locale, "photo.take")}
           >
             <span
               className={`flex h-12 w-12 items-center justify-center rounded-full ${bgTone} ${iconTone}`}
@@ -149,16 +151,18 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
               <Camera className="h-6 w-6" strokeWidth={1.8} />
             </span>
             <span className="text-[13px] font-medium text-slate-900">
-              {busy ? "Processing…" : "Take photo"}
+              {busy ? t(locale, "photo.processing") : t(locale, "photo.take")}
             </span>
-            <span className="text-[11px] text-slate-500">Use camera</span>
+            <span className="text-[11px] text-slate-500">
+              {t(locale, "photo.use_camera")}
+            </span>
           </button>
           <button
             type="button"
             onClick={openGallery}
             disabled={busy}
             className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${borderTone} bg-white transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60`}
-            aria-label="Choose a photo from the gallery"
+            aria-label={t(locale, "photo.from_gallery")}
           >
             <span
               className={`flex h-12 w-12 items-center justify-center rounded-full ${bgTone} ${iconTone}`}
@@ -167,16 +171,18 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
               <ImageIcon className="h-6 w-6" strokeWidth={1.8} />
             </span>
             <span className="text-[13px] font-medium text-slate-900">
-              From gallery
+              {t(locale, "photo.from_gallery")}
             </span>
-            <span className="text-[11px] text-slate-500">Pick existing photo</span>
+            <span className="text-[11px] text-slate-500">
+              {t(locale, "photo.pick_existing")}
+            </span>
           </button>
         </div>
       )}
 
       {!value && (
         <p className="mt-2 text-center text-[11px] text-slate-400">
-          Photo required · JPEG or PNG · up to 10 MB
+          {t(locale, "photo.required_hint")}
         </p>
       )}
 

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { PhotoCapture } from "@/components/photo-capture"
 import { VoiceRecorder } from "@/components/voice-recorder"
-import { CATEGORIES } from "@/lib/categories"
+import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
   readDraft,
@@ -15,6 +15,7 @@ import {
   setDraftPhoto,
   writeDraft,
 } from "@/lib/reporter-state"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 5 — Evidence.
@@ -37,9 +38,10 @@ export default function EvidencePage({
   params: { sap_code: string }
 }) {
   const router = useRouter()
+  const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
   const [tone, setTone] = useState<"slate" | "amber">("slate")
-  const [categoryLabel, setCategoryLabel] = useState("")
+  const [categoryKey, setCategoryKey] = useState("")
 
   const [photo, setPhoto] = useState<Blob | null>(null)
   const [audio, setAudio] = useState<Blob | null>(null)
@@ -69,7 +71,7 @@ export default function EvidencePage({
     const cat = CATEGORIES.find((c) => c.key === draft.category)
     if (cat) {
       setTone(cat.kind === "observation" ? "slate" : "amber")
-      setCategoryLabel(cat.label)
+      setCategoryKey(cat.key)
     }
 
     // Re-hydrate any evidence captured earlier in this tab so a back-forward
@@ -103,14 +105,20 @@ export default function EvidencePage({
 
   const missingCopy = useMemo(() => {
     if (!photo && !hasVoiceOrText) {
-      return "Take a photo and add either a voice note or a short description."
+      return t(locale, "evidence.missing.both")
     }
-    if (!photo) return "A photo is required."
+    if (!photo) return t(locale, "evidence.missing.photo")
     if (!hasVoiceOrText) {
-      return `Add a voice note or type at least ${TEXT_MIN} characters.`
+      return t(locale, "evidence.missing.voicetext")
     }
     return null
-  }, [photo, hasVoiceOrText])
+  }, [photo, hasVoiceOrText, locale])
+
+  // Resolve the category label every render so locale switches re-translate.
+  const categoryLabel = useMemo(() => {
+    const cat = CATEGORIES.find((c) => c.key === categoryKey)
+    return cat ? labelFor(cat, locale) : ""
+  }, [categoryKey, locale])
 
   function onContinue() {
     if (!canContinue) return
@@ -134,10 +142,10 @@ export default function EvidencePage({
           className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Back
+          {t(locale, "common.back")}
         </Link>
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          Step 4 of 4
+          {t(locale, "common.step.4of4")}
         </span>
       </div>
 
@@ -151,16 +159,16 @@ export default function EvidencePage({
         </p>
       )}
       <h1 className="mt-1 font-display text-[28px] font-bold leading-9 text-slate-900">
-        Show us what happened.
+        {t(locale, "evidence.title")}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        A photo plus either a voice note or a short description.
+        {t(locale, "evidence.lede")}
       </p>
 
       {/* Photo — required */}
       <section className="mt-6">
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          Photo
+          {t(locale, "evidence.photo_label")}
         </p>
         <PhotoCapture value={photo} onChange={setPhoto} tone={tone} />
       </section>
@@ -168,7 +176,10 @@ export default function EvidencePage({
       {/* Voice note — optional */}
       <section className="mt-5">
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          Voice note <span className="font-normal normal-case text-slate-400">· optional</span>
+          {t(locale, "evidence.voice_label")}{" "}
+          <span className="font-normal normal-case text-slate-400">
+            · {t(locale, "common.optional")}
+          </span>
         </p>
         <VoiceRecorder value={audio} onChange={setAudio} />
       </section>
@@ -179,22 +190,24 @@ export default function EvidencePage({
           htmlFor="sr-description"
           className="mb-2 block text-[11px] font-bold uppercase tracking-wide text-slate-600"
         >
-          Or type a short description{" "}
-          <span className="font-normal normal-case text-slate-400">· optional</span>
+          {t(locale, "evidence.text_label")}{" "}
+          <span className="font-normal normal-case text-slate-400">
+            · {t(locale, "common.optional")}
+          </span>
         </label>
         <textarea
           id="sr-description"
           rows={4}
           value={text}
           onChange={(e) => setText(e.target.value.slice(0, TEXT_MAX))}
-          placeholder="What did you see or what happened?"
+          placeholder={t(locale, "evidence.text_placeholder")}
           className="block w-full rounded-xl border border-slate-200 bg-white p-3 text-[14px] leading-5 text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/40"
         />
         <div className="mt-1 flex justify-between text-[11px] text-slate-500">
           <span>
             {textTrimmed.length > 0 && !textValid
-              ? `At least ${TEXT_MIN} characters`
-              : "Use this if you can't record audio"}
+              ? t(locale, "evidence.text_min")
+              : t(locale, "evidence.text_helper")}
           </span>
           <span>
             {textTrimmed.length} / {TEXT_MAX}
@@ -209,7 +222,7 @@ export default function EvidencePage({
           disabled={!canContinue}
           className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Continue
+          {t(locale, "common.continue")}
           <ArrowRight className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         </button>
         {missingCopy && (
@@ -218,7 +231,7 @@ export default function EvidencePage({
           </p>
         )}
         <p className="mt-3 text-center text-[11px] uppercase tracking-wide text-slate-400">
-          Anonymous to store manager
+          {t(locale, "common.anonymous_footer")}
         </p>
       </div>
     </main>

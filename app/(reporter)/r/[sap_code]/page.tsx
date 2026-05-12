@@ -2,6 +2,7 @@ import { KeyRound, ShieldCheck, Store } from "lucide-react"
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ReporterForm } from "./reporter-form"
+import { StoreUnavailable } from "./store-unavailable"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 
 export const dynamic = "force-dynamic"
@@ -13,28 +14,6 @@ type StoreRow = {
   city: string
   state: string
   status: "active" | "temporarily_closed" | "permanently_closed"
-}
-
-function StoreUnavailable({ sap_code }: { sap_code: string }) {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-5 px-6 py-16">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-        Store not found
-      </p>
-      <h1 className="font-display text-[28px] font-bold leading-9 text-slate-900">
-        We couldn&apos;t find that store.
-      </h1>
-      <p className="text-[15px] leading-6 text-slate-600">
-        The code <span className="font-mono text-slate-900">{sap_code}</span> is
-        not in the SafeReport registry, or the store is currently inactive. If
-        you believe this is wrong, please show this screen to your manager.
-      </p>
-      <div className="rounded-lg border border-slate-200 bg-white p-4 text-[13px] leading-5 text-slate-600">
-        Tip: the QR poster on your back-of-house notice board has the correct
-        link for your store.
-      </div>
-    </main>
-  )
 }
 
 export default async function ReporterLandingPage({

@@ -23,6 +23,7 @@
 
 import { Mic, Play, Square, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 const MIN_SECONDS = 3
 const MAX_SECONDS = 120
@@ -50,6 +51,7 @@ type Status =
 const PREROLL_MS = 1000
 
 export function VoiceRecorder({ value, onChange }: Props) {
+  const locale = useReporterLocale()
   const [status, setStatus] = useState<Status>(value ? "ready" : "idle")
   const [elapsed, setElapsed] = useState(0) // seconds
   const [bars, setBars] = useState<number[]>(() => new Array(BAR_COUNT).fill(3))
@@ -205,9 +207,7 @@ export function VoiceRecorder({ value, onChange }: Props) {
       setStatus("recording")
     } catch (err) {
       console.error("Mic permission / record failed:", err)
-      setError(
-        "Couldn't access the microphone. Check your browser permissions and try again.",
-      )
+      setError(t(locale, "voice.error_mic"))
       teardownAudioGraph()
       stopStream()
       setStatus("idle")
@@ -260,11 +260,11 @@ export function VoiceRecorder({ value, onChange }: Props) {
           <span className="flex flex-col">
             <span className="text-[15px] font-semibold text-slate-900">
               {status === "requesting"
-                ? "Requesting microphone…"
-                : "Tap to start recording"}
+                ? t(locale, "voice.requesting")
+                : t(locale, "voice.tap_record")}
             </span>
             <span className="text-[12px] text-slate-500">
-              Optional · up to {MAX_SECONDS}s · 1-second pause before recording starts
+              {t(locale, "voice.optional_hint")}
             </span>
           </span>
         </button>
@@ -288,10 +288,10 @@ export function VoiceRecorder({ value, onChange }: Props) {
           </span>
           <div className="flex flex-col">
             <span className="text-[14px] font-semibold text-indigo-900">
-              Get ready…
+              {t(locale, "voice.get_ready")}
             </span>
             <span className="text-[12px] text-indigo-700">
-              Recording starts in a moment.
+              {t(locale, "voice.starts_soon")}
             </span>
           </div>
         </div>
@@ -311,8 +311,8 @@ export function VoiceRecorder({ value, onChange }: Props) {
             type="button"
             onClick={stopRecording}
             disabled={tooShort}
-            aria-label="Stop recording"
-            title={tooShort ? `Keep recording (min ${MIN_SECONDS}s)` : "Stop recording"}
+            aria-label={t(locale, "voice.stop_aria")}
+            title={tooShort ? t(locale, "voice.keep_recording") : t(locale, "voice.stop_aria")}
             className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-md ring-4 ring-orange-100 transition hover:bg-orange-700 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:ring-slate-100 disabled:bg-slate-400"
           >
             <Square className="h-5 w-5" strokeWidth={2} fill="currentColor" />
@@ -322,7 +322,7 @@ export function VoiceRecorder({ value, onChange }: Props) {
           <button
             type="button"
             onClick={togglePlay}
-            aria-label={status === "playing" ? "Pause" : "Play"}
+            aria-label={status === "playing" ? t(locale, "voice.pause") : t(locale, "voice.play")}
             className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
           >
             {status === "playing" ? (
@@ -352,7 +352,7 @@ export function VoiceRecorder({ value, onChange }: Props) {
           </span>
           {status === "recording" && tooShort && (
             <span className="text-[10px] text-slate-500">
-              min {MIN_SECONDS}s
+              {t(locale, "voice.min_label")}
             </span>
           )}
         </div>
@@ -366,7 +366,7 @@ export function VoiceRecorder({ value, onChange }: Props) {
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-slate-600 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-            Discard & re-record
+            {t(locale, "voice.discard")}
           </button>
         </div>
       )}

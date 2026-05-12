@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle2, Mic, Pencil } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { CATEGORIES } from "@/lib/categories"
+import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   clearDraft,
   getDraftBlobs,
@@ -14,6 +14,7 @@ import {
   type ReportDraft,
 } from "@/lib/reporter-state"
 import { submitReport } from "@/lib/report-submit"
+import { t, useReporterLocale, type Locale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 6 — Review + submit.
@@ -24,11 +25,12 @@ import { submitReport } from "@/lib/report-submit"
  * and let the user try again without losing any evidence.
  */
 
-function humanTime(iso: string | undefined): string {
+function humanTime(iso: string | undefined, locale: Locale): string {
   if (!iso) return ""
   try {
     const d = new Date(iso)
-    return d.toLocaleString(undefined, {
+    const bcp = locale === "kn" ? "kn-IN" : "en-IN"
+    return d.toLocaleString(bcp, {
       weekday: "short",
       day: "numeric",
       month: "short",
@@ -46,6 +48,7 @@ export default function ReviewPage({
   params: { sap_code: string }
 }) {
   const router = useRouter()
+  const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
   const [profile, setProfile] = useState<ReporterProfile | null>(null)
   const [draft, setDraft] = useState<ReportDraft | null>(null)
@@ -155,18 +158,18 @@ export default function ReviewPage({
           className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Back
+          {t(locale, "common.back")}
         </Link>
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          Review
+          {t(locale, "common.step.review")}
         </span>
       </div>
 
       <h1 className="mt-6 font-display text-[28px] font-bold leading-9 text-slate-900">
-        One last check.
+        {t(locale, "review.title")}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        If anything&rsquo;s off, tap the edit link next to it.
+        {t(locale, "review.lede")}
       </p>
 
       {/* Summary card */}
@@ -186,13 +189,14 @@ export default function ReviewPage({
             href={`/r/${params.sap_code}/evidence`}
             className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow backdrop-blur hover:bg-white"
           >
-            <Pencil className="h-3 w-3" strokeWidth={1.8} aria-hidden /> Edit
+            <Pencil className="h-3 w-3" strokeWidth={1.8} aria-hidden /> {t(locale, "common.edit")}
           </Link>
         </div>
 
         {/* Category */}
         <Row
-          label="Category"
+          label={t(locale, "review.row.category")}
+          editLabel={t(locale, "common.edit")}
           editHref={`/r/${params.sap_code}/category`}
           body={
             <span
@@ -205,7 +209,7 @@ export default function ReviewPage({
                 strokeWidth={1.8}
                 aria-hidden
               />
-              {category.label}
+              {labelFor(category, locale)}
               {category.acronym ? (
                 <span className="text-slate-400">· {category.acronym}</span>
               ) : null}
@@ -214,24 +218,27 @@ export default function ReviewPage({
         />
 
         <Row
-          label="When"
+          label={t(locale, "review.row.when")}
+          editLabel={t(locale, "common.edit")}
           editHref={`/r/${params.sap_code}/when`}
           body={
             <span className="text-[14px] text-slate-700">
-              {humanTime(draft.event_at)}
+              {humanTime(draft.event_at, locale)}
             </span>
           }
         />
 
         <Row
-          label="What you added"
+          label={t(locale, "review.row.added")}
+          editLabel={t(locale, "common.edit")}
           editHref={`/r/${params.sap_code}/evidence`}
           body={
             <div className="space-y-1 text-[13px] text-slate-700">
               {audio && (
                 <div className="inline-flex items-center gap-2">
                   <Mic className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                  Voice note{audioDurationLabel ? ` · ${audioDurationLabel}` : ""}
+                  {t(locale, "review.row.voicenote")}
+                  {audioDurationLabel ? ` · ${audioDurationLabel}` : ""}
                 </div>
               )}
               {draft.description_text && (
@@ -252,7 +259,8 @@ export default function ReviewPage({
         />
 
         <Row
-          label="You"
+          label={t(locale, "review.row.you")}
+          editLabel={t(locale, "common.edit")}
           editHref={`/r/${params.sap_code}`}
           body={
             <div className="text-[13px] text-slate-700">
@@ -265,7 +273,7 @@ export default function ReviewPage({
       </section>
 
       <p className="mt-3 text-center text-[11px] uppercase tracking-wide text-slate-400">
-        Your name &amp; number go only to Head Office
+        {t(locale, "review.privacy")}
       </p>
 
       {error && (
@@ -290,12 +298,12 @@ export default function ReviewPage({
                 className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
                 aria-hidden
               />
-              Submitting…
+              {t(locale, "review.submitting")}
             </>
           ) : (
             <>
               <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-              Submit report
+              {t(locale, "review.submit")}
             </>
           )}
         </button>
@@ -310,11 +318,13 @@ function Row({
   label,
   body,
   editHref,
+  editLabel,
   isLast,
 }: {
   label: string
   body: React.ReactNode
   editHref: string
+  editLabel: string
   isLast?: boolean
 }) {
   return (
@@ -333,7 +343,7 @@ function Row({
         href={editHref}
         className="shrink-0 text-[12px] font-medium text-indigo-700 hover:text-indigo-900"
       >
-        Edit
+        {editLabel}
       </Link>
     </div>
   )

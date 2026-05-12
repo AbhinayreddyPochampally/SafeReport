@@ -4,8 +4,14 @@ import { ArrowLeft, ChevronRight, type LucideIcon } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { CATEGORIES, type CategoryDef } from "@/lib/categories"
+import {
+  CATEGORIES,
+  blurbFor,
+  labelFor,
+  type CategoryDef,
+} from "@/lib/categories"
 import { readProfile, writeDraft } from "@/lib/reporter-state"
+import { t, useReporterLocale, type Locale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 3 — sub-category.
@@ -20,12 +26,16 @@ import { readProfile, writeDraft } from "@/lib/reporter-state"
 
 function CategoryRow({
   cat,
+  locale,
   onPick,
 }: {
   cat: CategoryDef
+  locale: Locale
   onPick: (c: CategoryDef) => void
 }) {
   const Icon: LucideIcon = cat.icon
+  const label = labelFor(cat, locale)
+  const blurb = blurbFor(cat, locale)
 
   const accentText =
     cat.kind === "observation" ? "text-slate-700" : "text-amber-700"
@@ -42,7 +52,7 @@ function CategoryRow({
     <button
       type="button"
       onClick={() => onPick(cat)}
-      aria-label={cat.label}
+      aria-label={label}
       className={`group flex w-full items-center gap-4 rounded-2xl border ${accentBorder} bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md focus:outline-none focus:ring-4 ${ring}`}
     >
       {/* Icon tile — large, rounded-square, subtle accent background */}
@@ -56,7 +66,7 @@ function CategoryRow({
       {/* Copy stack */}
       <div className="flex-1 min-w-0">
         <p className="font-display text-[17px] font-bold leading-6 text-slate-900">
-          {cat.label}
+          {label}
           {cat.acronym ? (
             <span className="ml-1 font-sans text-[13px] font-medium text-slate-500">
               ({cat.acronym})
@@ -64,7 +74,7 @@ function CategoryRow({
           ) : null}
         </p>
         <p className="mt-0.5 text-[13px] leading-5 text-slate-600">
-          {cat.blurb}
+          {blurb}
         </p>
       </div>
 
@@ -85,6 +95,7 @@ export default function SubCategoryPage({
   params: { sap_code: string; kind: string }
 }) {
   const router = useRouter()
+  const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
 
   if (params.kind !== "observation" && params.kind !== "incident") {
@@ -111,9 +122,14 @@ export default function SubCategoryPage({
     return <main className="min-h-screen bg-slate-50" aria-hidden />
   }
 
-  const kindLabel = kind === "observation" ? "Observation" : "Incident"
+  const kindLabel =
+    kind === "observation"
+      ? t(locale, "subcat.observation.kind")
+      : t(locale, "subcat.incident.kind")
   const headingCopy =
-    kind === "observation" ? "What did you notice?" : "What kind of incident?"
+    kind === "observation"
+      ? t(locale, "subcat.observation.heading")
+      : t(locale, "subcat.incident.heading")
   const accentText =
     kind === "observation" ? "text-slate-600" : "text-amber-700"
 
@@ -125,10 +141,10 @@ export default function SubCategoryPage({
           className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Back
+          {t(locale, "common.back")}
         </Link>
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          Step 2 of 4
+          {t(locale, "common.step.2of4")}
         </span>
       </div>
 
@@ -141,17 +157,17 @@ export default function SubCategoryPage({
         {headingCopy}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        Tap the one that best matches.
+        {t(locale, "subcat.lede")}
       </p>
 
       <section className="mt-6 flex flex-col gap-3">
         {tiles.map((c) => (
-          <CategoryRow key={c.key} cat={c} onPick={onPick} />
+          <CategoryRow key={c.key} cat={c} locale={locale} onPick={onPick} />
         ))}
       </section>
 
       <p className="mt-8 text-center text-[11px] uppercase tracking-wide text-slate-400">
-        Anonymous to store manager
+        {t(locale, "common.anonymous_footer")}
       </p>
     </main>
   )

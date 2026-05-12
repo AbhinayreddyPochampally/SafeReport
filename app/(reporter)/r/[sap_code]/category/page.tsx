@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { readProfile } from "@/lib/reporter-state"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 2 — triage.
@@ -69,6 +70,7 @@ export default function TriagePage({
   params: { sap_code: string }
 }) {
   const router = useRouter()
+  const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
@@ -93,11 +95,11 @@ export default function TriagePage({
           className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Back
+          {t(locale, "common.back")}
         </Link>
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-            Step 1 of 4
+            {t(locale, "common.step.1of4")}
           </span>
           <Link
             href={`/m/${params.sap_code}`}
@@ -111,31 +113,31 @@ export default function TriagePage({
       </div>
 
       <h1 className="mt-6 font-display text-[28px] font-bold leading-9 text-slate-900">
-        What happened?
+        {t(locale, "triage.title")}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        Pick the one that best describes it.
+        {t(locale, "triage.lede")}
       </p>
 
       <div className="mt-6 flex flex-col gap-3">
         <TriageCard
           href={`/r/${params.sap_code}/category/observation`}
           kind="observation"
-          title="Observation"
-          subtitle="I noticed something unsafe — no one was hurt."
+          title={t(locale, "triage.observation.title")}
+          subtitle={t(locale, "triage.observation.subtitle")}
           icon={Eye}
         />
         <TriageCard
           href={`/r/${params.sap_code}/category/incident`}
           kind="incident"
-          title="Incident"
-          subtitle="Someone was hurt, or there was a serious event."
+          title={t(locale, "triage.incident.title")}
+          subtitle={t(locale, "triage.incident.subtitle")}
           icon={TriangleAlert}
         />
       </div>
 
       <p className="mt-8 text-center text-[11px] uppercase tracking-wide text-slate-400">
-        Anonymous to store manager
+        {t(locale, "common.anonymous_footer")}
       </p>
     </main>
   )

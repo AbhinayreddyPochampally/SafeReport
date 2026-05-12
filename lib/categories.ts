@@ -10,6 +10,7 @@ import {
   Ribbon,
 } from "lucide-react"
 import type { ReportCategory } from "./reporter-state"
+import { t, type Locale, type StringKey } from "./reporter-i18n"
 
 export type CategoryKind = "observation" | "incident"
 
@@ -17,12 +18,15 @@ export type CategoryDef = {
   key: ReportCategory
   kind: CategoryKind
   icon: LucideIcon
-  /** Short label, English only (the pilot dropped Hindi/Marathi labels). */
+  /** Short label, English (fallback). For localised label use labelFor(cat, locale). */
   label: string
   /** Optional acronym shown after the label, e.g. "(FAC)". */
   acronym?: string
-  /** One-line description shown below the label. */
+  /** One-line description, English (fallback). For localised blurb use blurbFor(cat, locale). */
   blurb: string
+  /** i18n key bases — `${labelKey}` and `${blurbKey}` resolve via reporter-i18n. */
+  labelKey: StringKey
+  blurbKey: StringKey
 }
 
 // Icon choices track the team's reference imagery:
@@ -45,6 +49,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     icon: PackageOpen,
     label: "Near Miss",
     blurb: "An event with potential for harm, but no injury occurred.",
+    labelKey: "category.near_miss.label",
+    blurbKey: "category.near_miss.blurb",
   },
   {
     key: "unsafe_act",
@@ -52,6 +58,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     icon: HardHat,
     label: "Unsafe Act",
     blurb: "A deviation from safety procedures by an individual.",
+    labelKey: "category.unsafe_act.label",
+    blurbKey: "category.unsafe_act.blurb",
   },
   {
     key: "unsafe_condition",
@@ -59,6 +67,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     icon: AlertTriangle,
     label: "Unsafe Condition",
     blurb: "An environmental hazard that could cause harm.",
+    labelKey: "category.unsafe_condition.label",
+    blurbKey: "category.unsafe_condition.blurb",
   },
   // Incidents — injury occurred (Amber 700 accent)
   {
@@ -68,6 +78,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     label: "First Aid Case",
     acronym: "FAC",
     blurb: "Minor injury, treated on-site.",
+    labelKey: "category.first_aid_case.label",
+    blurbKey: "category.first_aid_case.blurb",
   },
   {
     key: "medical_treatment_case",
@@ -76,6 +88,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     label: "Medical Treatment",
     acronym: "MTC",
     blurb: "Requires professional medical care.",
+    labelKey: "category.medical_treatment_case.label",
+    blurbKey: "category.medical_treatment_case.blurb",
   },
   {
     key: "restricted_work_case",
@@ -84,6 +98,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     label: "Restricted Work",
     acronym: "RWC",
     blurb: "Injury limits work duties.",
+    labelKey: "category.restricted_work_case.label",
+    blurbKey: "category.restricted_work_case.blurb",
   },
   {
     key: "lost_time_injury",
@@ -92,6 +108,8 @@ export const CATEGORIES: readonly CategoryDef[] = [
     label: "Lost Time Injury",
     acronym: "LTI",
     blurb: "Results in days away from work.",
+    labelKey: "category.lost_time_injury.label",
+    blurbKey: "category.lost_time_injury.blurb",
   },
   {
     key: "fatality",
@@ -99,8 +117,20 @@ export const CATEGORIES: readonly CategoryDef[] = [
     icon: Ribbon,
     label: "Fatality",
     blurb: "Resulting in death.",
+    labelKey: "category.fatality.label",
+    blurbKey: "category.fatality.blurb",
   },
 ] as const
+
+/** Localised label for a category. Falls back to English copy. */
+export function labelFor(cat: CategoryDef, locale: Locale): string {
+  return t(locale, cat.labelKey)
+}
+
+/** Localised blurb for a category. Falls back to English copy. */
+export function blurbFor(cat: CategoryDef, locale: Locale): string {
+  return t(locale, cat.blurbKey)
+}
 
 /**
  * Legacy helper retained for any callers still referencing a localised label.

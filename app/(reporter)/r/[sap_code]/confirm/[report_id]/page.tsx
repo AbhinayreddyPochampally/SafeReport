@@ -4,6 +4,7 @@ import { CheckCircle2, Home, Plus } from "lucide-react"
 import Link from "next/link"
 import { useEffect } from "react"
 import { clearDraft } from "@/lib/reporter-state"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 7 — Confirmation.
@@ -18,6 +19,7 @@ export default function ConfirmPage({
 }: {
   params: { sap_code: string; report_id: string }
 }) {
+  const locale = useReporterLocale()
   useEffect(() => {
     clearDraft()
   }, [])
@@ -41,7 +43,7 @@ export default function ConfirmPage({
       </div>
 
       <p className="mt-6 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-        Report received
+        {t(locale, "confirm.eyebrow")}
       </p>
 
       {prettyId ? (
@@ -50,25 +52,22 @@ export default function ConfirmPage({
             {prettyId}
           </h1>
           <p className="mt-3 max-w-sm text-[15px] leading-6 text-slate-700">
-            Thank you. The store manager has been notified and will acknowledge
-            this shortly.
+            {t(locale, "confirm.body.withid")}
           </p>
         </>
       ) : (
         <>
           <h1 className="mt-2 font-display text-[28px] font-bold tracking-tight text-slate-900">
-            Thank you — your report was submitted.
+            {t(locale, "confirm.title.noid")}
           </h1>
           <p className="mt-3 max-w-sm text-[15px] leading-6 text-slate-700">
-            The store manager has been notified and will acknowledge this
-            shortly.
+            {t(locale, "confirm.body")}
           </p>
         </>
       )}
 
       <p className="mt-4 text-[12px] text-slate-500">
-        Your name and phone number are visible only to Head Office, never to
-        the store manager.
+        {t(locale, "confirm.privacy")}
       </p>
 
       <div className="mt-10 flex w-full flex-col gap-3">
@@ -77,14 +76,14 @@ export default function ConfirmPage({
           className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
         >
           <Home className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Close
+          {t(locale, "confirm.close")}
         </Link>
         <Link
           href={`/r/${params.sap_code}/category`}
           className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 text-[14px] font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
         >
           <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Report something else
+          {t(locale, "confirm.again")}
         </Link>
       </div>
     </main>

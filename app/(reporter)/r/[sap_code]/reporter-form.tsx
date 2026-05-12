@@ -129,7 +129,7 @@ export function ReporterForm({ sap_code }: Props) {
       <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
         <div className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
           <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-          Language
+          {t(locale, "landing.language")}
         </div>
         <div
           role="radiogroup"

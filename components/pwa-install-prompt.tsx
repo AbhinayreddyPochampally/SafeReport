@@ -2,6 +2,7 @@
 
 import { Bell, Check, Download, Share2, X } from "lucide-react"
 import { useEffect, useState } from "react"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Persistent PWA-install + notification-permission prompt.
@@ -39,6 +40,7 @@ type BeforeInstallPromptEvent = Event & {
 const SESSION_DISMISS_KEY = "sr_pwa_dismissed_this_session"
 
 export function PwaInstallPrompt() {
+  const locale = useReporterLocale()
   const [notif, setNotif] = useState<NotifState>("unknown")
   const [install, setInstall] = useState<InstallState>("unknown")
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null)
@@ -174,16 +176,16 @@ export function PwaInstallPrompt() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-indigo-700">
-            Set up SafeReport
+            {t(locale, "pwa.eyebrow")}
           </p>
           <h3 className="mt-0.5 font-display text-[16px] font-semibold text-slate-900 leading-tight">
-            Two quick steps so you can report faster next time
+            {t(locale, "pwa.title")}
           </h3>
         </div>
         <button
           type="button"
           onClick={dismissForSession}
-          aria-label="Hide for this session"
+          aria-label={t(locale, "pwa.dismiss_aria")}
           className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <X className="h-4 w-4" aria-hidden />
@@ -196,19 +198,19 @@ export function PwaInstallPrompt() {
           icon={<Bell className="h-4 w-4" strokeWidth={1.8} aria-hidden />}
           title={
             notif === "granted"
-              ? "Notifications allowed"
+              ? t(locale, "pwa.notif.allowed")
               : notif === "denied"
-                ? "Notifications blocked — enable from your browser settings"
-                : "Allow notifications"
+                ? t(locale, "pwa.notif.blocked")
+                : t(locale, "pwa.notif.allow")
           }
           subtitle={
             notif === "granted"
-              ? "We'll ping you when Head Office responds."
+              ? t(locale, "pwa.notif.allowed_sub")
               : notif === "denied"
-                ? "Tap the lock icon in the address bar to re-enable."
-                : "Hear back when Head Office responds."
+                ? t(locale, "pwa.notif.blocked_sub")
+                : t(locale, "pwa.notif.allow_sub")
           }
-          ctaLabel={notif === "denied" ? null : "Allow"}
+          ctaLabel={notif === "denied" ? null : t(locale, "pwa.cta.allow")}
           onCta={requestNotifications}
         />
         <Step
@@ -216,15 +218,15 @@ export function PwaInstallPrompt() {
           icon={<Download className="h-4 w-4" strokeWidth={1.8} aria-hidden />}
           title={
             install === "installed"
-              ? "Added to home screen"
-              : "Add to home screen"
+              ? t(locale, "pwa.install.installed")
+              : t(locale, "pwa.install.installable")
           }
           subtitle={
             install === "installed"
-              ? "Tap the SafeReport icon next time — no need to scan the QR again."
-              : "One tap next time, instead of scanning the QR every time."
+              ? t(locale, "pwa.install.installed_sub")
+              : t(locale, "pwa.install.installable_sub")
           }
-          ctaLabel={install === "installed" ? null : "Add"}
+          ctaLabel={install === "installed" ? null : t(locale, "pwa.cta.install")}
           onCta={triggerInstall}
         />
       </ul>

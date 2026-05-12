@@ -217,19 +217,35 @@ Excel export hung off `/api/excel/export` (one sheet per month).
 
 ---
 
-## Reporter landing — language toggle
+## Reporter localisation — English + Kannada across the flow
 
 The first screen the reporter sees carries an **English / ಕನ್ನಡ** toggle pill.
-Strings live in `lib/reporter-i18n.ts` (small surface — just the landing-form
-copy). Locale persists in `localStorage` as `sr_locale`. Adding a new locale =
-extend `LOCALES` + the `STRINGS` map.
+Strings live in `lib/reporter-i18n.ts` and cover the entire reporter flow,
+not just the landing form: triage, sub-category, when, evidence, review,
+confirm, the store-not-found fallback, plus the shared `PhotoCapture`,
+`VoiceRecorder`, and `PwaInstallPrompt` components. Category labels and
+blurbs are localised too, via `labelFor(cat, locale)` / `blurbFor(cat, locale)`
+in `lib/categories.ts` — `cat.label` still exists as the English fallback so
+non-reporter surfaces (manager inbox, HO console, Excel export) can keep
+reading it directly.
 
-The rest of the reporter flow (voice recorder, wheel picker, evidence) stays in
-English for the pilot — Whisper handles spoken Hindi/Kannada/Tamil/Telugu and the
-icons carry the meaning visually.
+Locale persists in `localStorage` as `sr_locale`. Adding a new locale =
+extend `LOCALES` + the `STRINGS` map (the category `*.label` / `*.blurb`
+keys are part of the same map). The toggle in `reporter-form.tsx` renders
+one button per `LOCALES` entry automatically.
 
-The page sets a `sr:locale` `CustomEvent` on change so any other locale-aware UI
-on the page can react without re-querying localStorage.
+Client components consume locale through the `useReporterLocale()` hook —
+SSR-safe (returns "en" until hydration), then subscribes to the `sr:locale`
+`CustomEvent` so a toggle on the landing re-renders every other locale-aware
+mount on the page. Don't read `localStorage` directly in new screens; use
+the hook.
+
+The wheel-picker preview and the review-screen timestamp call
+`Date.prototype.toLocaleString` with `kn-IN` when locale is Kannada so the
+weekday and month render in Kannada script on browsers that ship that
+locale data (modern Chrome / iOS Safari).
+
+The manager and HO surfaces remain English-only — they're internal tools.
 
 ---
 
