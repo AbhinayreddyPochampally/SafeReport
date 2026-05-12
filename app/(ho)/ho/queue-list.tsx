@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  FileText,
 } from "lucide-react"
 import Link from "next/link"
 import { CATEGORIES } from "@/lib/categories"
@@ -316,6 +315,3 @@ function formatRelative(iso: string): string {
     month: "short",
   })
 }
-
-// Suppress unused — we keep FileText import warm in case the icon is reused.
-void FileText

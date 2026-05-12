@@ -116,20 +116,30 @@ export default async function AllReportsPage({
 
   if (categoryFilter.length > 0) query = query.in("category", categoryFilter)
   if (brandFilter.length > 0) query = query.in("stores.brand", brandFilter)
-  if (from) query = query.gte("reported_at", from)
+  if (from) {
+    // Treat the date input as IST (the reporting locale). A naive
+    // `new Date("2026-05-12")` parses as UTC midnight, which drops the
+    // 00:00–05:30 IST window of that local date. Build the ISO with an
+    // explicit +05:30 offset.
+    const fromIso = istBoundary(from, "00:00:00.000")
+    if (fromIso) query = query.gte("reported_at", fromIso)
+  }
   if (to) {
-    // Inclusive end-of-day for the To date so 2026-05-12 covers the whole day.
-    const end = new Date(to)
-    end.setUTCHours(23, 59, 59, 999)
-    query = query.lte("reported_at", end.toISOString())
+    const toIso = istBoundary(to, "23:59:59.999")
+    if (toIso) query = query.lte("reported_at", toIso)
   }
   if (search) {
-    // SR-IDs match exactly, store codes match prefix, transcripts/descriptions
-    // match contains. We use ilike on multiple columns OR'd together.
-    const s = search.replace(/[%_]/g, "")
-    query = query.or(
-      `id.ilike.%${s}%,store_code.ilike.%${s}%,transcript.ilike.%${s}%,description.ilike.%${s}%`,
-    )
+    // PostgREST's .or() expression is comma-delimited and dot-delimited
+    // (column.op.value). A user search containing any of those characters
+    // — or quotes — would either break the query or rewrite the filter
+    // expression. Reject any unsafe character and the search becomes a
+    // pure literal contains-match on the whitelisted columns.
+    const safe = sanitizeSearch(search)
+    if (safe) {
+      query = query.or(
+        `id.ilike.%${safe}%,store_code.ilike.%${safe}%,transcript.ilike.%${safe}%,description.ilike.%${safe}%`,
+      )
+    }
   }
 
   const { data, count, error } = await query
@@ -226,17 +236,21 @@ async function fetchStatusCounts(
 
   if (categoryFilter.length > 0) q = q.in("category", categoryFilter)
   if (brandFilter.length > 0) q = q.in("stores.brand", brandFilter)
-  if (from) q = q.gte("reported_at", from)
+  if (from) {
+    const fromIso = istBoundary(from, "00:00:00.000")
+    if (fromIso) q = q.gte("reported_at", fromIso)
+  }
   if (to) {
-    const end = new Date(to)
-    end.setUTCHours(23, 59, 59, 999)
-    q = q.lte("reported_at", end.toISOString())
+    const toIso = istBoundary(to, "23:59:59.999")
+    if (toIso) q = q.lte("reported_at", toIso)
   }
   if (search) {
-    const s = search.replace(/[%_]/g, "")
-    q = q.or(
-      `id.ilike.%${s}%,store_code.ilike.%${s}%,transcript.ilike.%${s}%,description.ilike.%${s}%`,
-    )
+    const safe = sanitizeSearch(search)
+    if (safe) {
+      q = q.or(
+        `id.ilike.%${safe}%,store_code.ilike.%${safe}%,transcript.ilike.%${safe}%,description.ilike.%${safe}%`,
+      )
+    }
   }
 
   const { data } = await q
@@ -245,4 +259,48 @@ async function fetchStatusCounts(
     if (s in counts) counts[s] += 1
   }
   return counts
+}
+
+/* ---------------------- Filter sanitization helpers ---------------------- */
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Convert a YYYY-MM-DD URL param into an ISO 8601 timestamp pinned to IST.
+ * Returns null for malformed input so the query simply skips that bound
+ * instead of forwarding garbage to Postgres (which silently 500's the page).
+ */
+function istBoundary(date: string, time: string): string | null {
+  if (!ISO_DATE_RE.test(date)) return null
+  const candidate = `${date}T${time}+05:30`
+  const ms = Date.parse(candidate)
+  if (!Number.isFinite(ms)) return null
+  return new Date(ms).toISOString()
+}
+
+/**
+ * Strip characters that have meaning in PostgREST's `.or()` expression
+ * grammar — `,` separates terms, `.` delimits column.op.value, parentheses
+ * group, and quotes change the parse mode. Also drops `%`/`_` so the
+ * resulting string is a literal contains-match, never a wildcard. Returns
+ * empty string when nothing usable is left.
+ */
+function sanitizeSearch(s: string): string {
+  return s.replace(/[,()."'%_*\\]/g, "").trim()
+}
+}T${time}+05:30`
+  const ms = Date.parse(candidate)
+  if (!Number.isFinite(ms)) return null
+  return new Date(ms).toISOString()
+}
+
+/**
+ * Strip characters that have meaning in PostgREST's `.or()` expression
+ * grammar — `,` separates terms, `.` delimits column.op.value, parentheses
+ * group, and quotes change the parse mode. Also drops `%`/`_` so the
+ * resulting string is a literal contains-match, never a wildcard. Returns
+ * empty string when nothing usable is left.
+ */
+function sanitizeSearch(s: string): string {
+  return s.replace(/[,()."'%_*\\]/g, "").trim()
 }

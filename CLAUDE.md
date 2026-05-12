@@ -1,8 +1,9 @@
 # SafeReport — Build Brief for Claude Code
 
-You are building **SafeReport**, a workplace safety incident reporting system for
-Aditya Birla Fashion & Retail (ABFRL). This file is your project spec and sequencing
-guide. Read it end-to-end before writing code.
+You are maintaining **SafeReport**, a workplace safety incident reporting system for
+Aditya Birla Fashion & Retail (ABFRL). The pilot covers 20 retail stores and goes
+live tomorrow. This file is your single source of truth — read it end-to-end before
+touching the codebase.
 
 Two companion references:
 - `docs/DESIGN.md` — product, screens, flows, data model
@@ -16,13 +17,12 @@ context on why a decision was made.
 
 ## Your working agreement
 
-1. **Execute in phases A → G below.** Stop at the exit criterion of each phase and
-   ask the team to verify before starting the next. Do not silently roll into the next phase.
-2. **No speculative features.** If it's not in this brief or in DESIGN.md, don't build it.
-3. **Verify against live Supabase data, not mocks.** Every exit criterion is "this works
-   against the real DB with the real seed data."
-4. **If a phase overruns its time estimate by 50%, pause and scope-reduce** before continuing.
-5. **Commit at the end of every phase** with message `[Phase X] <summary>`.
+The Phase A → G plan that originally drove this build is now historical (see the
+appendix at the bottom). Day-to-day work is feature/fix-driven: no speculative
+changes, no library swaps, verify against the live Supabase project, ship small.
+
+If you're touching something the doc describes, the doc is law. If you're touching
+something the doc doesn't describe, write the doc *first*.
 
 ---
 
@@ -30,16 +30,19 @@ context on why a decision was made.
 
 - **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui
 - **Fonts:** DM Sans (body) + IBM Plex Sans (display), via `next/font`
-- **Icons:** `lucide-react` only (no custom icons in the pilot)
+- **Icons:** `lucide-react` only
 - **Animation:** `framer-motion` (specifically for the wheel picker)
 - **Database / Auth / Storage:** Supabase (managed Postgres 15)
-- **Voice:** `openai` SDK — `audio.translations.create` endpoint (always English output)
+- **Voice → English:** OpenAI two-stage pipeline — `gpt-4o-transcribe`
+  (with `whisper-1` fallback) for transcription, `gpt-4o-mini` chat for
+  translation. See §Translation pipeline.
 - **Charts:** `recharts`
-- **Excel:** `xlsx` (SheetJS, loaded via CDN in client bundles where needed)
+- **Excel / CSV:** `xlsx` (SheetJS)
+- **PDF (QR posters):** `pdf-lib` + `qrcode`
 - **Web push:** `web-push` + VAPID
 - **Email:** `resend` (free tier for pilot)
-- **SMS:** MSG91 (only for fatality alerts — leave stub until Phase E)
-- **Hosting:** Railway
+- **SMS:** MSG91 (only for fatality alerts — stub until needed)
+- **Hosting:** Railway (Nixpacks, Node 20 — see `nixpacks.toml`)
 - **Source control:** GitHub → `main` branch auto-deploys
 
 ---
@@ -49,35 +52,55 @@ context on why a decision was made.
 ```
 app/
   (reporter)/r/[sap_code]/
-    page.tsx            # screen 1 — landing (name + phone + role)
-    category/page.tsx   # screen 2 — eight-icon grid
-    voice/page.tsx      # screen 3 — voice recorder
-    when/page.tsx       # screen 4 — APPLE WHEEL PICKER (see §Wheel picker spec)
-    photo/page.tsx      # screen 5 — camera capture
-    review/page.tsx     # screen 6 — review + submit
+    page.tsx              # screen 1 — landing (name + phone + locale toggle)
+    category/page.tsx     # screen 2 — observation/incident triage
+    category/[kind]/page.tsx  # screen 3 — sub-category grid
+    when/page.tsx         # screen 4 — APPLE WHEEL PICKER (see §Wheel picker spec)
+    voice/page.tsx        # screen 5a — voice recorder
+    evidence/page.tsx     # screen 5 — photo (required) + voice/text
+    review/page.tsx       # screen 6 — review + submit
     confirm/[report_id]/page.tsx   # confirmation
 
   (manager)/m/[sap_code]/
-    page.tsx            # PIN keypad OR inbox (depending on cookie)
-    r/[report_id]/page.tsx   # report detail + resolution form
+    page.tsx              # phone+password login OR inbox (depending on cookie)
+    r/[report_id]/page.tsx       # report detail
+    r/[report_id]/resolve/page.tsx  # resolution form
 
   (ho)/ho/
-    page.tsx            # landing (cards + approval queue)
-    reports/[report_id]/page.tsx   # HO report detail (approve/return/void)
+    layout.tsx            # 240px left sidebar shell
+    page.tsx              # Overview — summary cards + 2 queues + heatmap
+    all-reports/page.tsx  # Reports tab — filter card + dense table
+    reports/[report_id]/page.tsx  # HO report detail (approve/return/void)
     analytics/page.tsx
-    stores/page.tsx     # store registry (CSV import)
+    stores/page.tsx       # store registry — add/edit/QR/CSV import
+    login/page.tsx
 
   api/
-    reports/route.ts    # POST (new report), returns SR-NNNNNN
-    reports/[id]/route.ts  # GET, PATCH (status transitions)
-    resolutions/route.ts   # POST
-    auth/manager/route.ts  # PIN → signed cookie
-    transcribe/route.ts    # background job, called from reports POST
+    reports/route.ts          # POST (new report), returns SR-NNNNNN
+    reports/[id]/route.ts     # GET, PATCH (status transitions)
+    resolutions/route.ts      # POST
+    auth/manager/route.ts     # phone+password → signed cookie
+    auth/ho/route.ts
+    transcribe/route.ts       # two-stage pipeline, fired from /api/reports
     excel/export/route.ts
-    excel/stores/route.ts
+    excel/stores/route.ts     # CSV upsert with optional prune flag
+    ho-stores/route.ts        # POST/PATCH from the Stores page
+    ho-actions/route.ts       # approve / return / void
+    qr/[sap_code]/route.ts    # single-store A4 poster PDF
+    qr/bulk/route.ts          # multi-page poster PDF
     push/subscribe/route.ts
-    webhooks/notify/route.ts
+    push/vapid-public-key/route.ts
+    notifications/dispatch/route.ts
 ```
+
+---
+
+## Surface viewports
+
+- **Reporter** and **Manager** are phone-only, designed at ~375px. Don't add desktop
+  layouts — the QR posters point straight at a phone.
+- **HO** is desktop-only and frames itself inside a 240px sidebar shell. The console
+  assumes a real screen; mobile is not a goal for the pilot.
 
 ---
 
@@ -100,6 +123,145 @@ VAPID_SUBJECT=mailto:safety@abfrl.example
 SESSION_SECRET=              # 32+ random bytes for manager JWT signing
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
+
+If you see "Invalid API key" on a fresh Supabase project, decode the JWT payload
+before re-pasting — keys with a URL-shaped `iss` or blank `sub`/`aud` are bad copies
+of the dashboard value. The anon key needs `role: "anon"`, the service-role key
+needs `role: "service_role"`.
+
+---
+
+## Manager auth — phone + password
+
+The pilot used to ship a 4-digit PIN keypad. As of migration 002 it's a phone +
+password flow:
+
+- The store row carries `manager_phone` (display + identity) and
+  `manager_password_hash` (bcrypt, cost 10). The legacy `manager_pin_hash` column is
+  dropped at the end of the migration; if you re-add it as a hot-patch, drop it
+  again once the new code is verified live (`ALTER TABLE stores DROP COLUMN IF
+  EXISTS manager_pin_hash;`).
+- `POST /api/auth/manager` takes `{ sap_code, phone, password }`. Phone is
+  normalised to digits-only and we compare on the trailing 10 digits, so `+91 98200
+  11234`, `9820011234`, and `(98200) 11234` all match. Password is 6–128 characters.
+- A legacy `{ pin }` body is rejected with `410 Gone` so old clients surface a
+  clear "update the app" message rather than a generic 400.
+- Three-strikes lockout per SAP code (15-minute TTL) lives in process memory.
+  Adequate for a single-instance pilot; if you ever scale horizontally, move it.
+- Passwords are set by HO from the Stores page (Add store, or Edit → password
+  field at the bottom of the modal). There's no self-service reset in the pilot.
+
+HO auth is unchanged — Supabase Auth email + password, gated by middleware on
+`/ho/*`.
+
+---
+
+## HO console layout
+
+The HO console lives behind a left sidebar (240px, sticky, white-on-slate-50).
+The sidebar is intentionally lean — **Overview, Reports, Analytics, Stores**, and
+nothing else. Counts beside Overview / Reports / Stores are fetched server-side in
+the layout so the sidebar shows live numbers without any client polling. No
+Notifications, no Settings, no Help — those would be empty surfaces in the pilot.
+
+### Overview (`/ho`)
+
+Four summary cards (Reports this month / Awaiting my approval / Closed this month
+/ Returned this month) sitting above two distinct queues:
+
+- **Approval Queue** — sky-accented (`border-l-sky-600`). Status =
+  `awaiting_ho`, oldest-first. This is the action queue; HO is the one who has to
+  do something. Rows that have been waiting > 48h surface an SLA-breach indicator
+  (orange-700 left bar, "SLA breach > 48h · N" header pill).
+- **Reported Queue** — slate-accented (`border-l-slate-400`). Statuses =
+  `new` | `in_progress` | `returned`, newest-first. Read-only awareness; the store
+  manager owns these. Each row carries a status pill so HO can scan what's flowing.
+
+Below the queues sits the 12-month × 8-category heatmap.
+
+### Reports (`/ho/all-reports`)
+
+Comprehensive browser over every report. The filter card carries free-text search,
+a date range, brand and category multi-select chips, and status pills with live
+counts. Filter state is URL-driven (searchParams) so refreshes are stable and
+permalinks work. Pagination is server-side at 50 rows/page; the dense sortable
+table is the body of the screen. Don't ship the whole pilot dataset to the
+browser — keep the server-paged shape.
+
+### Stores (`/ho/stores`)
+
+Searchable, filterable table of the full store roster. Has:
+
+- **Add store** button → modal with SAP code, name, brand, city, state,
+  manager name + phone, and the initial password.
+- **Edit** per row → same modal in edit mode, with the password field at the
+  bottom for resets. Leaving the password blank keeps the existing one.
+- **Per-store QR** download → `GET /api/qr/[sap_code]?download=1`, returns an
+  A4 PDF poster generated in `lib/poster.ts` (the user's "See Something? Say
+  Something" template, navy + orange-600 accent).
+- **Bulk QR download** → `GET /api/qr/bulk?codes=...`, returns one multi-page PDF.
+  When there are stores without a `qr_downloaded_at`, the button defaults to "new
+  only"; otherwise it dumps all stores.
+- **"New" badge** + **"Show new only"** filter for stores whose
+  `qr_downloaded_at` is null. The badge clears once HO downloads the QR.
+- **CSV import** → `POST /api/excel/stores`. Multipart, parsed with SheetJS,
+  upserts by SAP code, hashes plain-text passwords with bcrypt before write.
+  Includes an opt-in **"Treat this CSV as the master list"** prune flag — when
+  set, active stores not in the CSV are marked `permanently_closed`. Reports stay
+  intact for audit.
+
+### Analytics
+
+Recharts dashboards filterable by date range + brand + city + category, with an
+Excel export hung off `/api/excel/export` (one sheet per month).
+
+---
+
+## Reporter landing — language toggle
+
+The first screen the reporter sees carries an **English / ಕನ್ನಡ** toggle pill.
+Strings live in `lib/reporter-i18n.ts` (small surface — just the landing-form
+copy). Locale persists in `localStorage` as `sr_locale`. Adding a new locale =
+extend `LOCALES` + the `STRINGS` map.
+
+The rest of the reporter flow (voice recorder, wheel picker, evidence) stays in
+English for the pilot — Whisper handles spoken Hindi/Kannada/Tamil/Telugu and the
+icons carry the meaning visually.
+
+The page sets a `sr:locale` `CustomEvent` on change so any other locale-aware UI
+on the page can react without re-querying localStorage.
+
+---
+
+## Translation pipeline (v2)
+
+Voice notes go through a two-stage pipeline in `app/api/transcribe/route.ts`:
+
+1. **Stage A — transcribe.** `gpt-4o-transcribe` is the primary model
+   (better recall on Indian languages, especially Kannada/Tamil/Telugu); on error
+   it falls back to `whisper-1`. We pass a domain-aware `prompt` that biases
+   decoding toward retail-floor vocabulary (PPE, mannequin, billing counter,
+   trial room, mezzanine, etc).
+2. **Stage B — translate.** `gpt-4o-mini` chat completion with a system prompt
+   that demands a clean, formal English translation, preserves locations /
+   equipment / times / body parts, and outputs `NO_INTELLIGIBLE_SPEECH` literal
+   for unintelligible audio. Skipped when stage A returns English (we look at
+   the language code and an ASCII-letters heuristic).
+
+Three columns on `reports` carry the result:
+
+- `transcript` — English (translated, or original if English to begin with)
+- `transcript_source` — raw source-language transcript (audit + future
+  re-translation without paying transcription again)
+- `transcript_source_lang` — ISO-639-1 code returned by the transcriber
+- `transcript_error` — populated on failure; the UI surfaces a banner
+
+If Stage B fails but Stage A succeeded, we still persist `transcript_source` so
+HO can read the source language if they happen to speak it. Each stage retries
+3× with exponential backoff; only network and 5xx errors are retried.
+
+The whole call is fired-and-forgotten from `/api/reports` after the row insert so
+the reporter's confirmation screen is instant.
 
 ---
 
@@ -139,12 +301,37 @@ Reference rendering in the PDF, page 18 (`SafeReport_Design_Document_v6.pdf`).
 
 ---
 
+## Photo capture — Android gallery fix
+
+Both the reporter evidence screen and the manager resolution form use the
+`<PhotoCapture>` component in `components/photo-capture.tsx`, which exposes **two
+buttons**: "Take photo" (camera intent, `capture="environment"`) and "From
+gallery" (no capture attr). Splitting into two inputs is deliberate — Android
+WebView treats `capture` as a hint that hides the gallery picker on some OEMs,
+which silently broke the upload path on the first round of pilot testing. Don't
+collapse them back into a single input.
+
+Photos are still compressed client-side to 1600px longest edge, 80% JPEG before
+upload.
+
+---
+
+## HO report detail — side-by-side photo comparison
+
+`/ho/reports/[report_id]` shows the original report photo and the resolution
+proof photo side-by-side on `md+` screens (stacked on mobile). Left card =
+"Reported" (the scene the reporter captured); right card = "Latest fix attempt"
+(the manager's resolution photo). An arrow divider sits between them on wide
+screens. Tap-to-expand works on either card.
+
+---
+
 ## Palette rules (no green, no red)
 
 - **Observations** (near miss / unsafe act / unsafe condition) → **Slate 600** (`#475569`)
 - **Incidents** (all five injury categories) → **Amber 700** (`#B45309`)
 - **Status: NEW** → Slate 600
-- **Status: ACKNOWLEDGED** → Indigo 700 (`#4338CA`)
+- **Status: ACKNOWLEDGED** (`in_progress`) → Indigo 700 (`#4338CA`)
 - **Status: AWAITING HO** → Sky 700 (`#0369A1`)
 - **Status: CLOSED** → Teal 700 (`#0F766E`) — **not green**
 - **Status: RETURNED** → Orange 700 (`#C2410C`) — **not red**
@@ -152,249 +339,254 @@ Reference rendering in the PDF, page 18 (`SafeReport_Design_Document_v6.pdf`).
 - **Body text** → Slate 900
 - **Page background** → Slate 50
 
-Do not use `green-*`, `red-*`, `rose-*`, `crimson-*`, `lime-*`, or `emerald-*` Tailwind utilities
-anywhere in the codebase. Lint against them if possible.
+Do not use `green-*`, `red-*`, `rose-*`, `crimson-*`, `lime-*`, or `emerald-*`
+Tailwind utilities anywhere in the codebase. The QR poster (`lib/poster.ts`) gets
+a one-time exception: it uses orange-600 for the warm headline accent, which is
+palette-compliant.
 
 ---
 
 ## Refresh model (no realtime)
 
-- **Do NOT use Supabase Realtime subscriptions.** No `.channel(...)`, no `.on('postgres_changes', ...)`.
+- **Do NOT use Supabase Realtime subscriptions.** No `.channel(...)`, no
+  `.on('postgres_changes', ...)`.
 - **Manager inbox:** poll every 30 seconds when the tab is visible. Use
   `document.visibilityState === 'visible'` to gate the interval. Stop on unmount.
-- **HO dashboard:** no polling. Fetches fresh on navigation. HO users respond to email/SMS
-  notifications, then open the dashboard on demand.
-- **All pages server-rendered or SSR-ish** so a browser refresh = fresh state.
-- **Notifications are the "something happened" trigger** — not in-app subscriptions. See Phase E.
+- **HO dashboard:** no polling. Every page is `dynamic = "force-dynamic"`, fetches
+  fresh on navigation. HO users respond to email/SMS notifications, then open
+  the dashboard on demand.
+- **Notifications are the "something happened" trigger** — not in-app subscriptions.
 
 ---
 
-# Phases
+## Schema additions you should know about
 
-## Phase A — Scaffold (~2h)
+Beyond `supabase/schema.sql`, two migrations have run:
 
-**Goal:** A blank Next.js app running locally, connected to Supabase, rendering the reporter
-landing page with the store name pulled from the DB.
+- **`002_manager_password.sql`** — adds `stores.manager_password_hash` and
+  `stores.qr_downloaded_at`, drops `stores.manager_pin_hash`. Idempotent.
+- **`003_transcript_source.sql`** — adds `reports.transcript_source` and
+  `reports.transcript_source_lang`. Idempotent.
 
-**Steps:**
-1. `npx create-next-app@14 . --ts --tailwind --app --eslint --no-src-dir`
-2. Install deps:
-   ```
-   npm install @supabase/supabase-js @supabase/ssr openai bcryptjs jose
-   npm install framer-motion lucide-react recharts resend web-push
-   npm install -D @types/bcryptjs @types/web-push
-   npx shadcn@latest init
-   npx shadcn@latest add button card input label badge dialog toast
-   ```
-3. Configure Tailwind with the v6 palette. Open `tailwind.config.ts` and extend with the
-   exact colour tokens from `docs/VISUAL_LANGUAGE.md`.
-4. Set up `next/font` for DM Sans + IBM Plex Sans in `app/fonts.ts`.
-5. Create `lib/supabase/server.ts`, `lib/supabase/client.ts`, `lib/supabase/admin.ts`
-   (service-role client for API routes only, never exposed to browser).
-6. Create `/app/(reporter)/r/[sap_code]/page.tsx` as a server component. Fetch
-   `stores` row by `sap_code`. If inactive or not found, render a 404-style message.
-   Otherwise render: brand name, store name, "Continue" button linking to category screen.
-
-**Exit criterion:** Visit `http://localhost:3000/r/PNT-MUM-047` — page renders store name
-"Pantaloons Phoenix Palladium" (or whatever is in seed) with zero console errors.
+Demo data wipe: `supabase/wipe_demo_data.sql` clears reports, resolutions, HO
+actions, push subscriptions, and notification logs but preserves stores and HO
+users. Run it before a fresh smoke test.
 
 ---
 
-## Phase B — Reporter flow (~5h)
+## Smoke tests
 
-**Goal:** End-to-end submission. A reporter completes all six screens and a row appears in
-`reports` with audio file in storage.
+Two scripts cover the public-facing surface:
 
-**Steps:**
-1. Screen 1: name + phone + role form. Write to `localStorage` under key `sr_reporter_profile`.
-   Skip screen 1 on repeat visits; show "Not you? Switch reporter" link.
-2. Screen 2: 2×4 icon grid. Three Observation tiles in Slate 600, five Incident tiles in
-   Amber 700. Bilingual labels (local language from `navigator.language`, English underneath).
-3. Screen 3: voice recorder. `MediaRecorder` → `audio/webm` blob. Live waveform using
-   `AnalyserNode`. Timer. 3s min / 120s max.
-4. Screen 4: **the wheel picker** — implement per spec above. This is the highest-attention
-   component in the build.
-5. Screen 5: photo. `<input type="file" accept="image/*" capture="environment">`. Compress
-   client-side to 1600px longest edge, 80% JPEG.
-6. Screen 6: review card + "Edit" + "Submit". Multipart POST to `/api/reports` carrying
-   name, phone, role, sap_code, category, audio blob, photo blob (optional), event_at.
-7. `/api/reports` route (service-role client):
-   - Validate SAP code exists + active
-   - Validate category enum
-   - Validate audio ≤ 10MB `audio/*` MIME
-   - Validate photo ≤ 10MB `image/*` MIME (if present)
-   - Validate event_at within last 7 days, not future
-   - Write files to Supabase Storage (`audio` and `photos` buckets)
-   - Insert `reports` row with `status = 'new'`, blank `transcript_en`
-   - Return `report_id`
-8. Confirmation screen: `SR-000042` shown big, "Thank you" copy, "Close" CTA.
+- **`npm run smoke:api`** → `bash scripts/smoke-api.sh`. Hits the public routes
+  (reporter landing, manager login, auth rejection paths, QR auth gate, HO redirect)
+  and asserts none of them 500. Set `SR_BASE_URL` to point at local or Railway.
+- **`npm run smoke:translate`** → `tsx scripts/smoke-translate.ts`. Exercises the
+  two-stage transcription pipeline against a known audio file.
 
-**Exit criterion:** Fill the full flow as a reporter on PNT-MUM-047. A new row appears in
-`reports` table with `report_id` like `SR-000056`, audio file visible in Storage, status `new`.
-Reporter sees the confirmation screen.
-
----
-
-## Phase C — Manager flow (~5h)
-
-**Goal:** Manager logs in with PIN, sees the inbox updating via 30s poll, opens a report,
-acknowledges it, files a resolution.
-
-**Steps:**
-1. `/m/[sap_code]/page.tsx`: check `sr_mgr` cookie. If unset/invalid → render PIN keypad.
-   If valid → render inbox.
-2. `POST /api/auth/manager`: body `{ sap_code, pin }`. Look up `stores.pin_hash`,
-   `bcrypt.compare`, on success issue signed JWT via `jose` with `{ sap_code, iat, exp }`,
-   set as `sr_mgr` cookie (HttpOnly, SameSite=Lax, 7-day).
-3. Three-strikes lockout: track in-memory for pilot (per SAP code, 15-min TTL).
-4. Inbox: scrollable list of report cards sorted by `filed_at DESC`. Filter pills at top.
-   Default filter = "New + Returned".
-5. **Polling:** `useEffect` with `setInterval(fetch, 30_000)`. Gate by `document.visibilityState`.
-   Clear on unmount and on tab blur.
-6. Card shows: SR-ID, category icon + name, status badge, relative timestamp, first 80 chars
-   of transcript, media glyphs (camera if photo, speaker if audio).
-7. `/m/[sap_code]/r/[report_id]/page.tsx`: detail view.
-   - Audio player with speed toggle (1x / 1.5x)
-   - Transcript in Stone 100 card
-   - Photo (tap to expand)
-   - Context: event time, reporter role — **NOT name or phone** (exclude those columns at query time)
-   - CTA depends on status
-8. Resolution form: `what_was_done` (textarea 20–500 chars), `proof_photo` (optional),
-   `action_taken` (radio group, one of five). POST to `/api/resolutions` with `report_id`
-   and `attempt_no` (auto-increment from existing resolutions for this report).
-9. On resolution submit: report status → `awaiting_ho`, redirect to inbox with success toast.
-
-**Exit criterion:** Log in as manager on PNT-MUM-047. Submit a fresh report from another
-browser. Within 30s the new report appears in the manager inbox. Open it, acknowledge,
-file a resolution. Status progresses `new → acknowledged → awaiting_ho`.
-
----
-
-## Phase D — HO dashboard (~5h)
-
-**Goal:** HO user logs in, sees the approval queue, approves and returns resolutions,
-sees analytics charts against real data.
-
-**Steps:**
-1. Set up Supabase Auth. Add email/password. Seed HO demo user via
-   `npm run seed:ho-user` (creates auth user + `ho_users` row with scope = 'national').
-2. `/ho/page.tsx`: four summary cards, approval queue table, category heatmap.
-3. Cards pull from `v_store_metrics` (create this view in Phase A or now — SQL is in
-   `supabase/schema.sql`).
-4. Approval queue: all reports with `status = 'awaiting_ho'` within user scope,
-   oldest first. Clickable rows.
-5. `/ho/reports/[report_id]/page.tsx`: HO detail view. Identical to manager view, plus:
-   - Reporter name + phone visible in Context section
-   - Three CTAs if status = `awaiting_ho`: **Approve**, **Return for rework**, **Void**
-   - Return requires 10–300 char comment
-   - Void requires 20+ char audit reason, irreversible
-6. On Approve: report status → `closed`, insert `ho_actions` row (`action_type = 'approve'`,
-   actor_user_id = auth UUID).
-7. On Return: report status → `returned`, insert `ho_actions` row (`action_type = 'return'`,
-   comment), trigger notification (Phase E).
-8. Analytics page: four charts with Recharts, filterable by date range + brand + city + category.
-9. Store registry page: list all stores with status, editable via modal. CSV import:
-   `POST /api/excel/stores` parses with SheetJS, upserts to `stores`.
-
-**Exit criterion:** Log in as `ho@safereport.demo`. The report from Phase C in `awaiting_ho`
-appears in the approval queue. Approve it — status flips to `closed`, manager sees it on next
-poll. Return a second report — status flips to `returned`, manager sees it with HO comment.
-
----
-
-## Phase E — Whisper + notifications (~3h)
-
-**Goal:** Voice notes become English transcripts in the background. Notifications fire on
-status transitions. NO realtime subscriptions anywhere.
-
-**Steps:**
-1. `/api/transcribe/route.ts`: accepts `{ report_id, audio_path }`. Downloads audio from
-   Supabase Storage, calls `openai.audio.translations.create({ model: 'whisper-1', file: buffer,
-   response_format: 'text' })`, writes result to `reports.transcript_en`.
-2. In `/api/reports` POST, after inserting the row and returning the `report_id`, kick
-   off the transcription in a fire-and-forget fashion (don't block the response). If Whisper
-   errors, log and queue a retry (hourly for 6 hours max).
-3. VAPID key pair: generate once with `npx web-push generate-vapid-keys`. Put in `.env.local`.
-4. Manager push subscription: on first inbox load, prompt for notification permission.
-   On grant, subscribe via Service Worker, `POST /api/push/subscribe` with endpoint + keys.
-   Store in `push_subscriptions` keyed by `sap_code`.
-5. Notification triggers:
-   - New report filed → web push to all manager subscriptions for that SAP code
-   - Resolution awaiting approval → email via Resend to all HO users in scope
-   - Resolution returned → web push + email to manager
-   - Resolution closed → web push to manager
-   - Fatality reported → SMS via MSG91 + email to national HO
-6. All notifications write a row to `notification_log` for audit.
-
-**Exit criterion:** Record a voice note in Hindi on screen 3. Submit. Report confirmation
-appears immediately (no Whisper wait). Within 15 seconds, the manager sees the transcript
-in English. Web push notification fires on the manager's device. Resolution → email arrives
-in the HO inbox.
-
----
-
-## Phase F — Excel I/O (~2h)
-
-**Goal:** HO can download .xlsx of reports and upload CSV of stores.
-
-**Steps:**
-1. `/api/excel/export`: query reports with filters (date range, brand, city, category).
-   Build a workbook with SheetJS — one sheet per month in range. Columns per DESIGN.md §17.
-   Stream back as `.xlsx` attachment.
-2. `/api/excel/stores`: accept multipart CSV upload. Parse with SheetJS.
-   Upsert to `stores` table. Hash plain-text PINs with bcrypt before writing.
-3. HO analytics page: "Download" button that calls `/api/excel/export`.
-4. HO stores page: "Upload CSV" button.
-
-**Exit criterion:** Click Download on analytics. A .xlsx file downloads with the month's
-reports. Open it — columns match DESIGN.md §17. Upload a two-row CSV of test stores.
-Rows appear in the `stores` table with hashed PINs.
-
----
-
-## Phase G — Deploy + smoke test (~2h)
-
-**Goal:** Live at a custom domain. Ten QR posters printed. Ten test reports across the pilot
-stores submitted and resolved.
-
-**Steps:**
-1. Push to GitHub.
-2. Connect Railway to the repo. Configure env vars (copy from `.env.local`, inject VAPID,
-   set `NEXT_PUBLIC_APP_URL` to the Railway preview URL initially).
-3. Set up custom domain via CNAME. Update `NEXT_PUBLIC_APP_URL`.
-4. Run `scripts/generate-qrs.ts` — produces a PDF with ten QR posters, one per pilot SAP code.
-5. Print, laminate. Team distributes to pilot stores.
-6. Smoke test: from ten different devices, scan each QR, submit a report per store.
-   Manager acknowledges, resolves. HO approves (or returns one to test the rework path).
-7. Monitor `notification_log` and Railway logs for errors during the smoke test.
-
-**Exit criterion:** Ten reports filed across ten stores, all resolved through the full flow.
-Zero errors in logs. Public URL works. QR posters ready for distribution.
+Run smoke:api on Windows from Git Bash: `SR_BASE_URL=https://... bash scripts/smoke-api.sh`.
 
 ---
 
 ## Design fidelity — hard rules
 
+These don't change.
+
 - Every status badge is `{icon} {label}` — never colour-only
 - No component imports `green-*` or `red-*` Tailwind classes (grep as a lint check)
-- The wheel picker implements the exact visual spec above — centre row bracket, three columns,
-  five rows visible, the specified opacity gradient
-- No Supabase Realtime subscription anywhere — search for `.channel(` and `.on('postgres_changes'`
-  as a lint check
-- Reporter name and phone NEVER appear in the manager's view of the data — exclude those
-  columns at query time, not at render time
-- All copy uses the exact microcopy from DESIGN.md (the "Your name is visible only to Head Office"
-  line matters — do not paraphrase)
+- The wheel picker implements the exact visual spec above
+- No Supabase Realtime subscription anywhere — search for `.channel(` and
+  `.on('postgres_changes'` as a lint check
+- Reporter name and phone NEVER appear in the manager's view of the data —
+  exclude those columns at query time, not at render time
+- All copy uses the exact microcopy from DESIGN.md (the "Your name is visible only
+  to Head Office" line matters — do not paraphrase)
 
 ---
 
 ## If you get stuck
 
-1. Re-read the relevant section of DESIGN.md
+1. Re-read the relevant section of this brief (it's the source of truth, not the
+   PDF anymore)
 2. Check VISUAL_LANGUAGE.md for tokens
-3. Check the v6 PDF for rationale
-4. Ask the team — do not invent behaviour not specified in this brief
+3. Ask the team — do not invent behaviour not specified here
 
-Good luck. Build the pilot. Don't overbuild.
+---
 
-— Team Alpha, IIM Mumbai · 17 April 2026
+# RUNBOOK — Day 1 ops
+
+This section is tactical. Pilot launches tomorrow. Know where every dial is.
+
+## Deploy to Railway
+
+`main` auto-deploys. To ship a change:
+
+1. Run `npm run lint:guardrails && npx tsc --noEmit` locally. Strict-mode Next
+   build will reject unused imports — the most recent failed deploy was a single
+   stray import in a server component. Don't push to `main` without the typecheck.
+2. `git push origin main`. Watch the Railway dashboard for the new build under
+   the SafeReport service → Deployments. Watch the build log specifically for
+   `next build` — Nixpacks (not Railpack) drives the build per `nixpacks.toml`,
+   which pins Node 20 and explicit `install` / `build` / `start` phases.
+3. Target Port in the Railway service settings must match the `$PORT` Next.js
+   binds to (`npm run start` resolves to `next start -H 0.0.0.0 -p ${PORT:-3000}`).
+   If health checks fail with a connection refused, this is almost always why.
+4. **Roll back** from the Deployments tab → click the last known good build →
+   "Redeploy". Don't try to revert a commit on `main` if you're under time
+   pressure; redeploy is faster.
+
+## Add a store
+
+HO logs in → Stores tab in the sidebar → **Add store** (top right). Fill SAP code
+(uppercase letters/digits/dashes — used in the QR URL), name, brand, city, state,
+manager name, manager phone, and an initial password (6–128 chars). The password
+is required at creation — without one the store can't accept manager logins. The
+modal blocks submission with a clear error if you try.
+
+## Distribute QR posters
+
+HO → Stores → toggle the **"New only"** filter pill (top of the filter bar).
+The button in the page header switches to **"Download N new QRs"**. Click it,
+get a single multi-page PDF (one A4 poster per store), print, distribute. The
+download fires a server-side update to `qr_downloaded_at`, so refreshing the
+page clears the "New" badge on those rows.
+
+For a one-off reprint, use the per-row **QR** button — it streams a single A4
+PDF for that store.
+
+## Reset a manager password
+
+HO → Stores → click **Edit** on the row → scroll to the password panel at the
+bottom of the modal. Enter the new password (6–128 chars). The old password
+stops working immediately on save. Share the new password by phone, not text.
+
+If a store row shows the orange "No password set" warning under the manager
+column, the manager will fail every login attempt until you set one — fix it
+the same way.
+
+## Investigate a failed transcription
+
+A report whose voice note didn't translate will surface a banner in the manager
+and HO detail views. To debug:
+
+1. Look up the row in Supabase: `select id, transcript, transcript_source,
+   transcript_source_lang, transcript_error from reports where id = 'SR-...';`.
+   `transcript_error` carries a one-line reason (audio fetch failed, transcription
+   failed, translation failed, no speech detected, unintelligible).
+2. If `transcript_source` is non-null but `transcript` is null, **Stage B
+   failed** — transcription succeeded, translation didn't. HO can still read the
+   source-language transcript. Re-run is cheap (just translation).
+3. If both are null, **Stage A failed** — check Railway logs for `[transcribe]`
+   warn/error lines. The most common cause is OpenAI rate limiting (status 429)
+   or a malformed audio fetch.
+4. To re-trigger: `POST /api/transcribe` with `{ "report_id": "SR-..." }`. The
+   route is idempotent — it skips if `transcript` is already set.
+
+## Pilot smoke test
+
+From any shell on a clean install:
+
+```
+npm install
+SR_BASE_URL=http://localhost:3000 bash scripts/smoke-api.sh
+SR_BASE_URL=https://safereport.up.railway.app bash scripts/smoke-api.sh
+```
+
+(On Windows, use Git Bash — the inline `SR_BASE_URL=...` env-var syntax doesn't
+work in PowerShell. If you must, set `$env:SR_BASE_URL` first, then call bash.)
+
+`npm run smoke:translate` runs the two-stage pipeline against a fixture; it
+needs `OPENAI_API_KEY`.
+
+## Sandbox cleanup
+
+Once new auth is verified live in production and no client is sending PIN
+payloads:
+
+```sql
+ALTER TABLE stores DROP COLUMN IF EXISTS manager_pin_hash;
+```
+
+The migration already does this on a clean run, but the column was hot-patched
+back in temporarily during the cutover — drop it again once you're sure
+no rollback is on the table.
+
+## Incident response checklist
+
+If the manager inbox isn't updating during the smoke test:
+
+1. The polling interval is **30s**, gated by tab visibility. Confirm the tab is
+   foregrounded.
+2. Confirm the report is for the SAP code the manager is logged into — the
+   URL prefix is `/m/[sap_code]`.
+3. Inspect the network tab for the GET to the inbox API — a 401 means the
+   `sr_mgr` cookie has expired (7-day TTL) and the manager needs to sign in
+   again.
+
+If a reporter QR scan lands on "Store not found":
+
+1. The SAP code in the URL is wrong, the store row is `permanently_closed`, or
+   the store row was never created.
+2. HO → Stores → search for the SAP code. If absent, add it. If closed, edit
+   to active.
+
+If web push isn't firing on the manager device:
+
+1. iOS Safari requires the app to be installed to the home screen before push
+   permission works. Chrome/Android works without that.
+2. Check `push_subscriptions` for the SAP code.
+3. Check `notification_log` for the dispatch attempt and any error.
+
+---
+
+# Appendix — How we got here (historical)
+
+The original phased plan that drove the build is preserved below for reference.
+All seven phases are complete and the exit criteria have shifted (e.g. Phase C
+now reflects phone+password, not PIN; Phase D now reflects the sidebar console
+and the two-queue Overview). Treat this as a build log, not as instructions.
+
+## Phase A — Scaffold (~2h)
+
+Blank Next.js app, Supabase wired, reporter landing renders the store name from
+the DB. Created `app/(reporter)/r/[sap_code]/page.tsx`, the three Supabase
+client wrappers, Tailwind palette, and the `next/font` setup.
+
+## Phase B — Reporter flow (~5h)
+
+End-to-end submission. Six screens (later restructured into landing → triage →
+sub-category → wheel → evidence → review), `/api/reports` POST writing to
+Storage and inserting a `reports` row with a fresh `SR-NNNNNN` id.
+
+## Phase C — Manager flow (~5h)
+
+PIN keypad → inbox with 30s visibility-gated polling → report detail → resolution
+form. Note: PIN auth has since been replaced by phone+password (migration 002);
+the keypad component is gone.
+
+## Phase D — HO dashboard (~5h)
+
+Originally shipped with a top nav (Overview / Analytics / Stores) and a single
+"Active reports" panel on Overview. Now: 240px left sidebar (Overview / Reports
+/ Analytics / Stores), two queues on Overview (Approval + Reported), full
+Reports tab with URL-driven filters and server-paged 50/page table.
+
+## Phase E — Whisper + notifications (~3h)
+
+Whisper-1 single-stage translation. Now upgraded to the two-stage pipeline
+described in §Translation pipeline (gpt-4o-transcribe + gpt-4o-mini), and
+migration 003 added `transcript_source` + `transcript_source_lang`.
+
+## Phase F — Excel I/O (~2h)
+
+`/api/excel/export` (one sheet per month) and `/api/excel/stores` (CSV upsert
+with the optional prune flag for treating the CSV as the master list).
+
+## Phase G — Deploy + smoke test (~2h)
+
+Live on Railway, custom domain, QR posters via `lib/poster.ts` rendered into
+the user's "See Something? Say Something" template (single via
+`/api/qr/[sap_code]`, bulk via `/api/qr/bulk`). Smoke tests automated as
+`npm run smoke:api` and `npm run smoke:translate`.
+
+— Team Alpha, IIM Mumbai · 17 April 2026 (original) · 12 May 2026 (this revision)

@@ -126,9 +126,20 @@ export async function POST(req: Request) {
     !phoneMatches
   ) {
     // Deliberately generic to avoid confirming which SAP codes / phone
-    // numbers exist on file.
+    // numbers exist on file. Same lockout-aware response shape as the
+    // bcrypt-fail branch below so a brute-forcer hitting unknown SAP
+    // codes also gets a 429 once they trip the threshold.
     const remaining = recordFailedAttempt(sap_code)
-    return fail("Invalid phone or password.", 401, remaining)
+    if (remaining.lockedForMs > 0) {
+      return fail(
+        "Too many attempts. Try again later.",
+        429,
+        { locked_for_ms: remaining.lockedForMs },
+      )
+    }
+    return fail("Invalid phone or password.", 401, {
+      attempts_left: remaining.attemptsLeft,
+    })
   }
 
   const ok = await bcrypt.compare(password, store.manager_password_hash)
