@@ -77,7 +77,13 @@ export function ResolveForm({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  // Two inputs so the manager can explicitly pick camera or gallery on Android.
+  // On Android Chrome, a single input with `accept="image/*"` and no `capture`
+  // attr is supposed to show both options, but several OEM browsers (MIUI,
+  // Samsung Internet on older builds) silently jump straight to the camera.
+  // Splitting into two buttons makes the gallery path always reachable.
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement | null>(null)
 
   const cat = CATEGORIES.find((c) => c.key === report.category)
   const attemptNumber = priorAttempts.length + 1
@@ -120,7 +126,8 @@ export function ResolveForm({
 
   function clearPhoto() {
     setPhoto(null)
-    if (photoInputRef.current) photoInputRef.current.value = ""
+    if (cameraInputRef.current) cameraInputRef.current.value = ""
+    if (galleryInputRef.current) galleryInputRef.current.value = ""
   }
 
   async function submit(e: React.FormEvent) {
@@ -289,28 +296,53 @@ export function ResolveForm({
               </div>
             </div>
           ) : (
-            <label
-              htmlFor="resolve-photo"
-              className="mt-2 flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white text-slate-500 transition hover:border-indigo-500 hover:text-indigo-700 focus-within:border-indigo-500 focus-within:text-indigo-700"
-            >
-              <Camera className="h-9 w-9" strokeWidth={1.6} aria-hidden />
-              <span className="mt-2 text-[13px] font-medium">
-                Tap to take a photo
-              </span>
-              <span className="mt-0.5 text-[11px] text-slate-400">
-                JPEG or PNG · up to 10 MB
-              </span>
-            </label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white text-slate-500 transition hover:border-indigo-500 hover:text-indigo-700 focus:border-indigo-500 focus:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/30"
+              >
+                <Camera className="h-8 w-8" strokeWidth={1.6} aria-hidden />
+                <span className="mt-2 text-[13px] font-medium">Take photo</span>
+                <span className="mt-0.5 text-[11px] text-slate-400">
+                  Use camera
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white text-slate-500 transition hover:border-indigo-500 hover:text-indigo-700 focus:border-indigo-500 focus:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/30"
+              >
+                <ImageIcon className="h-8 w-8" strokeWidth={1.6} aria-hidden />
+                <span className="mt-2 text-[13px] font-medium">From gallery</span>
+                <span className="mt-0.5 text-[11px] text-slate-400">
+                  Pick existing photo
+                </span>
+              </button>
+            </div>
           )}
+          {/* Camera input — `capture` hint forces the camera intent on mobile. */}
           <input
-            ref={photoInputRef}
-            id="resolve-photo"
+            ref={cameraInputRef}
+            id="resolve-photo-camera"
             type="file"
             accept="image/*"
             capture="environment"
             onChange={onPickPhoto}
             className="sr-only"
           />
+          {/* Gallery input — no `capture` so the picker shows the photo library. */}
+          <input
+            ref={galleryInputRef}
+            id="resolve-photo-gallery"
+            type="file"
+            accept="image/*"
+            onChange={onPickPhoto}
+            className="sr-only"
+          />
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            JPEG or PNG · up to 10 MB
+          </p>
         </div>
 
         {/* Note */}

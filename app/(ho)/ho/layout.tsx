@@ -1,18 +1,24 @@
 import Link from "next/link"
 import { Shield } from "lucide-react"
 import { getHoSession } from "@/lib/ho-auth"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { HoSignOutButton } from "./sign-out-button"
+import { SidebarNav, type SidebarCounts } from "./sidebar-nav"
 
 /**
  * Layout for every /ho/* route.
  *
- * We only render the HO chrome (nav + sign-out) when there IS a session. On
- * /ho/login there's no session so we render `children` bare — that's what
- * gives the login page its full-bleed look.
+ * Renders a left sidebar (240px) with brand, pilot context block, primary
+ * nav, and the user/sign-out block at the bottom. Main content fills the
+ * rest of the viewport.
  *
- * Middleware already blocks unauthenticated access to non-login /ho routes,
- * and each page calls `requireHoSession()` itself. So the "no session" case
- * here really only covers /ho/login.
+ * Per-tab counts (Overview = awaiting HO, Reports = open total, Stores =
+ * total active) are fetched server-side once per page load so the sidebar
+ * shows live numbers without any client polling.
+ *
+ * Middleware blocks unauthenticated access to non-login /ho routes, and
+ * each page calls `requireHoSession()` itself. The "no session" branch
+ * here only matters for /ho/login, which intentionally renders bare.
  */
 export default async function HoLayout({
   children,
@@ -24,58 +30,111 @@ export default async function HoLayout({
     return <>{children}</>
   }
 
+  const counts = await fetchSidebarCounts()
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/ho"
-              className="flex items-center gap-2 text-slate-900 font-semibold tracking-tight"
-            >
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-indigo-700 text-white">
-                <Shield className="h-4 w-4" />
-              </span>
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* ----------------------------- Sidebar ----------------------------- */}
+      <aside className="w-[240px] shrink-0 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+        {/* Brand */}
+        <Link
+          href="/ho"
+          className="flex items-center gap-2.5 px-5 pt-5 pb-4 text-slate-900 hover:opacity-90"
+        >
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-indigo-700 text-white">
+            <Shield className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="font-display text-[15px] font-semibold tracking-tight">
               SafeReport
-            </Link>
-            <nav className="hidden md:flex items-center gap-1 text-sm">
-              <NavLink href="/ho">Overview</NavLink>
-              <NavLink href="/ho/analytics">Analytics</NavLink>
-              <NavLink href="/ho/stores">Stores</NavLink>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex flex-col items-end leading-tight">
-              <span className="text-sm text-slate-900 font-medium">
+            </span>
+            <span className="text-[10.5px] text-slate-500">
+              Head Office Console
+            </span>
+          </span>
+        </Link>
+
+        {/* Pilot context block */}
+        <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+          <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Pilot · ABFRL
+          </p>
+          <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-900">
+            {counts.stores ?? 0} retail stores
+          </p>
+          <p className="text-[10.5px] text-slate-500">In production</p>
+        </div>
+
+        {/* Primary nav (active state via client component) */}
+        <SidebarNav counts={counts} />
+
+        {/* Spacer pushes the user block to the bottom */}
+        <div className="flex-1" />
+
+        {/* User block */}
+        <div className="border-t border-slate-200 px-3 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-[12px] font-semibold text-slate-700">
+              {initials(session.display_name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-slate-900 truncate">
                 {session.display_name}
-              </span>
-              <span className="text-xs text-slate-500">
+              </p>
+              <p className="text-[11px] text-slate-500 truncate">
                 {session.email ?? formatRole(session.role)}
-              </span>
+              </p>
             </div>
             <HoSignOutButton />
           </div>
         </div>
-      </header>
-      <main>{children}</main>
+      </aside>
+
+      {/* ------------------------------ Main ------------------------------ */}
+      <main className="flex-1 min-w-0">{children}</main>
     </div>
   )
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="px-3 py-1.5 rounded-md text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-    >
-      {children}
-    </Link>
-  )
+/* --------------------------- Sidebar counts ------------------------------ */
+
+async function fetchSidebarCounts(): Promise<SidebarCounts> {
+  try {
+    const admin = createSupabaseAdminClient()
+    const [awaitingHo, openTotal, activeStores] = await Promise.all([
+      admin
+        .from("reports")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "awaiting_ho"),
+      admin
+        .from("reports")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["new", "in_progress", "awaiting_ho", "returned"]),
+      admin
+        .from("stores")
+        .select("sap_code", { count: "exact", head: true })
+        .eq("status", "active"),
+    ])
+    return {
+      overview: awaitingHo.count ?? 0,
+      reports: openTotal.count ?? 0,
+      stores: activeStores.count ?? 0,
+    }
+  } catch (err) {
+    // Sidebar counts are decorative — never block layout render on a DB hiccup.
+    console.error("[ho/layout] sidebar counts failed", err)
+    return {}
+  }
+}
+
+/* ------------------------------- Helpers --------------------------------- */
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2)
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "·"
 }
 
 function formatRole(role: string): string {
-  // Convert "safety_officer" -> "Safety officer" etc., without bringing in a
-  // helper lib for a single use.
   return role
     .split("_")
     .map((s, i) => (i === 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s))

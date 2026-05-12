@@ -7,14 +7,14 @@ import { ManagerInbox } from "./manager-inbox"
 /**
  * Manager landing — /m/[sap_code].
  *
- * Server component: decides on the server whether to render the PIN keypad
+ * Server component: decides on the server whether to render the login form
  * or the inbox, so a protected payload never ships to a logged-out browser.
  * The signed-in case hands off to <ManagerInbox /> (client) which polls
  * `/api/reports?sap_code=...` every 30 s.
  *
- * A store that doesn't exist, isn't active, or has no PIN hash on file is
- * treated as 404 — deliberately indistinguishable from a typo, so we're not
- * leaking store scaffolding through error copy.
+ * A store that doesn't exist, isn't active, or hasn't been provisioned with
+ * a manager password is treated as 404 — deliberately indistinguishable from
+ * a typo so we're not leaking store scaffolding through error copy.
  */
 
 type StoreHeader = {
@@ -24,7 +24,7 @@ type StoreHeader = {
   city: string
   state: string
   status: string
-  has_pin: boolean
+  has_password: boolean
 }
 
 async function loadStore(sap_code: string): Promise<StoreHeader | null> {
@@ -32,7 +32,7 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
   const { data, error } = await admin
     .from("stores")
     .select(
-      "sap_code, name, brand, city, state, status, manager_pin_hash",
+      "sap_code, name, brand, city, state, status, manager_password_hash",
     )
     .eq("sap_code", sap_code)
     .maybeSingle<{
@@ -42,7 +42,7 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
       city: string
       state: string
       status: string
-      manager_pin_hash: string | null
+      manager_password_hash: string | null
     }>()
   if (error) {
     console.error("[/m/sap_code] store lookup failed", error)
@@ -56,7 +56,7 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
     city: data.city,
     state: data.state,
     status: data.status,
-    has_pin: Boolean(data.manager_pin_hash),
+    has_password: Boolean(data.manager_password_hash),
   }
 }
 
@@ -66,7 +66,7 @@ export default async function ManagerLandingPage({
   params: { sap_code: string }
 }) {
   const store = await loadStore(params.sap_code)
-  if (!store || store.status !== "active" || !store.has_pin) {
+  if (!store || store.status !== "active" || !store.has_password) {
     notFound()
   }
 

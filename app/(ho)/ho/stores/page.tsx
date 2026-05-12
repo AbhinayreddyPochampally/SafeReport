@@ -9,11 +9,12 @@ export const dynamic = "force-dynamic"
  *
  * Server component: guards the session, loads the full store roster with
  * a per-store report count, and hands it off to the client for table
- * interaction (search, filter chips, edit modal, CSV import).
+ * interaction (search, filter chips, inline edit, add store, CSV import,
+ * QR code download).
  *
- * We include `manager_pin_hash` presence (boolean) so the UI can flag
- * stores without a PIN — a common pilot gotcha — without exposing the
- * hash itself to the client.
+ * Surfaces `has_password` and `qr_downloaded_at` so the client can flag
+ * stores without a manager password (cannot accept logins) and stores
+ * whose QR poster hasn't been distributed yet.
  */
 
 type StoresRow = {
@@ -25,9 +26,11 @@ type StoresRow = {
   location: string | null
   manager_name: string | null
   manager_phone: string | null
-  manager_pin_hash: string | null
+  manager_password_hash: string | null
   status: "active" | "temporarily_closed" | "permanently_closed"
   opening_date: string | null
+  qr_downloaded_at: string | null
+  created_at: string | null
 }
 
 export default async function HoStoresPage() {
@@ -42,7 +45,7 @@ export default async function HoStoresPage() {
     admin
       .from("stores")
       .select(
-        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_pin_hash, status, opening_date",
+        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_password_hash, status, opening_date, qr_downloaded_at, created_at",
       )
       .order("brand", { ascending: true })
       .order("city", { ascending: true })
@@ -81,10 +84,12 @@ export default async function HoStoresPage() {
       location: s.location,
       manager_name: s.manager_name,
       manager_phone: s.manager_phone,
-      has_pin: Boolean(s.manager_pin_hash),
+      has_password: Boolean(s.manager_password_hash),
       status: s.status,
       opening_date: s.opening_date,
       report_count: countByStore.get(s.sap_code) ?? 0,
+      qr_downloaded_at: s.qr_downloaded_at,
+      created_at: s.created_at,
     }),
   )
 

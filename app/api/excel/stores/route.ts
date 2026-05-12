@@ -7,26 +7,37 @@ import { getHoSession } from "@/lib/ho-auth"
 /**
  * POST /api/excel/stores — CSV import for the store registry.
  *
- * Accepts multipart/form-data with a single field named `file`. Expects a
- * CSV whose header row is a permutation/subset of:
+ * Accepts multipart/form-data with a single field named `file`, plus an
+ * optional `prune=1` form field. Expects a CSV whose header row is a
+ * permutation/subset of:
  *
  *   sap_code, name, brand, city, state, location,
- *   manager_name, manager_phone, pin, status
+ *   manager_name, manager_phone, password, status
  *
  * `sap_code` is the primary key and must be present. Rows upsert by it.
- * Plain-text PINs are bcrypted before any DB write. Rows that fail
+ * Plain-text passwords are bcrypted before any DB write. Rows that fail
  * per-row validation are reported back in `errors[]` alongside the counts.
  *
- * We deliberately roll a minimal CSV parser here instead of adding
- * SheetJS — the input is small (≤ a few thousand rows) and the sandbox's
- * CDN allowlist has bitten us on external bundles before. SheetJS lands
- * in Phase F where we need .xlsx writing.
+ * Prune mode: when `prune=1`, any active store NOT in the CSV is marked
+ * `permanently_closed` (it stays in the DB for audit trail; reports stay
+ * intact). This implements the "remove closed store from the list (if not
+ * present in the master remove)" requirement without losing history.
+ *
+ * We deliberately roll a minimal CSV parser here instead of adding SheetJS
+ * — the input is small (≤ a few thousand rows) and the sandbox's CDN
+ * allowlist has bitten us on external bundles before. SheetJS lands in
+ * Phase F where we need .xlsx writing.
  */
 
 const STATUSES = new Set(["active", "temporarily_closed", "permanently_closed"])
 const SAP_CODE = /^[A-Z0-9][A-Z0-9-]{1,20}$/
+const PASSWORD_MIN = 6
+const PASSWORD_MAX = 128
 
 // Canonical column names we accept, including a few common alternates.
+// Both the new `password` column AND the legacy `pin` column are recognised
+// so existing CSVs don't break — pin values get rejected with a helpful
+// error pointing operators at the new column.
 const HEADER_ALIASES: Record<string, string> = {
   sap: "sap_code",
   sap_code: "sap_code",
@@ -44,8 +55,10 @@ const HEADER_ALIASES: Record<string, string> = {
   phone: "manager_phone",
   manager_phone: "manager_phone",
   "manager phone": "manager_phone",
-  pin: "pin",
-  manager_pin: "pin",
+  password: "password",
+  manager_password: "password",
+  pin: "_legacy_pin",
+  manager_pin: "_legacy_pin",
   status: "status",
 }
 
@@ -58,7 +71,7 @@ type ParsedRow = {
   location?: string | null
   manager_name?: string | null
   manager_phone?: string | null
-  pin?: string | null
+  password?: string | null
   status?: string
 }
 
@@ -175,15 +188,21 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
   const parsed: ParsedRow[] = []
 
+  let legacyPinSeen = false
   for (let i = 1; i < rows.length; i++) {
     const raw = rows[i]
-    const rec: Partial<ParsedRow> = {}
+    const rec: Partial<ParsedRow> & { _legacy_pin?: string | null } = {}
     for (let j = 0; j < raw.length; j++) {
       const key = mapped[j]
       if (!key) continue
       const val = raw[j].trim()
       if (val === "") {
-        if (key === "location" || key === "manager_name" || key === "manager_phone" || key === "pin") {
+        if (
+          key === "location" ||
+          key === "manager_name" ||
+          key === "manager_phone" ||
+          key === "password"
+        ) {
           ;(rec as Record<string, unknown>)[key] = null
         }
         continue
@@ -194,6 +213,7 @@ export async function POST(req: NextRequest) {
       errors.push(`Row ${i + 1}: missing sap_code`)
       continue
     }
+    rec.sap_code = rec.sap_code.toUpperCase()
     if (!SAP_CODE.test(rec.sap_code)) {
       errors.push(`Row ${i + 1}: invalid sap_code "${rec.sap_code}"`)
       continue
@@ -204,13 +224,30 @@ export async function POST(req: NextRequest) {
       )
       continue
     }
-    if (rec.pin != null && rec.pin !== "" && !/^\d{4}$/.test(rec.pin)) {
+    if (rec._legacy_pin) {
+      legacyPinSeen = true
       errors.push(
-        `Row ${i + 1} (${rec.sap_code}): PIN must be exactly 4 digits`,
+        `Row ${i + 1} (${rec.sap_code}): the 'pin' column is no longer supported. Use 'password' instead.`,
+      )
+      continue
+    }
+    if (
+      rec.password != null &&
+      rec.password !== "" &&
+      (rec.password.length < PASSWORD_MIN || rec.password.length > PASSWORD_MAX)
+    ) {
+      errors.push(
+        `Row ${i + 1} (${rec.sap_code}): password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters`,
       )
       continue
     }
     parsed.push(rec as ParsedRow)
+  }
+
+  if (legacyPinSeen) {
+    errors.unshift(
+      "Detected legacy 'pin' column. Migration 002 replaced PIN with password — update your CSV to a 'password' column with 6+ char values.",
+    )
   }
 
   if (parsed.length === 0) {
@@ -277,8 +314,8 @@ export async function POST(req: NextRequest) {
     if ("manager_name" in rec) row.manager_name = rec.manager_name
     if ("manager_phone" in rec) row.manager_phone = rec.manager_phone
     if (rec.status) row.status = rec.status
-    if (rec.pin) {
-      row.manager_pin_hash = await bcrypt.hash(rec.pin, 10)
+    if (rec.password) {
+      row.manager_password_hash = await bcrypt.hash(rec.password, 10)
     }
     row.updated_at = new Date().toISOString()
 
@@ -322,11 +359,47 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Optional prune: stores not in the master CSV become permanently_closed.
+  // Soft delete (status flip) instead of DELETE so historical reports stay
+  // intact and the SAP code stays unique-reserved. Reporters who scan an
+  // old QR will land on a 404 on the manager side.
+  let pruned = 0
+  const pruneFlag = formData.get("prune")
+  if (pruneFlag === "1" || pruneFlag === "true") {
+    const masterCodes = new Set(parsed.map((p) => p.sap_code))
+    const { data: actives } = await admin
+      .from("stores")
+      .select("sap_code")
+      .eq("status", "active")
+    const orphaned =
+      (actives ?? [])
+        .map((r) => r.sap_code as string)
+        .filter((c) => !masterCodes.has(c))
+    if (orphaned.length > 0) {
+      const { error: pruneErr } = await admin
+        .from("stores")
+        .update({
+          status: "permanently_closed",
+          updated_at: new Date().toISOString(),
+        })
+        .in("sap_code", orphaned)
+      if (pruneErr) {
+        console.error("[excel/stores] prune failed", pruneErr)
+        errors.push(
+          `Prune step failed (${pruneErr.message}); imports above succeeded.`,
+        )
+      } else {
+        pruned = orphaned.length
+      }
+    }
+  }
+
   console.info("[excel/stores] imported", {
     by: session.email ?? session.user_id,
     inserted,
     updated,
     skipped,
+    pruned,
     errors: errors.length,
   })
 
@@ -334,6 +407,7 @@ export async function POST(req: NextRequest) {
     inserted,
     updated,
     skipped,
+    pruned,
     errors,
   })
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Languages } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
@@ -9,6 +9,14 @@ import {
   writeProfile,
   type ReporterProfile,
 } from "@/lib/reporter-state"
+import {
+  LOCALES,
+  LOCALE_LABELS,
+  readLocale,
+  t,
+  writeLocale,
+  type Locale,
+} from "@/lib/reporter-i18n"
 
 type Props = { sap_code: string }
 
@@ -16,6 +24,7 @@ export function ReporterForm({ sap_code }: Props) {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [existing, setExisting] = useState<ReporterProfile | null>(null)
+  const [locale, setLocale] = useState<Locale>("en")
 
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
@@ -23,18 +32,32 @@ export function ReporterForm({ sap_code }: Props) {
 
   useEffect(() => {
     setExisting(readProfile())
+    setLocale(readLocale())
     setMounted(true)
+    // React to locale changes from elsewhere on the page (header pill, etc).
+    function onLocale(e: Event) {
+      const custom = e as CustomEvent<Locale>
+      if (custom.detail) setLocale(custom.detail)
+    }
+    window.addEventListener("sr:locale", onLocale)
+    return () => window.removeEventListener("sr:locale", onLocale)
   }, [])
+
+  function changeLocale(loc: Locale) {
+    setLocale(loc)
+    writeLocale(loc)
+    setErr(null) // re-render error in new language on next attempt
+  }
 
   function validate(): ReporterProfile | null {
     const n = name.trim()
     const p = phone.trim()
     if (n.length < 2) {
-      setErr("Please enter your full name.")
+      setErr(t(locale, "validate.name_required"))
       return null
     }
     if (!/^[+0-9\s()-]{7,}$/.test(p)) {
-      setErr("Please enter a valid phone number.")
+      setErr(t(locale, "validate.phone_invalid"))
       return null
     }
     setErr(null)
@@ -73,7 +96,7 @@ export function ReporterForm({ sap_code }: Props) {
       <div className="mt-6 space-y-3">
         <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-5">
           <div>
-            <p className="text-slate-600">Reporting as</p>
+            <p className="text-slate-600">{t(locale, "form.reporting_as")}</p>
             <p className="text-slate-900">
               <span className="font-medium">{existing.name}</span>
               <span className="text-slate-400"> · {existing.phone}</span>
@@ -84,7 +107,7 @@ export function ReporterForm({ sap_code }: Props) {
             onClick={onSwitch}
             className="text-[13px] font-medium text-indigo-700 underline hover:text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
           >
-            Not you? Switch
+            {t(locale, "form.switch")}
           </button>
         </div>
         <button
@@ -92,7 +115,7 @@ export function ReporterForm({ sap_code }: Props) {
           onClick={onContinueExisting}
           className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
         >
-          Continue
+          {t(locale, "form.continue")}
           <ArrowRight className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         </button>
       </div>
@@ -100,63 +123,113 @@ export function ReporterForm({ sap_code }: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
-      <div>
-        <label
-          htmlFor="sr-name"
-          className="block text-[13px] font-medium text-slate-900"
+    <div className="mt-6" lang={locale}>
+      {/* Language toggle — visible right above the intro + form so the
+          reporter sees it before they decide what language to use. */}
+      <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+          Language
+        </div>
+        <div
+          role="radiogroup"
+          aria-label="Choose interface language"
+          className="inline-flex items-center gap-1"
         >
-          Your name
-        </label>
-        <input
-          id="sr-name"
-          type="text"
-          autoComplete="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="mt-1 block w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-[15px] text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/40"
-          placeholder="Full name"
-          required
-        />
+          {LOCALES.map((loc) => {
+            const active = loc === locale
+            return (
+              <button
+                key={loc}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => changeLocale(loc)}
+                className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
+                  active
+                    ? "bg-indigo-700 text-white"
+                    : "bg-white text-slate-700 border border-slate-200 hover:border-indigo-300"
+                }`}
+                lang={loc}
+              >
+                {LOCALE_LABELS[loc]}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      <div>
-        <label
-          htmlFor="sr-phone"
-          className="block text-[13px] font-medium text-slate-900"
-        >
-          Phone number
-        </label>
-        <input
-          id="sr-phone"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="mt-1 block w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-[15px] text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/40"
-          placeholder="+91 98xxx xxxxx"
-          required
-        />
-      </div>
-
-      {err && (
-        <p className="rounded-md bg-orange-100 px-3 py-2 text-[13px] text-orange-700">
-          {err}
+      {/* Localised intro */}
+      <section className="mb-6 space-y-2">
+        <h2 className="font-display text-[20px] font-bold leading-7 text-slate-900">
+          {t(locale, "page.title")}
+        </h2>
+        <p className="text-[15px] leading-6 text-slate-700">
+          {t(locale, "page.lede")}
         </p>
-      )}
+        <p className="text-[13px] leading-5 text-slate-600">
+          {t(locale, "page.privacy_note")}
+        </p>
+      </section>
 
-      <button
-        type="submit"
-        className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
-      >
-        Continue
-        <ArrowRight className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-      </button>
+      <form onSubmit={onSubmit} className="space-y-4" noValidate lang={locale}>
+        <div>
+          <label
+            htmlFor="sr-name"
+            className="block text-[13px] font-medium text-slate-900"
+          >
+            {t(locale, "form.name_label")}
+          </label>
+          <input
+            id="sr-name"
+            type="text"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 block w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-[15px] text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/40"
+            placeholder={t(locale, "form.name_placeholder")}
+            required
+          />
+        </div>
 
-      <p className="text-center text-[11px] uppercase tracking-wide text-slate-400">
-        Anonymous to store manager
-      </p>
-    </form>
+        <div>
+          <label
+            htmlFor="sr-phone"
+            className="block text-[13px] font-medium text-slate-900"
+          >
+            {t(locale, "form.phone_label")}
+          </label>
+          <input
+            id="sr-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="mt-1 block w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-[15px] text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/40"
+            placeholder={t(locale, "form.phone_placeholder")}
+            required
+          />
+        </div>
+
+        {err && (
+          <p className="rounded-md bg-orange-100 px-3 py-2 text-[13px] text-orange-700">
+            {err}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+        >
+          {t(locale, "form.continue")}
+          <ArrowRight className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        </button>
+
+        <p className="text-center text-[11px] uppercase tracking-wide text-slate-400">
+          {t(locale, "form.anonymous_note")}
+        </p>
+      </form>
+    </div>
   )
 }

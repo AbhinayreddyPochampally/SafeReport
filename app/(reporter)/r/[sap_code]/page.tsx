@@ -78,7 +78,8 @@ export default async function ReporterLandingPage({
         </Link>
       </header>
 
-      {/* Store card */}
+      {/* Store card — store identity stays in source language; safe to leave
+          unlocalised because the brand name + city + SAP code are universal. */}
       <section className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex items-center gap-2 text-slate-600">
           <Store className="h-5 w-5" strokeWidth={1.8} aria-hidden />
@@ -95,21 +96,8 @@ export default async function ReporterLandingPage({
         </p>
       </section>
 
-      {/* Intro copy */}
-      <section className="mt-6 space-y-2">
-        <h2 className="font-display text-[20px] font-bold leading-7 text-slate-900">
-          Report a safety issue
-        </h2>
-        <p className="text-[15px] leading-6 text-slate-700">
-          Saw something unsafe, or had a close call? Tell us in your own voice,
-          in your own language. It takes under a minute.
-        </p>
-        <p className="text-[13px] leading-5 text-slate-600">
-          Your name is visible only to Head Office, never to the store manager.
-        </p>
-      </section>
-
-      {/* Reporter form / profile recap */}
+      {/* Reporter form — owns the localised intro + name+phone form so the
+          language toggle inside it can re-render everything below it. */}
       <ReporterForm sap_code={store.sap_code} />
     </main>
   )

@@ -3,9 +3,11 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Ban,
   Check,
   Gauge,
+  ImageOff,
   Image as ImageIcon,
   Loader2,
   Mic,
@@ -201,33 +203,22 @@ export function HoReportDetail({
         ) : null}
       </div>
 
-      {/* Two-column on desktop: evidence on the left, context on the right. */}
+      {/* Before / After comparison ---------------------------------------- */}
+      {/* Two cards side-by-side on md+ screens, stacked on mobile. The left
+          card is what the reporter saw; the right card is the latest manager
+          fix attempt. If no resolution has been filed yet we render an empty
+          placeholder on the right so the alignment doesn't shift later. */}
+      <ComparisonSection
+        report={report}
+        latestResolution={resolutions[resolutions.length - 1] ?? null}
+        latestAttemptCount={resolutions.length}
+        onExpand={(url) => setPhotoOpen(url)}
+      />
+
+      {/* Two-column on desktop: voice + transcript on the left, context on the right. */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Evidence column */}
         <div className="lg:col-span-3 space-y-4">
-          <section aria-label="Evidence photo">
-            <button
-              type="button"
-              onClick={() => setPhotoOpen(report.photo_url)}
-              className="group relative block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
-              aria-label="Expand photo"
-            >
-              <div className="relative aspect-[4/3] w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={report.photo_url}
-                  alt="Reported scene"
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-                <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
-                  <ImageIcon className="h-3 w-3" aria-hidden />
-                  Tap to expand
-                </span>
-              </div>
-            </button>
-          </section>
-
           {report.audio_url ? (
             <section aria-label="Voice note">
               <AudioPlayer url={report.audio_url} />
@@ -686,6 +677,200 @@ function ReasonModal({
         </div>
       </form>
     </div>
+  )
+}
+
+/* ------------------------ Before/After comparison ------------------------ */
+
+function ComparisonSection({
+  report,
+  latestResolution,
+  latestAttemptCount,
+  onExpand,
+}: {
+  report: Report
+  latestResolution: Resolution | null
+  latestAttemptCount: number
+  onExpand: (url: string) => void
+}) {
+  // Trim the reporter description to the most signal-dense field. Voice
+  // transcripts win over typed descriptions because that's what the reporter
+  // actually said in their own words.
+  const reporterText =
+    report.transcript?.trim() ||
+    report.description?.trim() ||
+    (report.audio_url ? "Voice note attached — transcript pending." : null)
+
+  return (
+    <section className="mt-6" aria-label="Before and after comparison">
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          Before / After
+        </h2>
+        {latestResolution ? (
+          <span className="text-[11px] text-slate-400">
+            Latest of {latestAttemptCount} attempt
+            {latestAttemptCount === 1 ? "" : "s"}
+          </span>
+        ) : (
+          <span className="text-[11px] text-slate-400">
+            Awaiting first resolution
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-4 items-stretch">
+        {/* Reported (left) */}
+        <ComparisonCard
+          tone="report"
+          eyebrow="Reported"
+          eyebrowSub={formatDateTime(report.incident_datetime)}
+          photoUrl={report.photo_url}
+          photoAlt="Reported scene"
+          body={reporterText}
+          bodyEmpty="No description was added."
+          onExpand={onExpand}
+        />
+
+        {/* Arrow divider — visible on md+ only, where the cards sit side by side. */}
+        <div className="hidden md:flex items-center justify-center text-slate-300">
+          <ArrowRight className="h-5 w-5" strokeWidth={1.6} aria-hidden />
+        </div>
+
+        {/* Resolution (right) */}
+        {latestResolution ? (
+          <ComparisonCard
+            tone="resolution"
+            eyebrow={`Manager fix · attempt ${latestResolution.attempt_number}`}
+            eyebrowSub={formatRelative(latestResolution.resolved_at)}
+            photoUrl={latestResolution.photo_url}
+            photoAlt={`Proof of fix — attempt ${latestResolution.attempt_number}`}
+            body={latestResolution.note}
+            bodyEmpty="No note was filed with this attempt."
+            onExpand={onExpand}
+          />
+        ) : (
+          <ComparisonEmpty />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function ComparisonCard({
+  tone,
+  eyebrow,
+  eyebrowSub,
+  photoUrl,
+  photoAlt,
+  body,
+  bodyEmpty,
+  onExpand,
+}: {
+  tone: "report" | "resolution"
+  eyebrow: string
+  eyebrowSub: string
+  photoUrl: string | null
+  photoAlt: string
+  body: string | null
+  bodyEmpty: string
+  onExpand: (url: string) => void
+}) {
+  const accent =
+    tone === "report"
+      ? {
+          eyebrow: "text-amber-700",
+          dot: "bg-amber-500",
+          ring: "border-amber-200",
+          bg: "bg-amber-50/40",
+        }
+      : {
+          eyebrow: "text-teal-700",
+          dot: "bg-teal-600",
+          ring: "border-teal-200",
+          bg: "bg-teal-50/40",
+        }
+
+  return (
+    <article
+      className={`flex flex-col rounded-xl border ${accent.ring} ${accent.bg} overflow-hidden`}
+    >
+      <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200/60 bg-white/70">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`h-2 w-2 rounded-full ${accent.dot}`} aria-hidden />
+          <p
+            className={`truncate text-[11px] font-bold uppercase tracking-wide ${accent.eyebrow}`}
+          >
+            {eyebrow}
+          </p>
+        </div>
+        <p className="text-[11px] text-slate-500 shrink-0">{eyebrowSub}</p>
+      </header>
+
+      <button
+        type="button"
+        onClick={() => photoUrl && onExpand(photoUrl)}
+        className="group relative block w-full overflow-hidden bg-slate-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+        aria-label={`Expand ${photoAlt}`}
+        disabled={!photoUrl}
+      >
+        <div className="relative aspect-[4/3] w-full">
+          {photoUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoUrl}
+                alt={photoAlt}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+                loading="lazy"
+              />
+              <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
+                <ImageIcon className="h-3 w-3" aria-hidden />
+                Expand
+              </span>
+            </>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-slate-400">
+              <ImageOff className="h-8 w-8" aria-hidden />
+            </div>
+          )}
+        </div>
+      </button>
+
+      <div className="px-3 py-2.5">
+        {body ? (
+          <p className="whitespace-pre-wrap text-[13px] leading-5 text-slate-800 line-clamp-6">
+            {body}
+          </p>
+        ) : (
+          <p className="text-[13px] italic leading-5 text-slate-500">
+            {bodyEmpty}
+          </p>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function ComparisonEmpty() {
+  return (
+    <article className="flex flex-col rounded-xl border border-dashed border-slate-300 bg-white overflow-hidden">
+      <header className="flex items-center gap-2 px-3 py-2 border-b border-slate-200/60 bg-white/70">
+        <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden />
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          Manager fix · pending
+        </p>
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+        <ImageOff className="h-7 w-7 text-slate-300" aria-hidden />
+        <p className="text-[13px] text-slate-500">
+          No resolution has been filed yet.
+        </p>
+        <p className="text-[11px] text-slate-400">
+          Waiting on the store manager.
+        </p>
+      </div>
+    </article>
   )
 }
 

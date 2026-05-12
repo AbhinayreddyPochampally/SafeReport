@@ -4,7 +4,12 @@
  * Photo capture tile for the Evidence screen.
  *
  * Behaviour:
- *   - Tap: opens the device camera via `<input type="file" capture="environment">`.
+ *   - Two explicit buttons: "Take photo" (camera intent) and "From gallery"
+ *     (no capture hint, so the OS shows the photo library). A single input
+ *     with no `capture` attribute is supposed to surface both options on
+ *     Android, but several OEM browsers (MIUI, Samsung Internet on older
+ *     builds, UC Browser) silently jump straight to the camera. Splitting
+ *     into two inputs makes the gallery path always reachable.
  *   - Once a file is chosen we decode it, downscale to 1600px longest edge,
  *     and re-encode at JPEG 80 quality. That keeps uploads well under the
  *     10 MB limit enforced by `/api/reports` without sacrificing readability
@@ -18,7 +23,7 @@
  * browsers are fine either way because they auto-rotate JPEGs.
  */
 
-import { Camera, RefreshCcw } from "lucide-react"
+import { Camera, ImageIcon, RefreshCcw } from "lucide-react"
 import { useCallback, useRef, useState } from "react"
 
 const MAX_EDGE = 1600 // pixels
@@ -32,13 +37,17 @@ type Props = {
 }
 
 export function PhotoCapture({ value, onChange, tone }: Props) {
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
+  const galleryRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  const openPicker = useCallback(() => {
-    inputRef.current?.click()
+  const openCamera = useCallback(() => {
+    cameraRef.current?.click()
+  }, [])
+  const openGallery = useCallback(() => {
+    galleryRef.current?.click()
   }, [])
 
   const onFile = useCallback(
@@ -70,22 +79,31 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
   const iconTone = tone === "slate" ? "text-slate-600" : "text-amber-700"
   const bgTone = tone === "slate" ? "bg-slate-100" : "bg-amber-100"
 
+  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (f) void onFile(f)
+    // Reset so picking the same file twice still fires onChange.
+    e.target.value = ""
+  }
+
   return (
     <div>
+      {/* Camera input — `capture` hint forces the camera intent on mobile. */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
         type="file"
         accept="image/*"
-        // No `capture` attr — iOS/Android then show a picker with both
-        // "Take Photo" and "Photo Library" options. Desktop falls back to
-        // the OS file chooser.
+        capture="environment"
         className="sr-only"
-        onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) void onFile(f)
-          // Reset so picking the same file twice still fires onChange.
-          e.target.value = ""
-        }}
+        onChange={onInputChange}
+      />
+      {/* Gallery input — no `capture` so the OS picker shows the photo library. */}
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={onInputChange}
       />
 
       {value && previewUrl ? (
@@ -96,36 +114,70 @@ export function PhotoCapture({ value, onChange, tone }: Props) {
             alt="Captured photo preview"
             className="h-56 w-full object-cover"
           />
-          <button
-            type="button"
-            onClick={openPicker}
-            className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-[12px] font-medium text-slate-900 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
-          >
-            <RefreshCcw className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-            Retake
-          </button>
+          <div className="absolute bottom-3 right-3 flex gap-2">
+            <button
+              type="button"
+              onClick={openGallery}
+              className="inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-[12px] font-medium text-slate-900 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+            >
+              <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+              Gallery
+            </button>
+            <button
+              type="button"
+              onClick={openCamera}
+              className="inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1.5 text-[12px] font-medium text-slate-900 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+              Retake
+            </button>
+          </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={openPicker}
-          disabled={busy}
-          className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${borderTone} bg-white transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60`}
-          aria-label="Take or upload a photo"
-        >
-          <span
-            className={`flex h-14 w-14 items-center justify-center rounded-full ${bgTone} ${iconTone}`}
-            aria-hidden
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={openCamera}
+            disabled={busy}
+            className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${borderTone} bg-white transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60`}
+            aria-label="Take a photo with the camera"
           >
-            <Camera className="h-7 w-7" strokeWidth={1.8} />
-          </span>
-          <span className="text-[14px] font-medium text-slate-900">
-            {busy ? "Processing…" : "Take or upload a photo"}
-          </span>
-          <span className="text-[11px] text-slate-500">
-            Camera or gallery · required
-          </span>
-        </button>
+            <span
+              className={`flex h-12 w-12 items-center justify-center rounded-full ${bgTone} ${iconTone}`}
+              aria-hidden
+            >
+              <Camera className="h-6 w-6" strokeWidth={1.8} />
+            </span>
+            <span className="text-[13px] font-medium text-slate-900">
+              {busy ? "Processing…" : "Take photo"}
+            </span>
+            <span className="text-[11px] text-slate-500">Use camera</span>
+          </button>
+          <button
+            type="button"
+            onClick={openGallery}
+            disabled={busy}
+            className={`flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${borderTone} bg-white transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60`}
+            aria-label="Choose a photo from the gallery"
+          >
+            <span
+              className={`flex h-12 w-12 items-center justify-center rounded-full ${bgTone} ${iconTone}`}
+              aria-hidden
+            >
+              <ImageIcon className="h-6 w-6" strokeWidth={1.8} />
+            </span>
+            <span className="text-[13px] font-medium text-slate-900">
+              From gallery
+            </span>
+            <span className="text-[11px] text-slate-500">Pick existing photo</span>
+          </button>
+        </div>
+      )}
+
+      {!value && (
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          Photo required · JPEG or PNG · up to 10 MB
+        </p>
       )}
 
       {error && (
