@@ -93,22 +93,62 @@ export function ReporterForm({ sap_code }: Props) {
 
   if (existing) {
     return (
-      <div className="mt-6 space-y-3">
-        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-5">
-          <div>
-            <p className="text-slate-600">{t(locale, "form.reporting_as")}</p>
-            <p className="text-slate-900">
-              <span className="font-medium">{existing.name}</span>
-              <span className="text-slate-400"> · {existing.phone}</span>
-            </p>
+      <div className="mt-6 space-y-3" lang={locale}>
+        {/* Reporting-as summary card. Bug fix 2026-05-13: this card used
+            to be locale-blind, so a returning Kannada-only reporter had
+            no way to switch back to English (or vice versa) without
+            tapping Switch — which clears their saved profile. The
+            compact pill row at the bottom restores that affordance
+            without forcing the heavier full toggle UI. */}
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white text-[13px] leading-5">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div>
+              <p className="text-slate-600">{t(locale, "form.reporting_as")}</p>
+              <p className="text-slate-900">
+                <span className="font-medium">{existing.name}</span>
+                <span className="text-slate-400"> · {existing.phone}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onSwitch}
+              className="text-[13px] font-medium text-indigo-700 underline hover:text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            >
+              {t(locale, "form.switch")}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onSwitch}
-            className="text-[13px] font-medium text-indigo-700 underline hover:text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-          >
-            {t(locale, "form.switch")}
-          </button>
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+              {t(locale, "landing.language")}
+            </span>
+            <div
+              role="radiogroup"
+              aria-label="Choose interface language"
+              className="inline-flex items-center gap-1"
+            >
+              {LOCALES.map((loc) => {
+                const active = loc === locale
+                return (
+                  <button
+                    key={loc}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => changeLocale(loc)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
+                      active
+                        ? "bg-indigo-700 text-white"
+                        : "bg-white text-slate-700 border border-slate-200 hover:border-indigo-300"
+                    }`}
+                    lang={loc}
+                  >
+                    {LOCALE_LABELS[loc]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
         <button
           type="button"
