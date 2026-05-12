@@ -404,24 +404,3 @@ export async function POST(req: NextRequest) {
     translation_skipped: translationSkipped,
   })
 }
-  { error: "Pipeline succeeded but DB write failed." },
-      { status: 500 },
-    )
-  }
-
-  console.info("[transcribe] ok", {
-    reportId,
-    sourceModel: stageA.modelUsed,
-    sourceLang: stageA.language,
-    englishChars: englishText.length,
-    sourceChars: stageA.text.length,
-    translationSkipped,
-  })
-
-  return NextResponse.json({
-    transcript: englishText,
-    transcript_source: stageA.text,
-    transcript_source_lang: stageA.language,
-    translation_skipped: translationSkipped,
-  })
-}
