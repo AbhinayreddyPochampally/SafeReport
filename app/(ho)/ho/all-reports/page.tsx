@@ -288,19 +288,3 @@ function istBoundary(date: string, time: string): string | null {
 function sanitizeSearch(s: string): string {
   return s.replace(/[,()."'%_*\\]/g, "").trim()
 }
-}T${time}+05:30`
-  const ms = Date.parse(candidate)
-  if (!Number.isFinite(ms)) return null
-  return new Date(ms).toISOString()
-}
-
-/**
- * Strip characters that have meaning in PostgREST's `.or()` expression
- * grammar — `,` separates terms, `.` delimits column.op.value, parentheses
- * group, and quotes change the parse mode. Also drops `%`/`_` so the
- * resulting string is a literal contains-match, never a wildcard. Returns
- * empty string when nothing usable is left.
- */
-function sanitizeSearch(s: string): string {
-  return s.replace(/[,()."'%_*\\]/g, "").trim()
-}
