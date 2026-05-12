@@ -39,7 +39,15 @@ type Props = {
   onChange: (blob: Blob | null) => void
 }
 
-type Status = "idle" | "requesting" | "recording" | "ready" | "playing"
+type Status =
+  | "idle"
+  | "requesting"
+  | "counting" // 1s lead-in so the reporter can collect themselves
+  | "recording"
+  | "ready"
+  | "playing"
+
+const PREROLL_MS = 1000
 
 export function VoiceRecorder({ value, onChange }: Props) {
   const [status, setStatus] = useState<Status>(value ? "ready" : "idle")
@@ -155,6 +163,16 @@ export function VoiceRecorder({ value, onChange }: Props) {
         stopStream()
         setStatus("ready")
       }
+
+      // 1-second pre-roll: stream + analyser + recorder are wired up but
+      // we hold off on `mr.start()` so the reporter has a beat to collect
+      // themselves before audio capture actually begins. The waveform
+      // pulses during this window so they can confirm the mic is live.
+      setStatus("counting")
+      await new Promise((r) => setTimeout(r, PREROLL_MS))
+      // Bail if the user discarded during the lead-in.
+      if (mediaRef.current !== mr) return
+
       mr.start()
 
       startTsRef.current = Date.now()
@@ -234,19 +252,19 @@ export function VoiceRecorder({ value, onChange }: Props) {
           type="button"
           onClick={startRecording}
           disabled={status === "requesting"}
-          className="flex h-24 w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 text-left transition hover:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60"
+          className="flex min-h-[88px] w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-60"
         >
-          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700" aria-hidden>
-            <Mic className="h-6 w-6" strokeWidth={1.8} />
+          <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white shadow-sm" aria-hidden>
+            <Mic className="h-7 w-7" strokeWidth={2} />
           </span>
           <span className="flex flex-col">
-            <span className="text-[14px] font-medium text-slate-900">
+            <span className="text-[15px] font-semibold text-slate-900">
               {status === "requesting"
                 ? "Requesting microphone…"
-                : "Tap to record a voice note"}
+                : "Tap to start recording"}
             </span>
             <span className="text-[12px] text-slate-500">
-              Up to {MAX_SECONDS}s · optional
+              Optional · up to {MAX_SECONDS}s · 1-second pause before recording starts
             </span>
           </span>
         </button>
@@ -255,6 +273,28 @@ export function VoiceRecorder({ value, onChange }: Props) {
             {error}
           </p>
         )}
+      </div>
+    )
+  }
+
+  // Pre-roll — wired up but not capturing yet. Give the reporter a beat
+  // to compose what they want to say. Big visible "GET READY" cue.
+  if (status === "counting") {
+    return (
+      <div className="rounded-2xl border-2 border-indigo-300 bg-indigo-50 p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white animate-pulse" aria-hidden>
+            <Mic className="h-6 w-6" strokeWidth={2} />
+          </span>
+          <div className="flex flex-col">
+            <span className="text-[14px] font-semibold text-indigo-900">
+              Get ready…
+            </span>
+            <span className="text-[12px] text-indigo-700">
+              Recording starts in a moment.
+            </span>
+          </div>
+        </div>
       </div>
     )
   }
@@ -272,10 +312,10 @@ export function VoiceRecorder({ value, onChange }: Props) {
             onClick={stopRecording}
             disabled={tooShort}
             aria-label="Stop recording"
-            title={tooShort ? `Keep recording (min ${MIN_SECONDS}s)` : "Stop"}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            title={tooShort ? `Keep recording (min ${MIN_SECONDS}s)` : "Stop recording"}
+            className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-md ring-4 ring-orange-100 transition hover:bg-orange-700 focus:outline-none focus:ring-4 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:ring-slate-100 disabled:bg-slate-400"
           >
-            <Square className="h-4 w-4" strokeWidth={2} fill="currentColor" />
+            <Square className="h-5 w-5" strokeWidth={2} fill="currentColor" />
           </button>
         )}
         {showPlayButton && (

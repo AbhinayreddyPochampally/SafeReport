@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { Suspense } from "react"
 import { Shield } from "lucide-react"
 import { getHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -30,8 +31,6 @@ export default async function HoLayout({
     return <>{children}</>
   }
 
-  const counts = await fetchSidebarCounts()
-
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* ----------------------------- Sidebar ----------------------------- */}
@@ -54,19 +53,11 @@ export default async function HoLayout({
           </span>
         </Link>
 
-        {/* Pilot context block */}
-        <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
-          <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Pilot · ABFRL
-          </p>
-          <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-900">
-            {counts.stores ?? 0} retail stores
-          </p>
-          <p className="text-[10.5px] text-slate-500">In production</p>
-        </div>
-
-        {/* Primary nav (active state via client component) */}
-        <SidebarNav counts={counts} />
+        {/* Counts-dependent block streams in via Suspense so a Supabase
+            hiccup never blocks the rest of the layout from rendering. */}
+        <Suspense fallback={<SidebarCountsFallback />}>
+          <SidebarCountsBlock />
+        </Suspense>
 
         {/* Spacer pushes the user block to the bottom */}
         <div className="flex-1" />
@@ -97,6 +88,46 @@ export default async function HoLayout({
 }
 
 /* --------------------------- Sidebar counts ------------------------------ */
+
+// Async server component the layout suspends on. Wrapped in <Suspense>
+// so a slow / failing count query doesn't block the rest of the sidebar
+// (or the main content area) from rendering.
+async function SidebarCountsBlock() {
+  const counts = await fetchSidebarCounts()
+  return (
+    <>
+      <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          Pilot · ABFRL
+        </p>
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-900">
+          {counts.stores ?? 0} retail stores
+        </p>
+        <p className="text-[10.5px] text-slate-500">In production</p>
+      </div>
+      <SidebarNav counts={counts} />
+    </>
+  )
+}
+
+// Skeleton shown until counts settle. Same layout shape as the real
+// block so the sidebar doesn't shift when counts arrive.
+function SidebarCountsFallback() {
+  return (
+    <>
+      <div className="mx-3 mb-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 animate-pulse">
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          Pilot · ABFRL
+        </p>
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-300">
+          ─ retail stores
+        </p>
+        <p className="text-[10.5px] text-slate-400">Loading…</p>
+      </div>
+      <SidebarNav counts={{}} />
+    </>
+  )
+}
 
 async function fetchSidebarCounts(): Promise<SidebarCounts> {
   try {
