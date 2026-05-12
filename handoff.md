@@ -10,7 +10,9 @@ Production is on `main`, deployed to `safereport-production-cb1c.up.railway.app`
 - `c660b55` — docs: add agents.md (coordination layer for autonomous coding agents)
 - `8ceede0` — fix(transcribe): remove orphan duplicate block after success return
 - `5ea56e2` — fix(tsconfig): set target es2017 so Set/Map iteration typechecks
-- (about to push) feat(reporter): extend Kannada to the full reporter flow
+- `924f623` — feat(reporter): extend Kannada to the full reporter flow
+- `6057b34` — fix(reporter): keep locale pill visible for returning reporters
+- (about to push) docs: align CLAUDE.md with deployed reality — 4-col wheel picker, PWA install nag section, dual locale toggle
 
 Schema is at migrations 001 + 002 (manager_password_hash + qr_downloaded_at) + 003 (transcript_source columns) + 004 (manager_session_epoch). Smoke (`scripts/smoke-api.sh`) returns 12/13 — the single failing check is the manager landing 404 for stores with no password set, which is correct guard behaviour.
 
@@ -35,6 +37,12 @@ Nothing actively edited mid-batch. Last batch (Kannada full-flow + doc updates) 
   - `components/photo-capture.tsx`, `components/voice-recorder.tsx`, `components/pwa-install-prompt.tsx` — all three subscribe to locale via the hook and pull all user-facing strings from the i18n map.
   - Wheel-picker preview and review-screen timestamp now call `toLocaleString("kn-IN", …)` when locale is Kannada so weekday and month render in Kannada script on Chrome / iOS Safari.
   - CLAUDE.md §"Reporter landing — language toggle" rewritten to reflect the expanded scope.
+- **Returning-reporter locale pill (`6057b34`).** The Reporting-as summary card on the landing now carries a compact locale toggle on a slate-50 strip beneath the name+phone row. Closes the regression where a returning Kannada reporter had to tap Switch (clearing their saved profile) to change locale.
+- **Doc alignment pass (about to commit).**
+  - CLAUDE.md §"Wheel picker spec (Screen 4)" rewritten from 3-column 24-hour to the deployed 4-column 12h+AM/PM shape. Notes that the PDF reference still shows the old layout.
+  - CLAUDE.md routes block — `voice/page.tsx` removed from the reporter directory listing (file was deleted in `43b215d`).
+  - CLAUDE.md §"Reporter localisation" extended to document the dual-instance pattern (full toggle for first visit + compact pill inside the Reporting-as card for returning reporters).
+  - New CLAUDE.md §"PWA install nag (reporter landing)" describes the two-gate state machine, iOS Safari fallback, per-session dismiss, and co-located service-worker registration.
 
 ## Earlier this session, by way of background
 
@@ -52,19 +60,53 @@ Running `npx next build` in the sandbox `SIGBUS`s on memory pressure — typeche
 
 PowerShell mangles backticks inside commit messages — `` `next` `` literal becomes `ext` because the backtick is the PowerShell escape character. Use forward-slash phrasing or single-quote with care.
 
-## Out-of-scope findings from today (flagged, not fixed)
+## Out-of-scope findings from the Chrome live-flow audit (now resolved)
 
-These came up during the Chrome live-flow audit and the typecheck pass. Each is real but none was in this batch's scope, so they're parked here for the next pass to pick up.
+All three findings from the previous handoff have shipped. Keeping them
+here as a paper trail so a future agent can see the cleanup path.
 
-1. **Wheel picker is 12-hour AM/PM, not 24-hour as CLAUDE.md says.** The doc claims Hour values are `"00"` through `"23"`. The deployed picker renders Hour 1-12 plus an AM/PM column. Either fix the doc or fix the picker — but pick one. The 12-hour shape is probably what users want.
-2. **The PWA install banner on the reporter landing isn't documented in CLAUDE.md.** It exists, it works, but the reporter-flow section in the brief still describes a flow that doesn't mention the banner. Add a §"PWA install nag" subsection.
-3. **Language toggle disappears for returning reporters.** After the first successful name+phone save, the landing collapses to a "Reporting as Test User · 98xxx / Not you? Switch" summary, and the language pill is unmounted. A returning Kannada reporter can't change to English (or vice versa) without first tapping "Switch" to clear their profile. Either expose the pill in the "reporting as" state too, or surface a smaller "Language" link inline in that summary.
+1. ~~**Wheel picker is 12-hour AM/PM, not 24-hour as CLAUDE.md says.**~~
+   Resolved in the doc-alignment commit: the deployed 4-column picker
+   (Day · Hour 1-12 · Minute 00/15/30/45 · AM/PM) is now the documented
+   spec. The PDF reference still shows the old 3-column shape; the
+   CLAUDE.md section notes that the deployed component supersedes it.
+2. ~~**The PWA install banner on the reporter landing isn't documented
+   in CLAUDE.md.**~~ Resolved: new §"PWA install nag (reporter landing)"
+   section covers the two-gate state machine (notifications +
+   home-screen install), the iOS Safari fallback, the per-session
+   dismiss via `sessionStorage`, and the co-located service-worker
+   registration.
+3. ~~**Language toggle disappears for returning reporters.**~~ Resolved
+   in `6057b34`. A compact locale pill (smaller padding, same indigo-700
+   active state) now sits inside the "Reporting as …" summary card on
+   a slate-50 strip beneath the name+phone row. Both the full toggle
+   (first visit) and the compact pill (returning) flip via the same
+   `sr:locale` event. CLAUDE.md §"Reporter localisation" describes the
+   dual-instance pattern and notes that they should not be collapsed.
 
 ## Next step
 
-Pilot is essentially feature-complete for the reporter half — Kannada is now consistent end-to-end. Two suggestions for the next batch, in priority order:
+Pilot is essentially feature-complete for the reporter half. Suggested
+priorities for the next batch, lowest-friction first:
 
-1. **Address the language-toggle-disappears bug** (item 3 above). It's a real reporter-side regression — returning Kannada-only reporters who hit Switch to change locale will lose their saved name+phone and have to re-enter it. Surface a compact locale pill inside the "reporting as" summary card, no full toggle.
-2. **Decide on the wheel-picker 12h-vs-24h doc drift** (item 1 above). If the deployed picker is right, the brief needs a paragraph update. If the brief is right, the picker needs a column rewrite.
+1. **HO Analytics refresh.** The page hasn't been touched since the
+   nav switched from top bar to sidebar. Likely still functional, but
+   the surrounding shell expects a sidebar-shell layout while
+   Analytics may still render with the old top-bar assumptions.
+   Worth a visual audit + structural alignment to the rest of the HO
+   console.
+2. **Seed the 20 pilot stores.** Waiting on the SAP-code list + manager
+   phone/name data from ABFRL. The Stores page already supports CSV
+   import (`POST /api/excel/stores`) with the optional master-list
+   prune flag, so the actual ingest is a one-command operation once
+   the CSV lands.
+3. **PDF design doc realignment.** `docs/SafeReport_Design_Document_v6.pdf`
+   page 18 still illustrates the 3-column 24-hour wheel picker. Either
+   regenerate that page from the current component or add a "v7
+   addendum" page noting the 4-column shape. Not blocking, but it'll
+   be the next confusion source for anyone reading the doc cold.
 
-Lower priority: HO Analytics page hasn't been refreshed since the sidebar swap; the brand kicker on the reporter landing ("PANTALOONS") is unlocalised but that's intentional (proper nouns).
+Out-of-scope but worth noting: the brand kicker on the reporter
+landing ("PANTALOONS" / "ALLEN SOLLY" etc) is intentionally not
+localised — those are proper nouns and they show up in the store
+identity card alongside the city. Don't localise.

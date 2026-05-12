@@ -56,7 +56,6 @@ app/
     category/page.tsx     # screen 2 — observation/incident triage
     category/[kind]/page.tsx  # screen 3 — sub-category grid
     when/page.tsx         # screen 4 — APPLE WHEEL PICKER (see §Wheel picker spec)
-    voice/page.tsx        # screen 5a — voice recorder
     evidence/page.tsx     # screen 5 — photo (required) + voice/text
     review/page.tsx       # screen 6 — review + submit
     confirm/[report_id]/page.tsx   # confirmation
@@ -234,6 +233,20 @@ extend `LOCALES` + the `STRINGS` map (the category `*.label` / `*.blurb`
 keys are part of the same map). The toggle in `reporter-form.tsx` renders
 one button per `LOCALES` entry automatically.
 
+The toggle appears in **two places** in `reporter-form.tsx`, both bound
+to the same `sr:locale` event so flipping one flips the other on the
+next render:
+
+1. The full toggle (icon + "Language" label + pill row in a slate-50
+   panel) sits above the intro and form for first-visit reporters who
+   haven't saved a name+phone yet.
+2. A compact pill (same buttons, smaller padding, no surrounding panel)
+   sits inside the "Reporting as …" summary card for returning
+   reporters. Without it a Kannada-only repeat visitor would have to
+   tap Switch (which wipes the saved profile) just to read the next
+   screen in English. Don't collapse the two — they serve different
+   states.
+
 Client components consume locale through the `useReporterLocale()` hook —
 SSR-safe (returns "en" until hydration), then subscribes to the `sr:locale`
 `CustomEvent` so a toggle on the landing re-renders every other locale-aware
@@ -246,6 +259,47 @@ weekday and month render in Kannada script on browsers that ship that
 locale data (modern Chrome / iOS Safari).
 
 The manager and HO surfaces remain English-only — they're internal tools.
+
+---
+
+## PWA install nag (reporter landing)
+
+`components/pwa-install-prompt.tsx` mounts on every visit to
+`/r/[sap_code]` and shows a persistent two-step setup card above the
+reporter form. The card stays until BOTH gates are passed and persists
+across visits — pilot reporters are off-roll staff who scan the QR
+infrequently, so the nag is intentional.
+
+**Gates:**
+
+- **Notifications.** Calls `Notification.requestPermission()` on tap.
+  States are `unknown` / `granted` / `denied` / `unsupported`. Once
+  `granted` (or `unsupported` — old Android WebView, no point nagging),
+  the step is marked done.
+- **Home-screen install.** On Chromium-family browsers we capture the
+  `beforeinstallprompt` event and trigger `prompt()` on tap. On iOS
+  Safari the event never fires, so the CTA surfaces a manual hint
+  ("Tap the Share button → Add to Home Screen"). Standalone-mode
+  detection via `matchMedia("(display-mode: standalone)")` plus the
+  iOS-specific `window.navigator.standalone` fallback decides whether
+  the gate is already passed.
+
+**Dismiss:** the X in the top-right sets a `sr_pwa_dismissed_this_session`
+key in `sessionStorage`, hiding the card for the rest of the tab's
+session. A hard reload brings it back if either gate is still open.
+`localStorage` is deliberately not used — the nag is supposed to
+return after a closed-tab session.
+
+**Service worker registration** happens inside the same component's
+mount effect (`navigator.serviceWorker.register("/sw.js")`). It's
+co-located with the prompt because that's the earliest reliable client
+moment — anywhere later and the SW isn't ready when push subscriptions
+get issued. The registration is wrapped in a try/catch so a SW failure
+doesn't break the prompt's own state machine.
+
+**Localised.** All copy (eyebrow, title, step titles + subtitles, CTAs,
+dismiss aria-label) comes from `lib/reporter-i18n.ts` via the
+`useReporterLocale()` hook — see §"Reporter localisation".
 
 ---
 
@@ -285,35 +339,57 @@ the reporter's confirmation screen is instant.
 
 **Critical — get this right. It's the visual centrepiece.**
 
-- Three independent columns: **Day**, **Hour**, **Minute**
+- **Four** independent columns: **Day**, **Hour**, **Minute**, **AM/PM**.
+  Spec drifted from the original 3-column 24-hour design during the pilot
+  build because reporters in the early store walkthroughs read 24-hour
+  numerals as confusing — 12-hour with an explicit AM/PM column tested
+  cleaner. The deployed picker is now the source of truth.
   - Day values: `["Today", "Yesterday", "2 days ago", "3 days ago", "4 days ago", "5 days ago", "6 days ago"]`
-  - Hour values: `"00"` through `"23"`
+  - Hour values: `"1"` through `"12"` (12-hour, no leading zero)
   - Minute values: `["00", "15", "30", "45"]`
+  - AM/PM values: `["AM", "PM"]`
+- The four columns share screen width with `flex` — Day at `flex-[1.6]`
+  (it has the longest labels), the other three at `flex-1`.
 - **Five visible rows per column.** Row height 40 px.
 - **Centre row is the selection.** It gets:
-  - Fill: `bg-indigo-100` (#E0E7FF)
+  - Fill: `bg-indigo-100/60` (Indigo 100 at 60% alpha)
   - Border: `1px solid indigo-500` (#6366F1), `rounded-[3px]`
   - Text: `text-indigo-900 font-bold text-[14pt]`
 - **Distance-1 rows:** `text-slate-600 text-[11pt]`
 - **Distance-2 rows:** `text-slate-400 text-[9.5pt]`
 - **Interaction:**
   - Vertical swipe on a column scrolls that column only
-  - Momentum inertia, snap-to-row on release
+  - Momentum inertia, snap-to-row on release; release velocity is
+    projected by `velocity.y * 0.15` so a flick travels a bit further
+    than the raw drag offset
   - Snap animation: `180ms cubic-bezier(0.2, 0.9, 0.3, 1)` — no bounce
-  - Mouse wheel support on desktop
-  - Keyboard: ArrowUp/Down = ±1 row, PageUp/Down = ±3 rows
+  - Mouse wheel: one notch = one row
+  - Keyboard: ArrowUp/Down = ±1 row, PageUp/Down = ±3 rows, Home/End =
+    jump to the ends
   - Haptic `navigator.vibrate(5)` on selection change (wrap in a capability check)
-- **Implementation:**
-  - Use `framer-motion` with `motion.div drag="y"` + custom snap modifier
-  - Do **NOT** install a third-party date-picker library
-  - Expected component size: ~180 lines, split into `<Wheel />` + `<DateTimePicker />`
-  - Accessibility: `role="spinbutton"` per column, `aria-valuenow/min/max`
+- **Implementation (`components/wheel-picker.tsx`):**
+  - `framer-motion` `motion.ul` with `drag="y"` + an `animate={{ y }}`
+    spring that does the snap. No third-party date-picker library.
+  - Component is ~340 lines, split into `<Wheel />` (one column) +
+    `<DateTimeWheel />` (composes four columns). `DateTimeValue` carries
+    `dayIndex` + `hour12` + `minute` + `ampm` separately; `toISO(v)`
+    converts to an ISO 8601 timestamp in the reporter's local timezone
+    (12 AM → hour 0, 12 PM → hour 12).
+  - Accessibility: `role="spinbutton"` per column with `aria-valuenow`,
+    `aria-valuemin`, `aria-valuemax`, `aria-valuetext`
 - Respects `prefers-reduced-motion` — snap becomes 0ms instantaneous
 - Header copy: "When did this happen?"
-- Sub-header: "Scroll to adjust"
-- Default selection: Today · current hour · nearest past quarter-hour
+- Sub-header: "Scroll each column to adjust"
+- Default selection: Today · current hour (12h) · nearest past
+  quarter-hour · current AM/PM
+- Localised preview line under the picker calls `toLocaleString("kn-IN", …)`
+  on Kannada locale so the weekday and month render in Kannada script
+  (Chrome and iOS Safari ship the data; older Android WebView falls
+  back to the system default)
 
-Reference rendering in the PDF, page 18 (`SafeReport_Design_Document_v6.pdf`).
+Reference rendering in the PDF, page 18 (`SafeReport_Design_Document_v6.pdf`)
+— but note the PDF still illustrates the 3-column 24-hour layout. The
+deployed 4-column shape supersedes it.
 
 ---
 
