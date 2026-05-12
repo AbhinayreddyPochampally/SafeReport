@@ -2,6 +2,7 @@ import { KeyRound, ShieldCheck, Store } from "lucide-react"
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ReporterForm } from "./reporter-form"
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 
 export const dynamic = "force-dynamic"
 
@@ -95,6 +96,11 @@ export default async function ReporterLandingPage({
           <span className="font-mono">{store.sap_code}</span>
         </p>
       </section>
+
+      {/* PWA setup nag — persistent until both notifications and home-screen
+          install are done. Re-shows on every fresh visit if either is still
+          missing, even though the reporter may have been here before. */}
+      <PwaInstallPrompt />
 
       {/* Reporter form — owns the localised intro + name+phone form so the
           language toggle inside it can re-render everything below it. */}
