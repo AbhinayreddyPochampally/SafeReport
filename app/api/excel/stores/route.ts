@@ -250,6 +250,33 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Reject duplicate sap_codes within the same file. Without this, two
+  // rows for the same store would race in the upsert (last write wins
+  // silently) — operator copy-paste errors stay invisible.
+  {
+    const seen = new Set<string>()
+    const dupes = new Set<string>()
+    for (const p of parsed) {
+      if (seen.has(p.sap_code)) dupes.add(p.sap_code)
+      seen.add(p.sap_code)
+    }
+    if (dupes.size > 0) {
+      for (const d of dupes) {
+        errors.push(`Duplicate sap_code in CSV: ${d} (each store must appear once)`)
+      }
+      // Keep only the first occurrence of each duplicated code.
+      const kept: typeof parsed = []
+      const used = new Set<string>()
+      for (const p of parsed) {
+        if (used.has(p.sap_code)) continue
+        used.add(p.sap_code)
+        kept.push(p)
+      }
+      parsed.length = 0
+      parsed.push(...kept)
+    }
+  }
+
   if (parsed.length === 0) {
     return NextResponse.json(
       {
@@ -279,6 +306,23 @@ export async function POST(req: NextRequest) {
   }
 
   const existingSet = new Set((existing ?? []).map((e) => e.sap_code as string))
+
+  // Pre-hash all passwords in parallel (capped at 4 concurrent) before
+  // the per-row loop. bcrypt cost 10 is ~150-200ms per hash; sequentially
+  // that's 3-5s for a 20-row CSV and over 30s for a 200-row import — past
+  // the Vercel/Railway request timeout. Parallelising stays well inside.
+  const passwordHashes = new Map<string, string>()
+  {
+    const toHash = parsed.filter((p) => p.password)
+    const CONCURRENT = 4
+    for (let i = 0; i < toHash.length; i += CONCURRENT) {
+      const chunk = toHash.slice(i, i + CONCURRENT)
+      const hashes = await Promise.all(
+        chunk.map((p) => bcrypt.hash(p.password as string, 10)),
+      )
+      chunk.forEach((p, j) => passwordHashes.set(p.sap_code, hashes[j]))
+    }
+  }
 
   // Build the upsert payload. For NEW rows, fill required columns with
   // sensible defaults if the CSV omits them. For EXISTING rows, only
@@ -315,7 +359,7 @@ export async function POST(req: NextRequest) {
     if ("manager_phone" in rec) row.manager_phone = rec.manager_phone
     if (rec.status) row.status = rec.status
     if (rec.password) {
-      row.manager_password_hash = await bcrypt.hash(rec.password, 10)
+      row.manager_password_hash = passwordHashes.get(rec.sap_code)
     }
     row.updated_at = new Date().toISOString()
 

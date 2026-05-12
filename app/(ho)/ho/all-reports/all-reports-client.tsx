@@ -94,7 +94,7 @@ export function AllReportsClient({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition()
   const [searchDraft, setSearchDraft] = useState(filters.q)
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -439,9 +439,23 @@ export function AllReportsClient({
       {/* Result meta ---------------------------------------------------- */}
       <div className="flex items-center justify-between mb-3 px-1 text-[12.5px]">
         <p className="text-slate-600">
-          Showing <span className="font-medium text-slate-900 tabular-nums">{from.toLocaleString()}–{to.toLocaleString()}</span> of{" "}
-          <span className="font-medium text-slate-900 tabular-nums">{total.toLocaleString()}</span>{" "}
-          {total === 1 ? "report" : "reports"}
+          {total === 0 ? (
+            "No reports match these filters."
+          ) : rows.length === 0 ? (
+            <>This page is empty. Try jumping back to page 1.</>
+          ) : (
+            <>
+              Showing{" "}
+              <span className="font-medium text-slate-900 tabular-nums">
+                {from.toLocaleString()}–{to.toLocaleString()}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-slate-900 tabular-nums">
+                {total.toLocaleString()}
+              </span>{" "}
+              {total === 1 ? "report" : "reports"}
+            </>
+          )}
         </p>
         <p className="text-slate-500">Sorted by Reported · newest</p>
       </div>
@@ -483,7 +497,7 @@ export function AllReportsClient({
             <button
               type="button"
               onClick={() => apply({ page: Math.max(1, page - 1) })}
-              disabled={page <= 1}
+              disabled={page <= 1 || isPending}
               className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
@@ -492,7 +506,7 @@ export function AllReportsClient({
             <button
               type="button"
               onClick={() => apply({ page: Math.min(totalPages, page + 1) })}
-              disabled={page >= totalPages}
+              disabled={page >= totalPages || isPending}
               className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Next

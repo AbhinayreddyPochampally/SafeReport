@@ -86,19 +86,25 @@ function errMessage(err: unknown): string {
   return String(err)
 }
 
-/** Heuristic: if every word in the transcript is ASCII letters, treat as
- * already-English so we skip the translator round-trip. Cheap + saves cost
- * on the most common reporter case (English-speaking store managers). */
+/** Stricter "is this already English?" gate. The previous version trusted
+ * ASCII-char ratio alone, which let transliterated Hinglish ("didi gir gayi
+ * billing counter ke paas") through to HO un-translated. Now we require
+ * BOTH that the text be ASCII-only AND contain at least two whole-word
+ * English stopwords. When in doubt we fall through to the translator —
+ * GPT-4o-mini's system prompt returns English-as-input verbatim, so
+ * over-translating costs pennies; under-translating leaves Hindi text in
+ * HO's inbox. */
 function looksLikeEnglish(text: string): boolean {
   if (!text) return false
   const trimmed = text.trim()
   if (trimmed.length === 0) return false
-  // > 95% ASCII chars and contains a vowel = probably English.
-  let asciiCount = 0
+  // Reject anything with non-ASCII chars (Devanagari/Tamil/Kannada/Telugu).
   for (const ch of trimmed) {
-    if (ch.charCodeAt(0) < 128) asciiCount += 1
+    if (ch.charCodeAt(0) >= 128) return false
   }
-  return asciiCount / trimmed.length > 0.95 && /[aeiouAEIOU]/.test(trimmed)
+  // Require at least 2 whole-word English stopword hits.
+  const stops = /\b(the|a|an|is|are|was|were|and|or|to|of|in|on|at|for|with|from|that|this|it|i|we|they|he|she|you|have|has|had|did|not|no|so|as|near|when|after|before)\b/gi
+  return (trimmed.match(stops)?.length ?? 0) >= 2
 }
 
 type TranscribeResult = {
@@ -378,6 +384,27 @@ export async function POST(req: NextRequest) {
     console.error("[transcribe] DB write failed", { reportId, writeErr })
     return NextResponse.json(
       { error: "Pipeline succeeded but DB write failed." },
+      { status: 500 },
+    )
+  }
+
+  console.info("[transcribe] ok", {
+    reportId,
+    sourceModel: stageA.modelUsed,
+    sourceLang: stageA.language,
+    englishChars: englishText.length,
+    sourceChars: stageA.text.length,
+    translationSkipped,
+  })
+
+  return NextResponse.json({
+    transcript: englishText,
+    transcript_source: stageA.text,
+    transcript_source_lang: stageA.language,
+    translation_skipped: translationSkipped,
+  })
+}
+  { error: "Pipeline succeeded but DB write failed." },
       { status: 500 },
     )
   }
