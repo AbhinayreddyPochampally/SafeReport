@@ -139,6 +139,20 @@ export async function PATCH(req: NextRequest) {
   patch.updated_at = new Date().toISOString()
 
   const admin = createSupabaseAdminClient()
+
+  // If the password or phone-on-file changed, bump the session epoch so
+  // every existing manager cookie for this store becomes invalid on the
+  // next request. Without this, a rotated password wouldn't actually
+  // log anyone out until the JWT's natural 7-day expiry.
+  if ("manager_password_hash" in patch || "manager_phone" in patch) {
+    const { data: cur } = await admin
+      .from("stores")
+      .select("manager_session_epoch")
+      .eq("sap_code", sap)
+      .maybeSingle<{ manager_session_epoch: number }>()
+    patch.manager_session_epoch = (cur?.manager_session_epoch ?? 0) + 1
+  }
+
   const { data, error } = await admin
     .from("stores")
     .update(patch)

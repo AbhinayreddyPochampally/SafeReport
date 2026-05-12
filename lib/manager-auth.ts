@@ -26,6 +26,10 @@ const LOCKOUT_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
 
 export type ManagerSession = {
   sap_code: string
+  /** Session epoch — bumped on the store row when HO rotates the
+   * password or phone-on-file. Cookies with a stale epoch fail-closed
+   * on the next request even though the JWT itself is valid. */
+  e: number
   iat: number
   exp: number
 }
@@ -42,10 +46,13 @@ function secret(): Uint8Array {
 
 // ---- Sign / verify -------------------------------------------------------
 
-export async function signManagerJwt(sap_code: string): Promise<string> {
+export async function signManagerJwt(
+  sap_code: string,
+  sessionEpoch: number,
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   const exp = now + SESSION_DAYS * 24 * 60 * 60
-  return new SignJWT({ sap_code })
+  return new SignJWT({ sap_code, e: sessionEpoch })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt(now)
     .setExpirationTime(exp)
@@ -60,6 +67,7 @@ export async function verifyManagerJwt(
     if (!isManagerPayload(payload)) return null
     return {
       sap_code: payload.sap_code,
+      e: payload.e,
       iat: payload.iat,
       exp: payload.exp,
     }
@@ -70,10 +78,11 @@ export async function verifyManagerJwt(
 
 function isManagerPayload(
   p: JWTPayload,
-): p is JWTPayload & { sap_code: string; iat: number; exp: number } {
+): p is JWTPayload & { sap_code: string; e: number; iat: number; exp: number } {
   return (
     typeof p.sap_code === "string" &&
     p.sap_code.length > 0 &&
+    typeof p.e === "number" &&
     typeof p.iat === "number" &&
     typeof p.exp === "number"
   )
@@ -96,6 +105,23 @@ export async function getManagerSession(
   const s = await verifyManagerJwt(raw)
   if (!s) return null
   if (requiredSapCode && s.sap_code !== requiredSapCode) return null
+  // When a sap_code is required (i.e. callers protecting a real surface),
+  // also verify the JWT's epoch claim matches the live store value. This
+  // is what lets HO password rotation immediately invalidate every
+  // existing manager cookie even though the JWT is still valid until
+  // its 7-day natural expiry. Skipped for the no-arg "am I signed in?"
+  // probe since that hits no protected surface.
+  if (requiredSapCode) {
+    const { createSupabaseAdminClient } = await import("./supabase/admin")
+    const admin = createSupabaseAdminClient()
+    const { data, error } = await admin
+      .from("stores")
+      .select("manager_session_epoch")
+      .eq("sap_code", requiredSapCode)
+      .maybeSingle<{ manager_session_epoch: number }>()
+    if (error || !data) return null
+    if (data.manager_session_epoch !== s.e) return null
+  }
   return s
 }
 

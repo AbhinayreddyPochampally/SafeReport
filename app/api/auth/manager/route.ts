@@ -100,13 +100,14 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient()
   const { data: store, error } = await admin
     .from("stores")
-    .select("sap_code, status, manager_phone, manager_password_hash")
+    .select("sap_code, status, manager_phone, manager_password_hash, manager_session_epoch")
     .eq("sap_code", sap_code)
     .maybeSingle<{
       sap_code: string
       status: string
       manager_phone: string | null
       manager_password_hash: string | null
+      manager_session_epoch: number
     }>()
 
   if (error) {
@@ -157,9 +158,11 @@ export async function POST(req: Request) {
     })
   }
 
-  // Success — mint JWT, set cookie, clear attempts bucket.
+  // Success — mint JWT, set cookie, clear attempts bucket. Embed the
+  // current session epoch so HO can invalidate this cookie later by
+  // bumping it (on password reset or phone-on-file change).
   clearAttempts(sap_code)
-  const jwt = await signManagerJwt(sap_code)
+  const jwt = await signManagerJwt(sap_code, store.manager_session_epoch ?? 0)
   const res = NextResponse.json({ ok: true, sap_code })
   res.cookies.set({
     ...managerCookieOptions(),
