@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -142,12 +142,12 @@ export function ActionClient({
     })
   }
 
-  // Keyboard navigation. Wired to document so it works whether or not the
-  // list has focus.
-  const onKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  // Keyboard navigation. Bound at the window so it fires regardless of which
+  // element has focus, then gates on focused-input + key.toLowerCase() so
+  // shift / caps-lock can't break the shortcut.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null
-      // Don't trap typing inside form fields / textareas / modals.
       if (
         target &&
         (target.tagName === "INPUT" ||
@@ -159,34 +159,33 @@ export function ActionClient({
       if (returnOpen || voidOpen) return
       if (visible.length === 0) return
 
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
       const currentIndex = visible.findIndex((l) => l.id === selectedId)
-      if (e.key === "j" || e.key === "ArrowDown") {
+      if (key === "j" || key === "ArrowDown") {
         e.preventDefault()
         const next = visible[Math.min(visible.length - 1, currentIndex + 1)]
         if (next) navigateTo(next.id)
-      } else if (e.key === "k" || e.key === "ArrowUp") {
+      } else if (key === "k" || key === "ArrowUp") {
         e.preventDefault()
         const prev = visible[Math.max(0, currentIndex - 1)]
         if (prev) navigateTo(prev.id)
-      } else if (e.key === "a" && detail?.status === "awaiting_ho") {
+      } else if (key === "a" && detail?.status === "awaiting_ho") {
         e.preventDefault()
         void submitAction("approve")
-      } else if (e.key === "r" && detail?.status === "awaiting_ho") {
+      } else if (key === "r" && detail?.status === "awaiting_ho") {
         e.preventDefault()
         setReturnOpen(true)
-      } else if (e.key === "v" && detail && detail.status !== "voided") {
+      } else if (key === "v" && detail && detail.status !== "voided") {
         e.preventDefault()
         setVoidOpen(true)
       }
-    },
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // navigateTo / submitAction are stable enough — the deps below cover
+    // every value those closures read for branching.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible, selectedId, detail?.status, returnOpen, voidOpen],
-  )
-
-  useEffect(() => {
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [onKeyDown])
+  }, [visible, selectedId, detail, returnOpen, voidOpen])
 
   async function submitAction(
     action: "approve" | "return" | "void",
@@ -252,8 +251,8 @@ export function ActionClient({
               {counts.sla_breached > 0 && (
                 <>
                   {" · "}
-                  <span className="text-orange-700 font-medium">
-                    {counts.sla_breached} SLA-breached
+                  <span className="text-orange-700">
+                    {counts.sla_breached} past 48h
                   </span>
                 </>
               )}
@@ -274,8 +273,7 @@ export function ActionClient({
             onClick={() => setFilter("sla_breached")}
             tone="orange"
           >
-            <AlertTriangle className="h-3 w-3 inline -mt-0.5 mr-1" />
-            SLA breached · {counts.sla_breached}
+            Past 48h · {counts.sla_breached}
           </FilterChip>
           <FilterChip
             active={filter === "awaiting"}
@@ -408,7 +406,7 @@ function ActionList({
             }`}
           >
             {g.bucket === "sla_breached"
-              ? `SLA breached · ${g.rows.length}`
+              ? `Past 48 hours · ${g.rows.length}`
               : g.bucket === "awaiting"
                 ? `Awaiting HO · ${g.rows.length}`
                 : `Stale new · ${g.rows.length} `}
@@ -548,9 +546,8 @@ function DetailPane({
               </span>
               <StatusBadge status={detail.status} />
               {isSlaBreached && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 text-[10px] font-semibold uppercase tracking-wide border border-orange-200">
-                  <AlertTriangle className="h-3 w-3" />
-                  SLA breach {formatAge(listItem.age_hours)}
+                <span className="inline-flex items-center text-[10.5px] text-orange-700/90">
+                  · {formatAge(listItem.age_hours)} past 48h
                 </span>
               )}
               {listItem?.resubmitted && (

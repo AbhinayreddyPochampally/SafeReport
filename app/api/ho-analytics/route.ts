@@ -40,6 +40,7 @@ type ReportRow = {
   status: string
   reported_at: string
   acknowledged_at: string | null
+  reporter_phone: string | null
   brand: string
   city: string
 }
@@ -60,6 +61,8 @@ type BucketedMedian = {
   date: string
   median_ack_hours: number | null
   median_resolution_hours: number | null
+  first_attempt_rate: number | null
+  pct_within_48h: number | null
 }
 
 type LeaderboardRow = {
@@ -69,6 +72,10 @@ type LeaderboardRow = {
   city: string
   total: number
   first_attempt_rate: number
+  unique_reporters: number
+  median_ack_hours: number | null
+  median_resolution_hours: number | null
+  past_48h_count: number
 }
 
 const CATEGORY_KEYS = [
@@ -194,7 +201,7 @@ export async function GET(req: NextRequest) {
     let q = admin
       .from("reports")
       .select(
-        "id, store_code, category, status, reported_at, acknowledged_at, stores!inner(brand, city, name)",
+        "id, store_code, category, status, reported_at, acknowledged_at, reporter_phone, stores!inner(brand, city, name)",
       )
       .gte("reported_at", rangeFrom.toISOString())
       .lte("reported_at", rangeToEx.toISOString())
@@ -236,6 +243,7 @@ export async function GET(req: NextRequest) {
         status: string
         reported_at: string
         acknowledged_at: string | null
+        reporter_phone: string | null
         stores: { brand: string; city: string; name: string } | null
       }>
     ).map((r) => ({
@@ -245,6 +253,7 @@ export async function GET(req: NextRequest) {
       status: r.status,
       reported_at: r.reported_at,
       acknowledged_at: r.acknowledged_at,
+      reporter_phone: r.reporter_phone,
       brand: r.stores?.brand ?? "—",
       city: r.stores?.city ?? "—",
     }))
@@ -252,6 +261,16 @@ export async function GET(req: NextRequest) {
 
   const rows = flatten((reportsResp.data ?? []) as unknown[])
   const prevRows = flatten((prevReportsResp.data ?? []) as unknown[])
+
+  // Max attempt per report (used in first-attempt-rate computation, both for
+  // the headline cards and the per-bucket sparkline data).
+  const maxAttemptByReport = new Map<string, number>()
+  for (const r of resolutionsResp.data ?? []) {
+    const rid = r.report_id as string
+    const n = r.attempt_number as number
+    const prev = maxAttemptByReport.get(rid) ?? 0
+    if (n > prev) maxAttemptByReport.set(rid, n)
+  }
 
   // ---- approval timestamps (latest approve per report_id) ----
   const approvedAtByReport = new Map<string, string>()
@@ -285,15 +304,6 @@ export async function GET(req: NextRequest) {
     const resHours: number[] = []
     let firstAttemptClosed = 0
     let withinSla = 0
-
-    // Build maxAttempt map for first-attempt computation.
-    const maxAttemptByReport = new Map<string, number>()
-    for (const r of resolutionsResp.data ?? []) {
-      const rid = r.report_id as string
-      const n = r.attempt_number as number
-      const prev = maxAttemptByReport.get(rid) ?? 0
-      if (n > prev) maxAttemptByReport.set(rid, n)
-    }
 
     for (const r of scope) {
       const reportedTs = Date.parse(r.reported_at)
@@ -342,6 +352,9 @@ export async function GET(req: NextRequest) {
     categoryCounts: Record<string, number>
     ackHours: number[]
     resHours: number[]
+    closedCount: number
+    firstAttemptClosed: number
+    within48hClosed: number
   }
   const buckets: Bucket[] = []
   const bucketIndex = new Map<string, number>()
@@ -369,6 +382,9 @@ export async function GET(req: NextRequest) {
         categoryCounts: Object.fromEntries(CATEGORY_KEYS.map((k) => [k, 0])),
         ackHours: [],
         resHours: [],
+        closedCount: 0,
+        firstAttemptClosed: 0,
+        within48hClosed: 0,
       })
       stepCursor(cursor, granularity)
     }
@@ -391,11 +407,15 @@ export async function GET(req: NextRequest) {
       }
     }
     if (r.status === "closed") {
+      b.closedCount += 1
+      if ((maxAttemptByReport.get(r.id) ?? 0) === 1) b.firstAttemptClosed += 1
       const closedAtIso = approvedAtByReport.get(r.id)
       if (closedAtIso) {
         const closedTs = Date.parse(closedAtIso)
         if (!Number.isNaN(closedTs) && !Number.isNaN(reportedTs)) {
-          b.resHours.push(Math.max(0, (closedTs - reportedTs) / 36e5))
+          const hours = Math.max(0, (closedTs - reportedTs) / 36e5)
+          b.resHours.push(hours)
+          if (hours <= SLA_HOURS) b.within48hClosed += 1
         }
       }
     }
@@ -421,28 +441,27 @@ export async function GET(req: NextRequest) {
     date: b.date,
     median_ack_hours: median(b.ackHours),
     median_resolution_hours: median(b.resHours),
+    first_attempt_rate:
+      b.closedCount === 0 ? null : b.firstAttemptClosed / b.closedCount,
+    pct_within_48h:
+      b.closedCount === 0 ? null : b.within48hClosed / b.closedCount,
   }))
 
   // ---- Leaderboard ----
-  const maxAttemptByReport = new Map<string, number>()
-  for (const r of resolutionsResp.data ?? []) {
-    const rid = r.report_id as string
-    const n = r.attempt_number as number
-    const prev = maxAttemptByReport.get(rid) ?? 0
-    if (n > prev) maxAttemptByReport.set(rid, n)
+  const past48hCutoffMs = Date.now() - SLA_HOURS * 36e5
+  type StoreAgg = {
+    name: string
+    brand: string
+    city: string
+    total: number
+    firstAttempt: number
+    closed: number
+    reporters: Set<string>
+    ackHours: number[]
+    resHours: number[]
+    past48h: number
   }
-
-  const storeAgg = new Map<
-    string,
-    {
-      name: string
-      brand: string
-      city: string
-      total: number
-      firstAttempt: number
-      closed: number
-    }
-  >()
+  const storeAgg = new Map<string, StoreAgg>()
   for (const s of storesResp.data ?? []) {
     storeAgg.set(s.sap_code as string, {
       name: s.name as string,
@@ -451,17 +470,43 @@ export async function GET(req: NextRequest) {
       total: 0,
       firstAttempt: 0,
       closed: 0,
+      reporters: new Set<string>(),
+      ackHours: [],
+      resHours: [],
+      past48h: 0,
     })
   }
   for (const r of rows) {
     const agg = storeAgg.get(r.store_code)
     if (!agg) continue
     agg.total += 1
+    if (r.reporter_phone) agg.reporters.add(r.reporter_phone.trim())
+    const reportedTs = Date.parse(r.reported_at)
+    if (r.acknowledged_at) {
+      const ackTs = Date.parse(r.acknowledged_at)
+      if (!Number.isNaN(ackTs) && !Number.isNaN(reportedTs)) {
+        agg.ackHours.push(Math.max(0, (ackTs - reportedTs) / 36e5))
+      }
+    }
     if (r.status === "closed") {
       agg.closed += 1
       if ((maxAttemptByReport.get(r.id) ?? 0) === 1) {
         agg.firstAttempt += 1
       }
+      const closedAtIso = approvedAtByReport.get(r.id)
+      if (closedAtIso) {
+        const closedTs = Date.parse(closedAtIso)
+        if (!Number.isNaN(closedTs) && !Number.isNaN(reportedTs)) {
+          agg.resHours.push(Math.max(0, (closedTs - reportedTs) / 36e5))
+        }
+      }
+    }
+    if (
+      r.status === "awaiting_ho" &&
+      !Number.isNaN(reportedTs) &&
+      reportedTs <= past48hCutoffMs
+    ) {
+      agg.past48h += 1
     }
   }
   const leaderboard: LeaderboardRow[] = Array.from(storeAgg.entries())
@@ -472,6 +517,10 @@ export async function GET(req: NextRequest) {
       city: v.city,
       total: v.total,
       first_attempt_rate: v.closed === 0 ? 0 : v.firstAttempt / v.closed,
+      unique_reporters: v.reporters.size,
+      median_ack_hours: median(v.ackHours),
+      median_resolution_hours: median(v.resHours),
+      past_48h_count: v.past48h,
     }))
     .sort((a, b) => b.total - a.total || a.sap_code.localeCompare(b.sap_code))
     .slice(0, 20)

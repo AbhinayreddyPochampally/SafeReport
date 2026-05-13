@@ -6,9 +6,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -68,6 +65,8 @@ type BucketedMedian = {
   date: string
   median_ack_hours: number | null
   median_resolution_hours: number | null
+  first_attempt_rate: number | null
+  pct_within_48h: number | null
 }
 
 type TimeAnalytics = {
@@ -88,6 +87,10 @@ type LeaderboardRow = {
   city: string
   total: number
   first_attempt_rate: number
+  unique_reporters: number
+  median_ack_hours: number | null
+  median_resolution_hours: number | null
+  past_48h_count: number
 }
 
 type Payload = {
@@ -415,7 +418,7 @@ export function AnalyticsClient() {
         <Clock className="h-3 w-3" />
         Time analytics
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <TimeCard
           label="Median time to acknowledge"
           value={data?.time_analytics.median_ack_hours ?? null}
@@ -426,6 +429,10 @@ export function AnalyticsClient() {
               ? `P90 ${formatHours(data.time_analytics.p90_ack_hours)} · ${data.time_analytics.acked_count} acked`
               : "—"
           }
+          sparkline={
+            data?.time_series_medians.map((b) => b.median_ack_hours) ?? []
+          }
+          sparklineColor="#0F766E"
           lowerIsBetter
         />
         <TimeCard
@@ -438,6 +445,12 @@ export function AnalyticsClient() {
               ? `P90 ${formatHours(data.time_analytics.p90_resolution_hours)} · reported → closed`
               : "—"
           }
+          sparkline={
+            data?.time_series_medians.map(
+              (b) => b.median_resolution_hours,
+            ) ?? []
+          }
+          sparklineColor="#4338CA"
           lowerIsBetter
         />
         <TimeCard
@@ -450,30 +463,27 @@ export function AnalyticsClient() {
               ? `${Math.round((data.time_analytics.first_attempt_rate ?? 0) * data.time_analytics.closed_count)} first-try / ${data.time_analytics.closed_count}`
               : "—"
           }
+          sparkline={
+            data?.time_series_medians.map((b) => b.first_attempt_rate) ?? []
+          }
+          sparklineColor="#0F766E"
         />
         <TimeCard
-          label={`Resolved within ${data?.sla_hours ?? 48}h SLA`}
+          label={`Resolved within ${data?.sla_hours ?? 48}h`}
           value={data?.time_analytics.pct_within_48h ?? null}
           prev={data?.time_analytics_prev.pct_within_48h ?? null}
           format="percent"
           subline={
             data
-              ? `${Math.round((data.time_analytics.pct_within_48h ?? 0) * data.time_analytics.closed_count)} within SLA / ${data.time_analytics.closed_count}`
+              ? `${Math.round((data.time_analytics.pct_within_48h ?? 0) * data.time_analytics.closed_count)} within 48h / ${data.time_analytics.closed_count}`
               : "—"
           }
+          sparkline={
+            data?.time_series_medians.map((b) => b.pct_within_48h) ?? []
+          }
+          sparklineColor="#0F766E"
         />
       </div>
-
-      {/* Median trend line */}
-      <ChartCard
-        title={`${data?.granularity === "weekly" ? "Weekly" : "Daily"} median: acknowledge vs resolution`}
-        subtitle="Lower is better. Dashed line is the 48h resolution SLA."
-      >
-        <MedianTrend
-          rows={data?.time_series_medians ?? []}
-          sla={data?.sla_hours ?? 48}
-        />
-      </ChartCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
         <ChartCard
@@ -566,6 +576,8 @@ function TimeCard({
   prev,
   format,
   subline,
+  sparkline,
+  sparklineColor,
   lowerIsBetter,
 }: {
   label: string
@@ -573,6 +585,8 @@ function TimeCard({
   prev: number | null
   format: "hours" | "percent"
   subline: string
+  sparkline: (number | null)[]
+  sparklineColor: string
   lowerIsBetter?: boolean
 }) {
   const hasValue = value !== null
@@ -613,8 +627,111 @@ function TimeCard({
           </span>
         )}
       </div>
+      <div className="mt-2">
+        <Sparkline data={sparkline} color={sparklineColor} />
+      </div>
       <div className="text-[10.5px] text-slate-500 mt-1">{subline}</div>
     </div>
+  )
+}
+
+/**
+ * Tiny inline trend chart for a metric card. Auto-scales to the data range
+ * so even a metric that hovers in a narrow band reads as a visible curve.
+ * Nulls (no data on that day) are gaps — no fake line drawn through them.
+ */
+function Sparkline({
+  data,
+  color,
+  height = 32,
+}: {
+  data: (number | null)[]
+  color: string
+  height?: number
+}) {
+  const valid = data
+    .map((v, i) => ({ v, i }))
+    .filter((p): p is { v: number; i: number } => p.v !== null && Number.isFinite(p.v))
+
+  if (valid.length < 2) {
+    return (
+      <div
+        className="w-full text-[10px] text-slate-300 flex items-center"
+        style={{ height }}
+      >
+        Not enough data
+      </div>
+    )
+  }
+  const min = Math.min(...valid.map((p) => p.v))
+  const max = Math.max(...valid.map((p) => p.v))
+  const range = max - min || 1
+  const len = Math.max(1, data.length - 1)
+  // viewBox is normalized 0..100 horizontally so the SVG fills its container.
+  const xStep = 100 / len
+  const padY = 2
+  const drawY = (v: number) =>
+    height - padY - ((v - min) / range) * (height - 2 * padY)
+
+  // Build segments — break path when we hit a null gap so we don't connect
+  // through missing days.
+  const segments: { i: number; v: number }[][] = []
+  let cur: { i: number; v: number }[] = []
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i]
+    if (v === null || !Number.isFinite(v as number)) {
+      if (cur.length > 0) segments.push(cur)
+      cur = []
+    } else {
+      cur.push({ i, v: v as number })
+    }
+  }
+  if (cur.length > 0) segments.push(cur)
+
+  return (
+    <svg
+      viewBox={`0 0 100 ${height}`}
+      preserveAspectRatio="none"
+      width="100%"
+      height={height}
+      role="img"
+      aria-label="Trend"
+    >
+      {segments.map((seg, idx) => {
+        if (seg.length === 1) {
+          // Lone point — render as a small dot.
+          const p = seg[0]
+          return (
+            <circle
+              key={idx}
+              cx={p.i * xStep}
+              cy={drawY(p.v)}
+              r={1.2}
+              fill={color}
+            />
+          )
+        }
+        const d = seg
+          .map((p, j) => {
+            const x = p.i * xStep
+            const y = drawY(p.v)
+            return `${j === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`
+          })
+          .join(" ")
+        return (
+          <path
+            key={idx}
+            d={d}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )
+      })}
+    </svg>
   )
 }
 
@@ -637,97 +754,6 @@ function ChartCard({
       </header>
       <div className="p-4">{children}</div>
     </section>
-  )
-}
-
-function MedianTrend({
-  rows,
-  sla,
-}: {
-  rows: BucketedMedian[]
-  sla: number
-}) {
-  if (rows.length === 0) {
-    return <EmptyState label="No data in range." />
-  }
-  return (
-    <div className="h-[240px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={rows}
-          margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-          <XAxis
-            dataKey="date"
-            tickFormatter={tickDateFmt}
-            fontSize={11}
-            stroke="#94A3B8"
-          />
-          <YAxis
-            fontSize={11}
-            stroke="#94A3B8"
-            width={32}
-            label={{
-              value: "hrs",
-              angle: -90,
-              position: "insideLeft",
-              fontSize: 10,
-              fill: "#94A3B8",
-            }}
-          />
-          <Tooltip
-            labelFormatter={(v) => prettyDate(v as string)}
-            formatter={(value, name) => {
-              const v = typeof value === "number" ? value : null
-              const label =
-                name === "median_ack_hours" ? "Median ack" : "Median resolution"
-              return [v == null ? "—" : `${v.toFixed(1)}h`, label]
-            }}
-            contentStyle={{
-              fontSize: 12,
-              borderRadius: 6,
-              border: "1px solid #E2E8F0",
-            }}
-          />
-          <Legend
-            wrapperStyle={{ fontSize: 11 }}
-            formatter={(value) =>
-              value === "median_ack_hours"
-                ? "Median ack"
-                : "Median resolution"
-            }
-          />
-          <ReferenceLine
-            y={sla}
-            stroke="#C2410C"
-            strokeDasharray="3 3"
-            label={{
-              value: `${sla}h SLA`,
-              position: "right",
-              fontSize: 10,
-              fill: "#C2410C",
-            }}
-          />
-          <Line
-            type="monotone"
-            dataKey="median_ack_hours"
-            stroke="#0F766E"
-            strokeWidth={2}
-            dot={false}
-            connectNulls
-          />
-          <Line
-            type="monotone"
-            dataKey="median_resolution_hours"
-            stroke="#4338CA"
-            strokeWidth={2}
-            dot={false}
-            connectNulls
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
   )
 }
 
@@ -844,16 +870,17 @@ function StoreLeaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const maxTotal = withVolume.reduce((m, r) => (r.total > m ? r.total : m), 0)
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-[12.5px]">
         <thead>
-          <tr className="text-[11px] uppercase tracking-wide text-slate-500">
+          <tr className="text-[10.5px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
             <th className="text-left px-2 py-2 font-medium">Store</th>
-            <th className="text-left px-2 py-2 font-medium">Brand</th>
-            <th className="text-left px-2 py-2 font-medium">City</th>
+            <th className="text-left px-2 py-2 font-medium">Brand · city</th>
             <th className="text-right px-2 py-2 font-medium">Volume</th>
-            <th className="text-right px-2 py-2 font-medium">
-              First-attempt rate
-            </th>
+            <th className="text-right px-2 py-2 font-medium">Reporters</th>
+            <th className="text-right px-2 py-2 font-medium">Mgr ack</th>
+            <th className="text-right px-2 py-2 font-medium">Resolution</th>
+            <th className="text-right px-2 py-2 font-medium">1st-try</th>
+            <th className="text-right px-2 py-2 font-medium">Past 48h</th>
           </tr>
         </thead>
         <tbody>
@@ -861,20 +888,29 @@ function StoreLeaderboard({ rows }: { rows: LeaderboardRow[] }) {
             const volPct =
               maxTotal === 0 ? 0 : Math.round((r.total / maxTotal) * 100)
             const firstPct = Math.round(r.first_attempt_rate * 100)
+            const ackHealthy =
+              r.median_ack_hours != null && r.median_ack_hours < 24
+            const resHealthy =
+              r.median_resolution_hours != null &&
+              r.median_resolution_hours < 48
             return (
               <tr key={r.sap_code} className="border-t border-slate-100">
                 <td className="px-2 py-2">
-                  <div className="text-slate-900 font-medium">{r.name}</div>
+                  <div className="text-slate-900 font-medium truncate max-w-[220px]">
+                    {r.name}
+                  </div>
                   <div className="text-[11px] text-slate-400 font-mono">
                     {r.sap_code}
                   </div>
                 </td>
-                <td className="px-2 py-2 text-slate-700">{r.brand}</td>
-                <td className="px-2 py-2 text-slate-700">{r.city}</td>
+                <td className="px-2 py-2 text-slate-700">
+                  <div>{r.brand}</div>
+                  <div className="text-[11px] text-slate-500">{r.city}</div>
+                </td>
                 <td className="px-2 py-2 text-right tabular-nums">
                   <div className="flex items-center justify-end gap-2">
                     <span className="text-slate-900">{r.total}</span>
-                    <span className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <span className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                       <span
                         className="block h-full bg-indigo-500"
                         style={{ width: `${volPct}%` }}
@@ -882,19 +918,47 @@ function StoreLeaderboard({ rows }: { rows: LeaderboardRow[] }) {
                     </span>
                   </div>
                 </td>
+                <td className="px-2 py-2 text-right tabular-nums text-slate-700">
+                  {r.unique_reporters || (
+                    <span className="text-slate-300">—</span>
+                  )}
+                </td>
+                <td
+                  className={`px-2 py-2 text-right tabular-nums ${
+                    r.median_ack_hours == null
+                      ? "text-slate-300"
+                      : ackHealthy
+                        ? "text-teal-700"
+                        : "text-orange-700"
+                  }`}
+                >
+                  {formatHours(r.median_ack_hours)}
+                </td>
+                <td
+                  className={`px-2 py-2 text-right tabular-nums ${
+                    r.median_resolution_hours == null
+                      ? "text-slate-300"
+                      : resHealthy
+                        ? "text-teal-700"
+                        : "text-orange-700"
+                  }`}
+                >
+                  {formatHours(r.median_resolution_hours)}
+                </td>
                 <td className="px-2 py-2 text-right tabular-nums">
                   {r.total === 0 ? (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-slate-300">—</span>
                   ) : (
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-slate-900">{firstPct}%</span>
-                      <span className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                        <span
-                          className="block h-full bg-teal-500"
-                          style={{ width: `${firstPct}%` }}
-                        />
-                      </span>
-                    </div>
+                    <span className="text-slate-700">{firstPct}%</span>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {r.past_48h_count > 0 ? (
+                    <span className="text-orange-700">
+                      {r.past_48h_count}
+                    </span>
+                  ) : (
+                    <span className="text-slate-300">0</span>
                   )}
                 </td>
               </tr>

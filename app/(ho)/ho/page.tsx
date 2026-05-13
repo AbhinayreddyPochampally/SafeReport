@@ -1,16 +1,16 @@
 import Link from "next/link"
 import {
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
-  Clock,
   FileText,
   Inbox,
   RotateCcw,
+  Store as StoreIcon,
   type LucideIcon,
 } from "lucide-react"
 import { requireHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
-import { CATEGORIES } from "@/lib/categories"
 import type { ReportCategory } from "@/lib/reporter-state"
 import { QueueList, type QueueRow, type QueueStatus } from "./queue-list"
 
@@ -19,9 +19,10 @@ export const dynamic = "force-dynamic"
 /**
  * HO landing — /ho.
  *
- * Renders four summary cards, an approval queue, and a 12-month × 8-category
- * heatmap strip. All data is fetched in parallel on the server; no polling,
- * no realtime — HO refreshes manually and reacts to email/SMS.
+ * Renders four summary cards, an approval queue, a pipeline queue, and a
+ * "stores needing attention" panel (replaces the 12-month heatmap as of
+ * May 2026 — the heatmap surfaced no actionable signal). All data is fetched
+ * in parallel on the server; no polling, no realtime.
  *
  * Data shape notes:
  *  - `reports.store_code` joins to `stores.sap_code`
@@ -30,11 +31,15 @@ export const dynamic = "force-dynamic"
  *    a Phase E concern and not layered in yet
  */
 
-type HeatmapCell = {
-  category: ReportCategory
-  /** ISO month boundary, YYYY-MM-01 */
-  month: string
-  count: number
+const ATTENTION_HOURS = 48
+
+type AttentionStore = {
+  sap_code: string
+  store_name: string
+  brand: string
+  past_48h_count: number
+  oldest_report_id: string
+  oldest_hours: number
 }
 
 function startOfThisMonthISO(): string {
@@ -43,14 +48,7 @@ function startOfThisMonthISO(): string {
     .toISOString()
 }
 
-function startOfMonthsAgoISO(monthsBack: number): string {
-  const now = new Date()
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack, 1),
-  ).toISOString()
-}
-
-async function fetchLandingData(monthStart: string, heatmapStart: string) {
+async function fetchLandingData(monthStart: string) {
   const admin = createSupabaseAdminClient()
 
   const [
@@ -59,7 +57,6 @@ async function fetchLandingData(monthStart: string, heatmapStart: string) {
     closedThisMonth,
     returnedThisMonth,
     activeRowsRaw,
-    heatmap,
   ] = await Promise.all([
     admin
       .from("reports")
@@ -92,10 +89,6 @@ async function fetchLandingData(monthStart: string, heatmapStart: string) {
       .in("status", ["new", "in_progress", "awaiting_ho", "returned"])
       .order("reported_at", { ascending: true })
       .limit(100),
-    admin
-      .from("reports")
-      .select("category, reported_at")
-      .gte("reported_at", heatmapStart),
   ])
 
   const allOpen: QueueRow[] = (activeRowsRaw.data ?? []).map((r) => {
@@ -128,35 +121,55 @@ async function fetchLandingData(monthStart: string, heatmapStart: string) {
     .filter((r) => r.status !== "awaiting_ho")
     .sort((a, b) => b.reported_at.localeCompare(a.reported_at))
 
-  // Bucket the heatmap data into (category × month). We only need the last 12
-  // months by spec, so truncate if the DB returns extras.
-  const buckets = new Map<string, number>()
-  for (const row of heatmap.data ?? []) {
-    const dt = new Date(row.reported_at as string)
-    const monthKey = new Date(
-      Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), 1),
-    )
-      .toISOString()
-      .slice(0, 10)
-    const k = `${row.category}::${monthKey}`
-    buckets.set(k, (buckets.get(k) ?? 0) + 1)
+  // Stores needing attention = the subset of approvalRows older than the
+  // attention threshold (48h), grouped by store. Each entry exposes the
+  // oldest report so a click lands HO directly on the most urgent item.
+  const nowMs = Date.now()
+  const cutoffMs = nowMs - ATTENTION_HOURS * 36e5
+  type Agg = {
+    sap_code: string
+    store_name: string
+    brand: string
+    count: number
+    oldest_at_ms: number
+    oldest_id: string
   }
-
-  const heatmapCells: HeatmapCell[] = []
-  const now = new Date()
-  for (const cat of CATEGORIES) {
-    for (let m = 11; m >= 0; m--) {
-      const d = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m, 1),
-      )
-      const monthKey = d.toISOString().slice(0, 10)
-      heatmapCells.push({
-        category: cat.key,
-        month: monthKey,
-        count: buckets.get(`${cat.key}::${monthKey}`) ?? 0,
+  const aggByStore = new Map<string, Agg>()
+  for (const r of approvalRows) {
+    const ts = Date.parse(r.reported_at)
+    if (!Number.isFinite(ts) || ts > cutoffMs) continue
+    const existing = aggByStore.get(r.store_code)
+    if (existing) {
+      existing.count += 1
+      if (ts < existing.oldest_at_ms) {
+        existing.oldest_at_ms = ts
+        existing.oldest_id = r.id
+      }
+    } else {
+      aggByStore.set(r.store_code, {
+        sap_code: r.store_code,
+        store_name: r.store_name,
+        brand: r.brand,
+        count: 1,
+        oldest_at_ms: ts,
+        oldest_id: r.id,
       })
     }
   }
+  const attentionStores: AttentionStore[] = Array.from(aggByStore.values())
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count
+      return a.oldest_at_ms - b.oldest_at_ms
+    })
+    .slice(0, 8)
+    .map((a) => ({
+      sap_code: a.sap_code,
+      store_name: a.store_name,
+      brand: a.brand,
+      past_48h_count: a.count,
+      oldest_report_id: a.oldest_id,
+      oldest_hours: (nowMs - a.oldest_at_ms) / 36e5,
+    }))
 
   return {
     reportsThisMonth: reportsThisMonth.count ?? 0,
@@ -165,7 +178,7 @@ async function fetchLandingData(monthStart: string, heatmapStart: string) {
     returnedThisMonth: returnedThisMonth.count ?? 0,
     approvalRows,
     pipelineRows,
-    heatmap: heatmapCells,
+    attentionStores,
   }
 }
 
@@ -173,9 +186,7 @@ export default async function HoLandingPage() {
   await requireHoSession("/ho")
 
   const monthStart = startOfThisMonthISO()
-  const heatmapStart = startOfMonthsAgoISO(11) // current month + 11 back = 12 months
-
-  const data = await fetchLandingData(monthStart, heatmapStart)
+  const data = await fetchLandingData(monthStart)
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
@@ -250,21 +261,92 @@ export default async function HoLandingPage() {
         viewAllHref="/ho/all-reports?status=open"
       />
 
-      {/* Category heatmap --------------------------------------------------- */}
-      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* Stores needing attention ----------------------------------------- */}
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-8">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-slate-600" aria-hidden />
-            <h2 className="font-display text-base font-semibold text-slate-900">
-              Category heatmap
-            </h2>
+            <AlertCircle className="h-4.5 w-4.5 text-orange-700" aria-hidden />
+            <div>
+              <h2 className="font-display text-base font-semibold text-slate-900">
+                Stores needing attention
+              </h2>
+              <p className="text-[12px] text-slate-500 mt-0.5">
+                Stores with reports waiting more than {ATTENTION_HOURS} hours.
+                Click a store to open its oldest report.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-500">Last 12 months</p>
+          {data.attentionStores.length > 0 && (
+            <Link
+              href="/ho/action?filter=sla_breached"
+              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-indigo-700 hover:text-indigo-900"
+            >
+              Open Action queue
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Link>
+          )}
         </div>
-        <Heatmap cells={data.heatmap} />
+        {data.attentionStores.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700 mb-2">
+              <CheckCircle2 className="h-5 w-5" aria-hidden />
+            </div>
+            <p className="text-[14px] text-slate-700">All caught up</p>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              No store has reports older than {ATTENTION_HOURS} hours.
+            </p>
+          </div>
+        ) : (
+          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+            {data.attentionStores.map((s) => (
+              <li key={s.sap_code}>
+                <Link
+                  href={`/ho/action?id=${s.oldest_report_id}`}
+                  className="group block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-orange-300 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-700 ring-1 ring-orange-100">
+                      <StoreIcon className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] text-slate-500 truncate">
+                        {s.sap_code}
+                      </p>
+                      <p className="text-[13px] font-medium text-slate-900 truncate group-hover:text-orange-800">
+                        {s.store_name}
+                      </p>
+                      <p className="text-[10.5px] text-slate-500 truncate">
+                        {s.brand}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-baseline justify-between gap-2 tabular-nums">
+                    <span className="text-[12px] text-slate-700">
+                      <span className="text-[16px] font-semibold text-orange-700">
+                        {s.past_48h_count}
+                      </span>{" "}
+                      <span className="text-[11px] text-slate-500">
+                        past 48h
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      oldest {formatHours(s.oldest_hours)}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   )
+}
+
+/** Compact hour formatting for the attention panel. */
+function formatHours(h: number): string {
+  if (h < 24) return `${Math.round(h)}h`
+  return `${Math.round(h / 24)}d`
 }
 
 /* ----------------------------- Summary card ------------------------------ */
@@ -334,142 +416,3 @@ function SummaryCard({
   )
 }
 
-/* -------------------------------- Heatmap -------------------------------- */
-
-function Heatmap({ cells }: { cells: HeatmapCell[] }) {
-  // Compute the max count so we can map to 5 discrete opacity buckets. A flat
-  // linear mapping puts too much weight on outliers, so we take a gentle root.
-  const max = cells.reduce((m, c) => (c.count > m ? c.count : m), 0)
-
-  // Pull a stable ordered list of months from the data (cells are emitted in
-  // oldest→newest order per category; all categories share the same month set).
-  const months = Array.from(new Set(cells.map((c) => c.month))).sort()
-  const monthLabel = (iso: string) => {
-    const d = new Date(iso)
-    return d.toLocaleDateString("en-IN", { month: "short" })
-  }
-
-  // Group cells by category for row rendering.
-  const byCategory = new Map<ReportCategory, HeatmapCell[]>()
-  for (const c of cells) {
-    const arr = byCategory.get(c.category) ?? []
-    arr.push(c)
-    byCategory.set(c.category, arr)
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-xs">
-        <thead>
-          <tr>
-            <th className="text-left text-[11px] font-medium text-slate-500 uppercase tracking-wide px-6 py-3">
-              Category
-            </th>
-            {months.map((m) => (
-              <th
-                key={m}
-                scope="col"
-                className="text-center text-[11px] font-medium text-slate-500 uppercase tracking-wide px-1 py-3"
-              >
-                {monthLabel(m)}
-              </th>
-            ))}
-            <th className="px-6" />
-          </tr>
-        </thead>
-        <tbody>
-          {CATEGORIES.map((cat) => {
-            const row = (byCategory.get(cat.key) ?? []).sort((a, b) =>
-              a.month.localeCompare(b.month),
-            )
-            const rowTotal = row.reduce((n, c) => n + c.count, 0)
-            const isIncident = cat.kind === "incident"
-            return (
-              <tr key={cat.key} className="border-t border-slate-100">
-                <td className="px-6 py-2 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <cat.icon
-                      className={`h-4 w-4 ${
-                        isIncident ? "text-amber-700" : "text-slate-600"
-                      }`}
-                      aria-hidden
-                    />
-                    <span className="text-slate-800">{cat.label}</span>
-                  </div>
-                </td>
-                {row.map((c) => (
-                  <HeatmapCellBox
-                    key={c.month}
-                    count={c.count}
-                    max={max}
-                    isIncident={isIncident}
-                    month={c.month}
-                    categoryLabel={cat.label}
-                  />
-                ))}
-                <td className="px-6 py-2 text-right text-slate-500 tabular-nums">
-                  {rowTotal}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function HeatmapCellBox({
-  count,
-  max,
-  isIncident,
-  month,
-  categoryLabel,
-}: {
-  count: number
-  max: number
-  isIncident: boolean
-  month: string
-  categoryLabel: string
-}) {
-  // 0 → empty cell; otherwise bucket into 1..5 using sqrt scaling against max.
-  let bucket = 0
-  if (count > 0 && max > 0) {
-    const ratio = Math.sqrt(count) / Math.sqrt(max)
-    bucket = Math.max(1, Math.min(5, Math.ceil(ratio * 5)))
-  }
-  // Palette rule: incidents = amber, observations = slate. Never green/red.
-  const paletteAmber = [
-    "bg-slate-50",
-    "bg-amber-100",
-    "bg-amber-200",
-    "bg-amber-300",
-    "bg-amber-500",
-    "bg-amber-700",
-  ]
-  const paletteSlate = [
-    "bg-slate-50",
-    "bg-slate-200",
-    "bg-slate-300",
-    "bg-slate-400",
-    "bg-slate-500",
-    "bg-slate-700",
-  ]
-  const palette = isIncident ? paletteAmber : paletteSlate
-  const textInverted = bucket >= 4
-  return (
-    <td className="px-1 py-1 align-middle">
-      <div
-        title={`${categoryLabel} · ${new Date(month).toLocaleDateString(
-          "en-IN",
-          { month: "short", year: "numeric" },
-        )} · ${count}`}
-        className={`mx-auto h-7 w-7 rounded flex items-center justify-center text-[11px] tabular-nums ${
-          palette[bucket]
-        } ${textInverted ? "text-white" : "text-slate-700"}`}
-      >
-        {count > 0 ? count : ""}
-      </div>
-    </td>
-  )
-}

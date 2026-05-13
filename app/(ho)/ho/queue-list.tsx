@@ -104,9 +104,9 @@ export function QueueList({
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {variant === "approval" && breachedCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-orange-700">
-                <AlertCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                SLA breach &gt; {SLA_HOURS}h · {breachedCount}
+              <span className="inline-flex items-center gap-1 text-[11px] text-orange-700/90">
+                <AlertCircle className="h-3 w-3" strokeWidth={2} aria-hidden />
+                {breachedCount} past {SLA_HOURS}h
               </span>
             )}
             <Link
