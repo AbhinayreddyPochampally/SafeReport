@@ -168,7 +168,7 @@ function QueueRowItem({
   return (
     <li>
       <Link
-        href={`/ho/reports/${row.id}`}
+        href={`/ho/reports/${row.id}?from=overview`}
         className="group grid grid-cols-[6px_44px_minmax(0,1fr)_auto] items-center gap-4 px-6 py-4 hover:bg-slate-50/80 transition-colors"
       >
         {/* Tone marker (vertical bar) */}

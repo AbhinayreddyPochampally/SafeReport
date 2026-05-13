@@ -65,16 +65,27 @@ type HoActionEntry = {
   actor_display_name: string | null
 }
 
+export type BackTarget = "overview" | "action" | "reports"
+
+function parseBackTarget(s: string | string[] | undefined): BackTarget {
+  const v = Array.isArray(s) ? s[0] : s
+  if (v === "action" || v === "reports") return v
+  return "overview"
+}
+
 export default async function HoReportDetailPage({
   params,
+  searchParams,
 }: {
   params: { report_id: string }
+  searchParams?: { from?: string | string[] }
 }) {
   if (!REPORT_ID.test(params.report_id)) {
     notFound()
   }
 
   const session = await requireHoSession(`/ho/reports/${params.report_id}`)
+  const backTarget = parseBackTarget(searchParams?.from)
 
   const admin = createSupabaseAdminClient()
 
@@ -168,6 +179,7 @@ export default async function HoReportDetailPage({
       resolutions={resolutions}
       history={history}
       viewer={{ display_name: session.display_name }}
+      backTarget={backTarget}
     />
   )
 }

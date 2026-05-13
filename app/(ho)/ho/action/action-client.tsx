@@ -634,7 +634,7 @@ function DetailPane({
             {detail.store.sap_code} · {detail.store.name} · {detail.store.city}
           </span>
           <Link
-            href={`/ho/reports/${detail.id}`}
+            href={`/ho/reports/${detail.id}?from=action`}
             className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-indigo-700 hover:text-indigo-900"
             target="_blank"
             rel="noopener noreferrer"

@@ -92,19 +92,30 @@ type HoActionEntry = {
 
 type Viewer = { display_name: string }
 
+export type BackTarget = "overview" | "action" | "reports"
+
+const BACK_TARGETS: Record<BackTarget, { href: string; label: string }> = {
+  overview: { href: "/ho", label: "Back to overview" },
+  action: { href: "/ho/action", label: "Back to Action queue" },
+  reports: { href: "/ho/all-reports", label: "Back to Reports" },
+}
+
 export function HoReportDetail({
   store,
   report: initialReport,
   resolutions,
   history,
   viewer,
+  backTarget = "overview",
 }: {
   store: Store
   report: Report
   resolutions: Resolution[]
   history: HoActionEntry[]
   viewer: Viewer
+  backTarget?: BackTarget
 }) {
+  const back = BACK_TARGETS[backTarget] ?? BACK_TARGETS.overview
   const router = useRouter()
   const [report, setReport] = useState<Report>(initialReport)
   const [busy, setBusy] = useState<null | "approve" | "return" | "void">(null)
@@ -169,11 +180,11 @@ export function HoReportDetail({
   return (
     <div className="max-w-3xl mx-auto px-6 py-8">
       <Link
-        href="/ho"
+        href={back.href}
         className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-indigo-700"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to overview
+        {back.label}
       </Link>
 
       {/* Header */}
