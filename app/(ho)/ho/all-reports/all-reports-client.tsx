@@ -1,9 +1,25 @@
 "use client"
 
-import { ChevronLeft, ChevronRight, Download, Search, X } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Ban,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ImageOff,
+  Loader2,
+  Mic,
+  Phone,
+  RotateCcw,
+  Search,
+  User,
+  X,
+} from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { CATEGORIES } from "@/lib/categories"
 import type { ReportCategory } from "@/lib/reporter-state"
 
@@ -37,6 +53,44 @@ export type AllReportsRow = {
   status: ReportStatus
   reported_at: string
   headline: string | null
+}
+
+export type ReportDetail = {
+  id: string
+  store: {
+    sap_code: string
+    name: string
+    brand: string
+    city: string
+    state: string
+  }
+  type: "observation" | "incident"
+  category: string
+  status: ReportStatus
+  description: string | null
+  transcript: string | null
+  transcript_error: string | null
+  photo_url: string
+  audio_url: string | null
+  incident_datetime: string
+  reported_at: string
+  acknowledged_at: string | null
+  reporter_name: string | null
+  reporter_phone: string | null
+  resolutions: {
+    id: string
+    attempt_number: number
+    note: string
+    photo_url: string | null
+    resolved_at: string
+  }[]
+  history: {
+    id: string
+    action: "approve" | "return" | "void"
+    rejection_reason: string | null
+    acted_at: string
+    actor_display_name: string | null
+  }[]
 }
 
 type Filters = {
@@ -83,6 +137,8 @@ export function AllReportsClient({
   filters,
   statusCounts,
   availableBrands,
+  detail,
+  selectedId,
 }: {
   rows: AllReportsRow[]
   total: number
@@ -91,11 +147,83 @@ export function AllReportsClient({
   filters: Filters
   statusCounts: Record<ReportStatus, number>
   availableBrands: string[]
+  detail: ReportDetail | null
+  selectedId: string | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [searchDraft, setSearchDraft] = useState(filters.q)
+  // Action bar state for the inline detail pane.
+  const [actionBusy, setActionBusy] = useState<
+    null | "approve" | "return" | "void"
+  >(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [returnOpen, setReturnOpen] = useState(false)
+  const [voidOpen, setVoidOpen] = useState(false)
+
+  function selectRow(id: string | null) {
+    const params = new URLSearchParams(searchParams?.toString() ?? "")
+    if (id) params.set("id", id)
+    else params.delete("id")
+    startTransition(() => {
+      const qs = params.toString()
+      router.replace(`/ho/all-reports${qs ? `?${qs}` : ""}`, { scroll: false })
+    })
+  }
+
+  async function submitAction(
+    action: "approve" | "return" | "void",
+    comment?: string,
+  ) {
+    if (!detail) return
+    setActionBusy(action)
+    setActionError(null)
+    try {
+      const res = await fetch("/api/ho-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_id: detail.id,
+          action,
+          comment: comment ?? undefined,
+        }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        status?: ReportStatus
+        error?: string
+      } | null
+      if (res.status === 401) {
+        router.replace(`/ho/login?next=/ho/all-reports`)
+        return
+      }
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error || `HTTP ${res.status}`)
+      }
+      setReturnOpen(false)
+      setVoidOpen(false)
+      router.refresh()
+    } catch (e) {
+      setActionError(
+        e instanceof Error ? e.message : "Couldn't complete that.",
+      )
+    } finally {
+      setActionBusy(null)
+    }
+  }
+
+  // Esc closes the detail pane (when no modal is open).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && selectedId && !returnOpen && !voidOpen) {
+        selectRow(null)
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, returnOpen, voidOpen])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = (page - 1) * pageSize + (rows.length === 0 ? 0 : 1)
@@ -460,68 +588,174 @@ export function AllReportsClient({
         <p className="text-slate-500">Sorted by Reported · newest</p>
       </div>
 
-      {/* Table ---------------------------------------------------------- */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="overflow-auto" style={{ maxHeight: "65vh" }}>
-          <table className="w-full text-[12.5px]">
-            <thead className="bg-slate-50 sticky top-0 z-10">
-              <tr className="border-b border-slate-200 text-[10.5px] uppercase font-bold tracking-wide text-slate-500">
-                <th className="text-left py-2.5 pl-5 w-[100px]">SR-ID</th>
-                <th className="text-left py-2.5 w-[60px]">Cat</th>
-                <th className="text-left py-2.5 w-[230px]">Store</th>
-                <th className="text-left py-2.5">Headline</th>
-                <th className="text-left py-2.5 w-[120px]">Status</th>
-                <th className="text-right py-2.5 pr-5 w-[110px]">Reported</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500">
-                    No reports match these filters.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => <ReportRow key={r.id} row={r} />)
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Table OR split-pane -------------------------------------------- */}
+      {detail ? (
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4 items-start">
+          {/* Compact list ---------------------------------------------- */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto">
+            {rows.length === 0 ? (
+              <div className="p-6 text-center text-[12.5px] text-slate-500">
+                No reports match these filters.
+              </div>
+            ) : (
+              <ul role="listbox" aria-label="Reports">
+                {rows.map((r) => (
+                  <li key={r.id}>
+                    <CompactRow
+                      row={r}
+                      active={r.id === selectedId}
+                      onSelect={() => selectRow(r.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-t border-slate-200 bg-slate-50/60 text-[11.5px]">
+              <p className="text-slate-600 tabular-nums">
+                {page} / {totalPages}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => apply({ page: Math.max(1, page - 1) })}
+                  disabled={page <= 1 || isPending}
+                  className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => apply({ page: Math.min(totalPages, page + 1) })}
+                  disabled={page >= totalPages || isPending}
+                  className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+            </div>
+          </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-slate-50/60 text-[12px]">
-          <p className="text-slate-600 tabular-nums">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => apply({ page: Math.max(1, page - 1) })}
-              disabled={page <= 1 || isPending}
-              className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-              Prev
-            </button>
-            <button
-              type="button"
-              onClick={() => apply({ page: Math.min(totalPages, page + 1) })}
-              disabled={page >= totalPages || isPending}
-              className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </button>
+          {/* Detail pane ----------------------------------------------- */}
+          <DetailPane
+            detail={detail}
+            busy={actionBusy}
+            error={actionError}
+            onApprove={() => submitAction("approve")}
+            onReturnRequested={() => setReturnOpen(true)}
+            onVoidRequested={() => setVoidOpen(true)}
+            onClose={() => selectRow(null)}
+          />
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="overflow-auto" style={{ maxHeight: "65vh" }}>
+            <table className="w-full text-[12.5px]">
+              <thead className="bg-slate-50 sticky top-0 z-10">
+                <tr className="border-b border-slate-200 text-[10.5px] uppercase font-bold tracking-wide text-slate-500">
+                  <th className="text-left py-2.5 pl-5 w-[100px]">SR-ID</th>
+                  <th className="text-left py-2.5 w-[60px]">Cat</th>
+                  <th className="text-left py-2.5 w-[230px]">Store</th>
+                  <th className="text-left py-2.5">Headline</th>
+                  <th className="text-left py-2.5 w-[120px]">Status</th>
+                  <th className="text-right py-2.5 pr-5 w-[110px]">Reported</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-slate-500">
+                      No reports match these filters.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => (
+                    <ReportRow key={r.id} row={r} onSelect={() => selectRow(r.id)} />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-slate-50/60 text-[12px]">
+            <p className="text-slate-600 tabular-nums">
+              Page {page} of {totalPages}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => apply({ page: Math.max(1, page - 1) })}
+                disabled={page <= 1 || isPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => apply({ page: Math.min(totalPages, page + 1) })}
+                disabled={page >= totalPages || isPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Modals ------------------------------------------------------- */}
+      {returnOpen && detail && (
+        <ReasonModal
+          title="Return for rework"
+          description="The manager will be notified and asked to update their resolution. Please explain what needs to change."
+          minLen={10}
+          maxLen={300}
+          submitLabel="Return report"
+          submitTone="orange"
+          busy={actionBusy === "return"}
+          onCancel={() => setReturnOpen(false)}
+          onSubmit={(c) => submitAction("return", c)}
+        />
+      )}
+      {voidOpen && detail && (
+        <ReasonModal
+          title={
+            detail.status === "new" || detail.status === "in_progress"
+              ? "Void — not a safety concern"
+              : "Void this report"
+          }
+          description={
+            detail.status === "new" || detail.status === "in_progress"
+              ? "Use this when the manager has confirmed (by phone, in person, etc.) that the report doesn't represent a real safety concern. Voiding is irreversible — the report stays on record for audit, but no further action is possible. Please give a 20+ character reason."
+              : "Voiding is irreversible. The report stays on record for audit, but no further action is possible. Please give a 20+ character reason."
+          }
+          minLen={20}
+          submitLabel="Void report"
+          submitTone="slate"
+          busy={actionBusy === "void"}
+          onCancel={() => setVoidOpen(false)}
+          onSubmit={(c) => submitAction("void", c)}
+          warning
+        />
+      )}
     </div>
   )
 }
 
-/* ------------------------------- Row -------------------------------- */
+/* ------------------------------- Rows ------------------------------- */
 
-function ReportRow({ row }: { row: AllReportsRow }) {
+function ReportRow({
+  row,
+  onSelect,
+}: {
+  row: AllReportsRow
+  onSelect: () => void
+}) {
   const cat = CATEGORIES.find((c) => c.key === row.category)
   const isIncident = cat?.kind === "incident"
   const catTone = isIncident
@@ -529,14 +763,21 @@ function ReportRow({ row }: { row: AllReportsRow }) {
     : "bg-slate-100 text-slate-700 border-slate-200"
 
   return (
-    <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 transition-colors">
+    <tr
+      onClick={onSelect}
+      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 transition-colors cursor-pointer"
+    >
       <td className="py-3 pl-5">
-        <Link
-          href={`/ho/reports/${row.id}`}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect()
+          }}
           className="font-mono text-[12px] font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
         >
           {row.id}
-        </Link>
+        </button>
       </td>
       <td className="py-3">
         <span
@@ -547,27 +788,19 @@ function ReportRow({ row }: { row: AllReportsRow }) {
         </span>
       </td>
       <td className="py-3">
-        <Link
-          href={`/ho/reports/${row.id}`}
-          className="block hover:text-slate-900"
-        >
-          <div className="font-mono text-[12px] text-slate-600">
-            {row.store_code}
-          </div>
-          <div className="text-[12px] text-slate-500 truncate max-w-[210px]">
-            {row.store_name}
-          </div>
-        </Link>
+        <div className="font-mono text-[12px] text-slate-600">
+          {row.store_code}
+        </div>
+        <div className="text-[12px] text-slate-500 truncate max-w-[210px]">
+          {row.store_name}
+        </div>
       </td>
       <td className="py-3 pr-3">
-        <Link
-          href={`/ho/reports/${row.id}`}
-          className="block text-[13px] text-slate-800 hover:text-slate-900 truncate max-w-[420px]"
-        >
+        <div className="block text-[13px] text-slate-800 truncate max-w-[420px]">
           {row.headline?.trim() || (
             <span className="text-slate-400 italic">No description</span>
           )}
-        </Link>
+        </div>
       </td>
       <td className="py-3">
         <span
@@ -585,6 +818,540 @@ function ReportRow({ row }: { row: AllReportsRow }) {
         </div>
       </td>
     </tr>
+  )
+}
+
+/** Compact list row for the split-pane view. */
+function CompactRow({
+  row,
+  active,
+  onSelect,
+}: {
+  row: AllReportsRow
+  active: boolean
+  onSelect: () => void
+}) {
+  const cat = CATEGORIES.find((c) => c.key === row.category)
+  const isIncident = cat?.kind === "incident"
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={active}
+      onClick={onSelect}
+      className={`w-full text-left px-3 py-2.5 border-b border-slate-100 transition-colors block ${
+        active ? "bg-indigo-50/70" : "hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[11px] text-slate-700 font-medium">
+          {row.id}
+        </span>
+        <span className="text-[10.5px] text-slate-500 tabular-nums">
+          {formatRelative(row.reported_at)}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+        <span
+          className={`inline-flex items-center justify-center px-1.5 h-4 rounded text-[9.5px] font-bold border ${
+            isIncident
+              ? "bg-amber-50 text-amber-800 border-amber-200"
+              : "bg-slate-100 text-slate-700 border-slate-200"
+          }`}
+        >
+          {cat?.acronym ?? row.category.slice(0, 3).toUpperCase()}
+        </span>
+        <span
+          className={`inline-flex items-center rounded-full border px-1.5 h-4 text-[9.5px] font-bold uppercase tracking-wide ${STATUS_PILL_CLASSES[row.status]}`}
+        >
+          {STATUS_LABEL[row.status]}
+        </span>
+      </div>
+      <div className="text-[12px] text-slate-700 mt-1 truncate">
+        {row.store_code} · {row.store_name}
+      </div>
+      {row.headline && (
+        <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+          {row.headline}
+        </div>
+      )}
+    </button>
+  )
+}
+
+/* ----------------------------- Detail pane ------------------------------- */
+
+function DetailPane({
+  detail,
+  busy,
+  error,
+  onApprove,
+  onReturnRequested,
+  onVoidRequested,
+  onClose,
+}: {
+  detail: ReportDetail
+  busy: null | "approve" | "return" | "void"
+  error: string | null
+  onApprove: () => void
+  onReturnRequested: () => void
+  onVoidRequested: () => void
+  onClose: () => void
+}) {
+  const cat = CATEGORIES.find((c) => c.key === detail.category)
+  const latestRes = detail.resolutions[detail.resolutions.length - 1] ?? null
+  const reporterText =
+    detail.transcript?.trim() ||
+    detail.description?.trim() ||
+    (detail.audio_url ? "Voice note attached — transcript pending." : null)
+
+  // Action availability by status. Approve/Return only on awaiting_ho;
+  // Void allowed on every non-terminal status (new, in_progress, awaiting_ho,
+  // returned). Closed and voided are read-only.
+  const canApprove = detail.status === "awaiting_ho"
+  const canReturn = detail.status === "awaiting_ho"
+  const canVoid =
+    detail.status !== "closed" && detail.status !== "voided"
+  const preResolution =
+    detail.status === "new" || detail.status === "in_progress"
+
+  // Header background tint hints at what's possible. Awaiting → amber/warm,
+  // closed → faint teal, voided → slate. New/in_progress → slate.
+  const headerBg =
+    detail.status === "awaiting_ho"
+      ? "bg-amber-50 border-amber-200"
+      : detail.status === "closed"
+        ? "bg-teal-50/60 border-teal-200"
+        : detail.status === "voided"
+          ? "bg-slate-50 border-slate-200"
+          : "bg-slate-50 border-slate-200"
+
+  return (
+    <article className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {/* Action bar -------------------------------------------------- */}
+      <header className={`px-4 py-3 border-b ${headerBg}`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-[12.5px] font-medium text-slate-900">
+              {detail.id}
+            </span>
+            <StatusBadge status={detail.status} />
+            {preResolution && (
+              <span className="text-[11px] text-slate-500">
+                {detail.status === "new"
+                  ? "Manager hasn't acknowledged yet"
+                  : "Acknowledged · waiting for resolution"}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {canApprove && (
+              <button
+                type="button"
+                onClick={onApprove}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[12.5px] font-semibold px-3 py-1.5 disabled:opacity-60"
+              >
+                {busy === "approve" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                Approve &amp; close
+              </button>
+            )}
+            {canReturn && (
+              <button
+                type="button"
+                onClick={onReturnRequested}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-white hover:bg-orange-50 text-orange-700 text-[12.5px] font-medium px-3 py-1.5 disabled:opacity-60"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Return
+              </button>
+            )}
+            {canVoid && (
+              <button
+                type="button"
+                onClick={onVoidRequested}
+                disabled={busy !== null}
+                title={
+                  preResolution
+                    ? "Void — not a safety concern"
+                    : "Void this report"
+                }
+                className={`inline-flex items-center gap-1.5 rounded-md border text-[12.5px] font-medium px-3 py-1.5 disabled:opacity-60 ${
+                  preResolution
+                    ? "border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                    : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                }`}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {preResolution ? "Void · not a safety concern" : "Void"}
+              </button>
+            )}
+            {!canApprove && !canReturn && !canVoid && (
+              <span className="text-[11.5px] text-slate-500 italic">
+                {detail.status === "closed"
+                  ? "Approved and closed"
+                  : "Voided — read-only"}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close detail (Esc)"
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-500"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        {error && (
+          <p className="mt-2 text-[12px] text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1.5">
+            {error}
+          </p>
+        )}
+      </header>
+
+      {/* Body -------------------------------------------------------- */}
+      <div className="p-4 space-y-4">
+        {/* Category + store + open-full-view */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className={`inline-flex items-center px-2 h-6 rounded-md text-[11.5px] font-medium border ${
+              detail.type === "incident"
+                ? "bg-amber-50 text-amber-800 border-amber-200"
+                : "bg-slate-100 text-slate-700 border-slate-200"
+            }`}
+          >
+            {cat?.label ?? detail.category}
+          </span>
+          <span className="text-[12.5px] text-slate-600">
+            {detail.store.sap_code} · {detail.store.name} · {detail.store.city}
+          </span>
+          <Link
+            href={`/ho/reports/${detail.id}`}
+            className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-indigo-700 hover:text-indigo-900"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open full view
+            <ArrowUpRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        {/* Side-by-side photos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <PhotoCard
+            label="Reported"
+            sub={formatAbs(detail.incident_datetime)}
+            photo_url={detail.photo_url}
+            body={reporterText}
+          />
+          {latestRes ? (
+            <PhotoCard
+              label={`Latest fix · attempt ${latestRes.attempt_number}`}
+              sub={formatRelative(latestRes.resolved_at)}
+              photo_url={latestRes.photo_url}
+              body={latestRes.note}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-slate-500">
+              <ImageOff className="h-5 w-5 mb-2 text-slate-300" />
+              <p className="text-[12.5px]">No resolution filed yet</p>
+              {preResolution && (
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {detail.status === "new"
+                    ? "Manager hasn't opened the report"
+                    : "Manager is working on it"}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Reporter / timing strip */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[12.5px]">
+          <div className="rounded-md border border-sky-200 bg-sky-50/60 px-3 py-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-sky-800 flex items-center gap-1">
+              <User className="h-3 w-3" />
+              Reporter (HO only)
+            </div>
+            <div className="mt-0.5 text-slate-900 truncate">
+              {detail.reporter_name ?? "—"}
+            </div>
+            {detail.reporter_phone && (
+              <a
+                href={`tel:${detail.reporter_phone}`}
+                className="inline-flex items-center gap-1 text-sky-800 hover:text-sky-900"
+              >
+                <Phone className="h-3 w-3" />
+                {detail.reporter_phone}
+              </a>
+            )}
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500">
+              Filed
+            </div>
+            <div className="text-slate-900">{formatAbs(detail.reported_at)}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">
+              {formatRelative(detail.reported_at)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500">
+              Acknowledged
+            </div>
+            <div className="text-slate-900">
+              {detail.acknowledged_at
+                ? formatAbs(detail.acknowledged_at)
+                : "—"}
+            </div>
+            {detail.acknowledged_at && (
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                {formatRelative(detail.acknowledged_at)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Return-history notes */}
+        {detail.history.filter((h) => h.action === "return").length > 0 && (
+          <div className="rounded-md border border-orange-200 bg-orange-50/60 px-3 py-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-orange-800 flex items-center gap-1 mb-1">
+              <RotateCcw className="h-3 w-3" />
+              Previous return notes
+            </div>
+            <ul className="space-y-1">
+              {detail.history
+                .filter((h) => h.action === "return")
+                .map((h) => (
+                  <li key={h.id} className="text-[12px] text-orange-900">
+                    <span className="text-[10.5px] text-orange-700">
+                      {formatRelative(h.acted_at)} ·{" "}
+                      {h.actor_display_name ?? "HO"}
+                    </span>
+                    <p className="whitespace-pre-wrap">
+                      {h.rejection_reason ?? "(no note)"}
+                    </p>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Void reason banner (if voided) */}
+        {detail.status === "voided" &&
+          (() => {
+            const lastVoid = [...detail.history]
+              .reverse()
+              .find((h) => h.action === "void")
+            return lastVoid ? (
+              <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2">
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-600 flex items-center gap-1 mb-1">
+                  <Ban className="h-3 w-3" />
+                  Void reason
+                </div>
+                <div className="text-[10.5px] text-slate-500 mb-1">
+                  {formatRelative(lastVoid.acted_at)} ·{" "}
+                  {lastVoid.actor_display_name ?? "HO"}
+                </div>
+                <p className="text-[12px] text-slate-800 whitespace-pre-wrap">
+                  {lastVoid.rejection_reason ?? "(no reason recorded)"}
+                </p>
+              </div>
+            ) : null
+          })()}
+
+        {/* Transcript */}
+        {(reporterText || detail.transcript_error) && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 flex items-center gap-1 mb-1">
+              <Mic className="h-3 w-3" />
+              {detail.transcript ? "Transcript (English)" : "Reporter note"}
+            </div>
+            {reporterText && (
+              <p className="text-[12.5px] text-slate-800 whitespace-pre-wrap leading-5">
+                {reporterText}
+              </p>
+            )}
+            {detail.transcript_error && (
+              <p className="text-[11px] text-orange-700 mt-1">
+                Transcript couldn&apos;t be generated automatically. Voice note
+                is still available on the full view.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
+/* --------------------------- Small components ---------------------------- */
+
+function PhotoCard({
+  label,
+  sub,
+  photo_url,
+  body,
+}: {
+  label: string
+  sub: string
+  photo_url: string | null
+  body: string | null
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white overflow-hidden">
+      <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <span className="text-[10.5px] font-bold uppercase tracking-wide text-slate-600">
+          {label}
+        </span>
+        <span className="text-[10.5px] text-slate-500">{sub}</span>
+      </div>
+      <div className="relative aspect-[4/3] w-full bg-slate-100">
+        {photo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo_url}
+            alt={label}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-slate-400">
+            <ImageOff className="h-6 w-6" />
+          </div>
+        )}
+      </div>
+      {body && (
+        <p className="px-3 py-2 text-[12px] text-slate-800 whitespace-pre-wrap line-clamp-4">
+          {body}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: ReportStatus }) {
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] font-bold uppercase tracking-wide border ${STATUS_PILL_CLASSES[status]}`}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  )
+}
+
+function ReasonModal({
+  title,
+  description,
+  minLen,
+  maxLen,
+  submitLabel,
+  submitTone,
+  onCancel,
+  onSubmit,
+  busy,
+  warning,
+}: {
+  title: string
+  description: string
+  minLen: number
+  maxLen?: number
+  submitLabel: string
+  submitTone: "orange" | "slate"
+  onCancel: () => void
+  onSubmit: (comment: string) => void
+  busy: boolean
+  warning?: boolean
+}) {
+  const [value, setValue] = useState("")
+  const trimmed = value.trim()
+  const tooShort = trimmed.length < minLen
+  const tooLong = maxLen !== undefined && trimmed.length > maxLen
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onCancel])
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (tooShort || tooLong || busy) return
+    onSubmit(trimmed)
+  }
+
+  const btn =
+    submitTone === "orange"
+      ? "bg-orange-700 hover:bg-orange-800"
+      : "bg-slate-900 hover:bg-slate-950"
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+      <form
+        onSubmit={submit}
+        className="bg-white rounded-xl shadow-lg w-full max-w-lg p-6"
+      >
+        <div className="flex items-start gap-3">
+          {warning && (
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700 ring-1 ring-orange-100">
+              <AlertTriangle className="h-5 w-5" />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+            <p className="mt-1 text-sm text-slate-600">{description}</p>
+          </div>
+        </div>
+        <label className="block mt-4 text-sm font-medium text-slate-800">
+          Reason
+        </label>
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          rows={4}
+          autoFocus
+          disabled={busy}
+          placeholder={
+            maxLen !== undefined
+              ? `Between ${minLen} and ${maxLen} characters.`
+              : `At least ${minLen} characters.`
+          }
+          className="mt-1.5 w-full rounded-md border border-slate-300 text-sm p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        />
+        <div className="mt-1 text-xs text-slate-500">
+          {trimmed.length}
+          {maxLen !== undefined ? ` / ${maxLen}` : ""}
+          {tooShort && ` — need ${minLen - trimmed.length} more`}
+          {tooLong && ` — ${trimmed.length - maxLen!} too many`}
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={tooShort || tooLong || busy}
+            className={`inline-flex items-center gap-2 rounded-md text-white font-medium px-4 py-2 text-sm disabled:opacity-60 ${btn}`}
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
 

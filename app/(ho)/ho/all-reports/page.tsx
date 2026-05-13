@@ -7,7 +7,10 @@ import type {
   AllReportsRow,
   ReportStatus,
   StatusFilter,
+  ReportDetail,
 } from "./all-reports-client"
+
+const REPORT_ID_RE = /^SR-\d{6,}$/
 
 export const dynamic = "force-dynamic"
 
@@ -186,6 +189,16 @@ export default async function AllReportsPage({
     new Set((brandsRaw ?? []).map((r) => r.brand as string)),
   ).sort()
 
+  // Selected row detail — server-fetched so the right pane is populated on
+  // first paint (no flash, no client round-trip). The selection is also
+  // permitted to be outside the current page of filtered results — e.g. when
+  // the user lands here from a URL someone shared.
+  const selectedId = readSingle(searchParams, "id") ?? ""
+  let detail: ReportDetail | null = null
+  if (selectedId && REPORT_ID_RE.test(selectedId)) {
+    detail = await fetchDetail(admin, selectedId)
+  }
+
   return (
     <AllReportsClient
       rows={rows}
@@ -202,8 +215,94 @@ export default async function AllReportsPage({
       }}
       statusCounts={allStatusCounts}
       availableBrands={brands}
+      detail={detail}
+      selectedId={detail ? selectedId : null}
     />
   )
+}
+
+/* --------------------------- Selected-row detail ------------------------- */
+
+async function fetchDetail(
+  admin: AdminClient,
+  reportId: string,
+): Promise<ReportDetail | null> {
+  const { data: rep, error: repErr } = await admin
+    .from("reports")
+    .select(
+      "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
+    )
+    .eq("id", reportId)
+    .maybeSingle()
+  if (repErr || !rep) return null
+
+  const storeRaw = (rep as unknown as {
+    stores: {
+      sap_code: string
+      name: string
+      brand: string
+      city: string
+      state: string
+    }
+  }).stores
+
+  const [{ data: resRows }, { data: histRows }] = await Promise.all([
+    admin
+      .from("resolutions")
+      .select("id, attempt_number, note, photo_url, resolved_at")
+      .eq("report_id", reportId)
+      .order("attempt_number", { ascending: true }),
+    admin
+      .from("ho_actions")
+      .select(
+        "id, action, rejection_reason, acted_at, ho_users!left(display_name)",
+      )
+      .eq("report_id", reportId)
+      .order("acted_at", { ascending: true }),
+  ])
+
+  return {
+    id: rep.id as string,
+    store: {
+      sap_code: storeRaw.sap_code,
+      name: storeRaw.name,
+      brand: storeRaw.brand,
+      city: storeRaw.city,
+      state: storeRaw.state,
+    },
+    type: rep.type as ReportDetail["type"],
+    category: rep.category as string,
+    status: rep.status as ReportStatus,
+    description: rep.description as string | null,
+    transcript: rep.transcript as string | null,
+    transcript_error: rep.transcript_error as string | null,
+    photo_url: rep.photo_url as string,
+    audio_url: rep.audio_url as string | null,
+    incident_datetime: rep.incident_datetime as string,
+    reported_at: rep.reported_at as string,
+    acknowledged_at: rep.acknowledged_at as string | null,
+    reporter_name: rep.reporter_name as string | null,
+    reporter_phone: rep.reporter_phone as string | null,
+    resolutions: (resRows ?? []).map((r) => ({
+      id: r.id as string,
+      attempt_number: r.attempt_number as number,
+      note: r.note as string,
+      photo_url: r.photo_url as string | null,
+      resolved_at: r.resolved_at as string,
+    })),
+    history: (histRows ?? []).map((h) => {
+      const user = (h as unknown as {
+        ho_users: { display_name: string } | null
+      }).ho_users
+      return {
+        id: h.id as string,
+        action: h.action as ReportDetail["history"][number]["action"],
+        rejection_reason: h.rejection_reason as string | null,
+        acted_at: h.acted_at as string,
+        actor_display_name: user?.display_name ?? null,
+      }
+    }),
+  }
 }
 
 /* -------------------------- Status count helper -------------------------- */
