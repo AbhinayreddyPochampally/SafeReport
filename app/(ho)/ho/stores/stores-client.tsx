@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
+  Activity as ActivityIcon,
   AlertTriangle,
   CheckCircle2,
   KeyRound,
@@ -13,6 +14,8 @@ import {
   Search,
   Sparkles,
   Store as StoreIcon,
+  TrendingDown,
+  TrendingUp,
   Upload,
   X,
 } from "lucide-react"
@@ -51,6 +54,52 @@ export type StoreRow = {
   report_count: number
   qr_downloaded_at: string | null
   created_at: string | null
+  // Adoption aggregates — see app/(ho)/ho/stores/page.tsx for derivation.
+  last_report_at: string | null
+  reports_this_month: number
+  reports_last_month: number
+  distinct_reporters: number
+  median_ack_hours: number | null
+  pct_acked_within_24h: number | null
+}
+
+/**
+ * Activity tier — Active ≤7d, Quiet 8–30d, Dormant >30d, Never = no report ever.
+ * Drives the left-bar colour on the Activity cell and the filter pills.
+ */
+export type ActivityTier = "active" | "quiet" | "dormant" | "never"
+
+function tierOf(lastReportAt: string | null): ActivityTier {
+  if (!lastReportAt) return "never"
+  const diffMs = Date.now() - Date.parse(lastReportAt)
+  if (Number.isNaN(diffMs)) return "never"
+  const days = diffMs / 86_400_000
+  if (days <= 7) return "active"
+  if (days <= 30) return "quiet"
+  return "dormant"
+}
+
+/** Human-readable relative time ("2d ago" / "6h ago" / "just now"). */
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—"
+  const ms = Date.now() - Date.parse(iso)
+  if (Number.isNaN(ms)) return "—"
+  const mins = Math.max(0, Math.floor(ms / 60_000))
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 48) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 60) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
+}
+
+function formatHours(h: number | null): string {
+  if (h == null) return "—"
+  if (h < 1) return `${Math.round(h * 60)}m`
+  if (h < 48) return `${Math.round(h)}h`
+  return `${Math.round(h / 24)}d`
 }
 
 const STATUS_OPTIONS: ReadonlyArray<"all" | StoreStatus> = [
@@ -60,11 +109,22 @@ const STATUS_OPTIONS: ReadonlyArray<"all" | StoreStatus> = [
   "permanently_closed",
 ]
 
+const ACTIVITY_OPTIONS: ReadonlyArray<"all" | ActivityTier> = [
+  "all",
+  "active",
+  "quiet",
+  "dormant",
+  "never",
+]
+
 export function StoresClient({ rows }: { rows: StoreRow[] }) {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [brandFilter, setBrandFilter] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<"all" | StoreStatus>("all")
+  const [activityFilter, setActivityFilter] = useState<"all" | ActivityTier>(
+    "all",
+  )
   const [showNewOnly, setShowNewOnly] = useState(false)
   const [editing, setEditing] = useState<StoreRow | null>(null)
   const [adding, setAdding] = useState(false)
@@ -82,12 +142,33 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
     [rows],
   )
 
+  // Activity tier per row, memoised once so the table cells, filter chips,
+  // and counts strip all agree without re-deriving from raw timestamps.
+  const tiersByCode = useMemo(() => {
+    const m = new Map<string, ActivityTier>()
+    for (const r of rows) m.set(r.sap_code, tierOf(r.last_report_at))
+    return m
+  }, [rows])
+
+  const activityCounts = useMemo(() => {
+    const out = { active: 0, quiet: 0, dormant: 0, never: 0 }
+    for (const r of rows) {
+      out[tiersByCode.get(r.sap_code) ?? "never"] += 1
+    }
+    return out
+  }, [rows, tiersByCode])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter((r) => {
       if (brandFilter && r.brand !== brandFilter) return false
       if (statusFilter !== "all" && r.status !== statusFilter) return false
       if (showNewOnly && r.qr_downloaded_at) return false
+      if (
+        activityFilter !== "all" &&
+        (tiersByCode.get(r.sap_code) ?? "never") !== activityFilter
+      )
+        return false
       if (!q) return true
       return (
         r.sap_code.toLowerCase().includes(q) ||
@@ -98,7 +179,7 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
         (r.manager_phone ?? "").toLowerCase().includes(q)
       )
     })
-  }, [rows, query, brandFilter, statusFilter, showNewOnly])
+  }, [rows, query, brandFilter, statusFilter, showNewOnly, activityFilter, tiersByCode])
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -216,6 +297,25 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                 </>
               )}
             </p>
+            <p className="mt-1 text-[12px] text-slate-500">
+              <ActivityIcon className="h-3 w-3 inline -mt-0.5 mr-1 text-slate-400" />
+              Adoption:{" "}
+              <span className="text-teal-700 font-medium">
+                {activityCounts.active} active
+              </span>{" "}
+              ·{" "}
+              <span className="text-sky-700 font-medium">
+                {activityCounts.quiet} quiet
+              </span>{" "}
+              ·{" "}
+              <span className="text-slate-600 font-medium">
+                {activityCounts.dormant} dormant
+              </span>{" "}
+              ·{" "}
+              <span className="text-slate-500">
+                {activityCounts.never} never reported
+              </span>
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -307,6 +407,45 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
           </button>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mt-3">
+          <span className="text-[11px] text-slate-500 mr-1">Activity:</span>
+          {ACTIVITY_OPTIONS.map((a) => (
+            <FilterChip
+              key={a}
+              active={activityFilter === a}
+              onClick={() => setActivityFilter(a)}
+            >
+              <span className="inline-flex items-center gap-1">
+                {a !== "all" && (
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      a === "active"
+                        ? "bg-teal-700"
+                        : a === "quiet"
+                          ? "bg-sky-700"
+                          : a === "dormant"
+                            ? "bg-slate-500"
+                            : "bg-slate-300 ring-1 ring-slate-400"
+                    }`}
+                  />
+                )}
+                {a === "all"
+                  ? "All"
+                  : a === "active"
+                    ? `Active · ${activityCounts.active}`
+                    : a === "quiet"
+                      ? `Quiet · ${activityCounts.quiet}`
+                      : a === "dormant"
+                        ? `Dormant · ${activityCounts.dormant}`
+                        : `Never · ${activityCounts.never}`}
+              </span>
+            </FilterChip>
+          ))}
+          <span className="text-[10.5px] text-slate-400 ml-1">
+            Active ≤ 7d · Quiet 8–30d · Dormant &gt; 30d
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap mt-2">
           <span className="text-[11px] text-slate-500 mr-1">Status:</span>
           {STATUS_OPTIONS.map((s) => (
             <FilterChip
@@ -345,19 +484,20 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
             <tr>
               <th className="text-left px-4 py-2.5 w-[110px]">SAP code</th>
               <th className="text-left px-4 py-2.5">Store</th>
-              <th className="text-left px-4 py-2.5 w-[120px]">Brand</th>
-              <th className="text-left px-4 py-2.5 w-[150px]">City · State</th>
-              <th className="text-left px-4 py-2.5 w-[200px]">Manager</th>
-              <th className="text-left px-4 py-2.5 w-[120px]">Status</th>
-              <th className="text-right px-4 py-2.5 w-[80px]">Reports</th>
-              <th className="text-right px-4 py-2.5 w-[180px]">Actions</th>
+              <th className="text-left px-4 py-2.5 w-[110px]">Brand</th>
+              <th className="text-left px-4 py-2.5 w-[140px]">City · State</th>
+              <th className="text-left px-4 py-2.5 w-[180px]">Manager</th>
+              <th className="text-left px-4 py-2.5 w-[100px]">Status</th>
+              <th className="text-left px-4 py-2.5 w-[200px]">Activity</th>
+              <th className="text-left px-4 py-2.5 w-[150px]">Engagement</th>
+              <th className="text-right px-4 py-2.5 w-[140px]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-12 text-center text-[13px] text-slate-500"
                 >
                   No stores match the current filters.
@@ -426,9 +566,11 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                   <td className="px-4 py-3">
                     <StatusPill status={r.status} />
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                    {r.report_count}
-                  </td>
+                  <ActivityCell
+                    row={r}
+                    tier={tiersByCode.get(r.sap_code) ?? "never"}
+                  />
+                  <EngagementCell row={r} />
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex items-center gap-1">
                       <button
@@ -1020,6 +1162,149 @@ function FilterChip({
       {children}
     </button>
   )
+}
+
+/**
+ * Activity cell — left bar colour-coded by tier, this-month count with
+ * month-over-month delta arrow, and a "Last Xd ago · N total" subline.
+ *
+ * Tier colours follow the project palette (no green / no red):
+ *   Active → teal-700, Quiet → sky-700, Dormant → slate-600, Never → slate-400.
+ */
+function ActivityCell({
+  row,
+  tier,
+}: {
+  row: StoreRow
+  tier: ActivityTier
+}) {
+  const cfg = ACTIVITY_PILL[tier]
+  const delta = row.reports_this_month - row.reports_last_month
+  return (
+    <td className={`px-4 py-3 align-top border-l-[3px] ${cfg.bar}`}>
+      {tier === "never" ? (
+        <div className="space-y-1">
+          <span
+            className={`inline-flex items-center px-2 h-5 text-[10.5px] font-medium rounded-md border border-dashed ${cfg.pill}`}
+          >
+            Never
+          </span>
+          <div className="text-[11px] text-slate-500">
+            {row.qr_downloaded_at
+              ? `QR distributed ${formatRelative(row.qr_downloaded_at)} · 0 total`
+              : "No QR distributed yet"}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span
+              className={`inline-flex items-center px-2 h-5 text-[10.5px] font-medium rounded-md ${cfg.pill}`}
+            >
+              {cfg.label}
+            </span>
+            <span className={`text-[14px] font-semibold tabular-nums ${cfg.num}`}>
+              {row.reports_this_month}
+            </span>
+            <span className="text-[10.5px] text-slate-500">this month</span>
+            {delta !== 0 && (
+              <span
+                className={`inline-flex items-center gap-0.5 text-[10.5px] font-medium ${
+                  delta > 0 ? "text-teal-700" : "text-orange-700"
+                }`}
+                title={`vs ${row.reports_last_month} last month`}
+              >
+                {delta > 0 ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : (
+                  <TrendingDown className="h-3 w-3" />
+                )}
+                {delta > 0 ? `+${delta}` : delta}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            Last {formatRelative(row.last_report_at)} ·{" "}
+            <span className="tabular-nums">{row.report_count}</span> total
+          </div>
+        </div>
+      )}
+    </td>
+  )
+}
+
+/**
+ * Engagement cell — unique reporters (lifetime) + manager response signal
+ * (median acknowledgement time + % acked under 24h). Renders "—" when
+ * the store has no reports yet.
+ */
+function EngagementCell({ row }: { row: StoreRow }) {
+  if (row.report_count === 0) {
+    return (
+      <td className="px-4 py-3 align-top">
+        <span className="text-[11.5px] text-slate-400">—</span>
+      </td>
+    )
+  }
+  const ackHealthy =
+    row.median_ack_hours != null && row.median_ack_hours < 24
+  const ackTone = ackHealthy ? "text-teal-700" : "text-orange-700"
+  return (
+    <td className="px-4 py-3 align-top">
+      <div className="text-[13px]">
+        <span className="font-medium tabular-nums">
+          {row.distinct_reporters}
+        </span>{" "}
+        <span className="text-[11px] text-slate-500">
+          {row.distinct_reporters === 1 ? "reporter" : "reporters"}
+        </span>
+      </div>
+      <div className="text-[11px] text-slate-500 mt-1">
+        Mgr ack{" "}
+        <span className={`font-medium ${ackTone}`}>
+          {formatHours(row.median_ack_hours)}
+        </span>
+        {row.pct_acked_within_24h != null && (
+          <>
+            {" · "}
+            <span className="tabular-nums">{row.pct_acked_within_24h}%</span>
+            <span className="text-slate-400">{"<"}24h</span>
+          </>
+        )}
+      </div>
+    </td>
+  )
+}
+
+/** Tailwind class config for each activity tier. */
+const ACTIVITY_PILL: Record<
+  ActivityTier,
+  { label: string; pill: string; num: string; bar: string }
+> = {
+  active: {
+    label: "Active",
+    pill: "bg-teal-50 text-teal-800 border border-teal-200",
+    num: "text-teal-700",
+    bar: "border-l-teal-700",
+  },
+  quiet: {
+    label: "Quiet",
+    pill: "bg-sky-50 text-sky-800 border border-sky-200",
+    num: "text-sky-700",
+    bar: "border-l-sky-700",
+  },
+  dormant: {
+    label: "Dormant",
+    pill: "bg-slate-100 text-slate-700 border border-slate-200",
+    num: "text-slate-600",
+    bar: "border-l-slate-500",
+  },
+  never: {
+    label: "Never",
+    pill: "bg-slate-50 text-slate-600 border-slate-300",
+    num: "text-slate-500",
+    bar: "border-l-slate-300",
+  },
 }
 
 function StatusPill({ status }: { status: StoreStatus }) {
