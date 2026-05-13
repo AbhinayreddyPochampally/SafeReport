@@ -1,6 +1,10 @@
 import { requireHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
-import { StoresClient, type StoreRow } from "./stores-client"
+import {
+  StoresClient,
+  type StoreRow,
+  type StoresSummary,
+} from "./stores-client"
 
 export const dynamic = "force-dynamic"
 
@@ -12,9 +16,16 @@ export const dynamic = "force-dynamic"
  *   - last_report_at (drives the Active/Quiet/Dormant/Never activity tier)
  *   - reports this month + last month (the "month-over-month delta" the
  *     client surfaces as +N / −N alongside the count)
+ *   - reports in the trailing 30 days (drives the "N last 30d" sub-line
+ *     in the Activity cell — preferred over calendar-month-last because it
+ *     reads sensibly mid-month)
  *   - distinct reporter phones (lifetime unique reporters)
  *   - median acknowledgement time + % acknowledged within 24h
  *     (manager engagement signal — drawn from reports.acknowledged_at)
+ *
+ * Plus a global `summary` object the redesigned stats-card row consumes
+ * (total stores, active vs quiet split, active-this-month, distinct
+ * lifetime reporters, MoM growth, % of reports acknowledged within 2h).
  *
  * The pilot reports table is small (≪ 10k rows for 20 stores), so a single
  * unfiltered fetch is cheaper than a per-store aggregate round trip.
@@ -49,6 +60,7 @@ type Agg = {
   total: number
   this_month: number
   last_month: number
+  last_30d: number
   last_report_at: string | null
   reporters: Set<string>
   ack_hours: number[]
@@ -60,6 +72,7 @@ function emptyAgg(): Agg {
     total: 0,
     this_month: 0,
     last_month: 0,
+    last_30d: 0,
     last_report_at: null,
     reporters: new Set<string>(),
     ack_hours: [],
@@ -120,6 +133,14 @@ export default async function HoStoresPage() {
   const startOfLastMonth = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
   ).getTime()
+  const startOfLast30d = now.getTime() - 30 * 86_400_000
+
+  // Global aggregates the stats-card row consumes.
+  const globalReporters = new Set<string>()
+  let globalAckCount = 0
+  let globalAckUnder2h = 0
+  let globalReportsThisMonth = 0
+  let globalReportsLastMonth = 0
 
   const aggByStore = new Map<string, Agg>()
   for (const r of (reportsResp.data as ReportRow[] | null) ?? []) {
@@ -131,8 +152,14 @@ export default async function HoStoresPage() {
     a.total += 1
     const reportedAt = Date.parse(r.reported_at)
     if (!Number.isNaN(reportedAt)) {
-      if (reportedAt >= startOfThisMonth) a.this_month += 1
-      else if (reportedAt >= startOfLastMonth) a.last_month += 1
+      if (reportedAt >= startOfThisMonth) {
+        a.this_month += 1
+        globalReportsThisMonth += 1
+      } else if (reportedAt >= startOfLastMonth) {
+        a.last_month += 1
+        globalReportsLastMonth += 1
+      }
+      if (reportedAt >= startOfLast30d) a.last_30d += 1
       if (
         a.last_report_at == null ||
         Date.parse(a.last_report_at) < reportedAt
@@ -140,13 +167,19 @@ export default async function HoStoresPage() {
         a.last_report_at = r.reported_at
       }
     }
-    if (r.reporter_phone) a.reporters.add(r.reporter_phone.trim())
+    if (r.reporter_phone) {
+      const phone = r.reporter_phone.trim()
+      a.reporters.add(phone)
+      globalReporters.add(phone)
+    }
     if (r.acknowledged_at) {
       const ackedAt = Date.parse(r.acknowledged_at)
       if (!Number.isNaN(ackedAt) && !Number.isNaN(reportedAt)) {
         const hours = Math.max(0, (ackedAt - reportedAt) / 36e5)
         a.ack_hours.push(hours)
         if (hours < 24) a.ack_within_24h += 1
+        globalAckCount += 1
+        if (hours <= 2) globalAckUnder2h += 1
       }
     }
   }
@@ -178,11 +211,37 @@ export default async function HoStoresPage() {
       last_report_at: a.last_report_at,
       reports_this_month: a.this_month,
       reports_last_month: a.last_month,
+      reports_last_30d: a.last_30d,
       distinct_reporters: a.reporters.size,
       median_ack_hours: medAck,
       pct_acked_within_24h: pct24,
     }
   })
 
-  return <StoresClient rows={rows} />
+  // Stats-card aggregates. MoM growth is computed against the prior calendar
+  // month — null when there is no baseline (avoids a misleading "+∞" pill).
+  const momGrowthPct =
+    globalReportsLastMonth > 0
+      ? Math.round(
+          ((globalReportsThisMonth - globalReportsLastMonth) /
+            globalReportsLastMonth) *
+            100,
+        )
+      : null
+  const pctAckUnder2h =
+    globalAckCount > 0
+      ? Math.round((globalAckUnder2h / globalAckCount) * 100)
+      : null
+
+  const summary: StoresSummary = {
+    total_stores: rows.length,
+    active_status: rows.filter((r) => r.status === "active").length,
+    reports_this_month: globalReportsThisMonth,
+    reports_last_month: globalReportsLastMonth,
+    mom_growth_pct: momGrowthPct,
+    total_reporters: globalReporters.size,
+    pct_acked_within_2h: pctAckUnder2h,
+  }
+
+  return <StoresClient rows={rows} summary={summary} />
 }

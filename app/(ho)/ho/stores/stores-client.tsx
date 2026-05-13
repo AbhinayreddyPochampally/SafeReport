@@ -3,20 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
-  Activity as ActivityIcon,
   AlertTriangle,
+  Archive,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Info,
   KeyRound,
   Loader2,
+  MessageSquare,
   Pencil,
   Plus,
   QrCode,
+  RotateCcw,
   Search,
   Sparkles,
   Store as StoreIcon,
   TrendingDown,
   TrendingUp,
   Upload,
+  Users,
   X,
 } from "lucide-react"
 
@@ -58,9 +65,26 @@ export type StoreRow = {
   last_report_at: string | null
   reports_this_month: number
   reports_last_month: number
+  reports_last_30d: number
   distinct_reporters: number
   median_ack_hours: number | null
   pct_acked_within_24h: number | null
+}
+
+/**
+ * Global aggregates the stats-card row consumes. All counts are pilot-wide
+ * (sum across every store the HO can see, regardless of the current filter
+ * state) — the cards are deliberately a fixed top-of-page reference, not a
+ * filter-aware live readout.
+ */
+export type StoresSummary = {
+  total_stores: number
+  active_status: number
+  reports_this_month: number
+  reports_last_month: number
+  mom_growth_pct: number | null
+  total_reporters: number
+  pct_acked_within_2h: number | null
 }
 
 /**
@@ -117,7 +141,13 @@ const ACTIVITY_OPTIONS: ReadonlyArray<"all" | ActivityTier> = [
   "never",
 ]
 
-export function StoresClient({ rows }: { rows: StoreRow[] }) {
+export function StoresClient({
+  rows,
+  summary,
+}: {
+  rows: StoreRow[]
+  summary: StoresSummary
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   // Allow deep-linking via ?q=... (e.g. from the Overview quiet-stores card).
@@ -133,6 +163,33 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
   const [importOpen, setImportOpen] = useState(false)
   const [bulkBusy, setBulkBusy] = useState<{ done: number; total: number } | null>(null)
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null)
+  // Pagination — mockup defaults to 20/page. With ~11 pilot stores this
+  // resolves to a single page, but the footer still reads correctly and the
+  // controls activate once HO grows the roster past the page size.
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<10 | 20 | 50 | 100>(20)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  /**
+   * True iff any filter / search is non-default. Drives whether the Reset
+   * button renders as active, and whether the "New only" pill shows its
+   * "× clear" affordance.
+   */
+  const filtersActive =
+    Boolean(query.trim()) ||
+    brandFilter !== null ||
+    statusFilter !== "all" ||
+    activityFilter !== "all" ||
+    showNewOnly
+
+  function resetFilters() {
+    setQuery("")
+    setBrandFilter(null)
+    setStatusFilter("all")
+    setActivityFilter("all")
+    setShowNewOnly(false)
+    setPage(1)
+  }
 
   const brands = useMemo(
     () => Array.from(new Set(rows.map((r) => r.brand))).sort(),
@@ -189,6 +246,39 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
     const t = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(t)
   }, [toast])
+
+  // ⌘K / Ctrl+K focuses the search input. Matches the hint shown in the
+  // input's trailing badge. Skips when the user is already typing in an
+  // editable element so we don't steal focus mid-edit.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const isMod = e.metaKey || e.ctrlKey
+      if (!isMod || e.key.toLowerCase() !== "k") return
+      const t = e.target as HTMLElement | null
+      const tag = t?.tagName?.toLowerCase()
+      if (tag === "input" || tag === "textarea" || t?.isContentEditable) {
+        if (t !== searchRef.current) return
+      }
+      e.preventDefault()
+      searchRef.current?.focus()
+      searchRef.current?.select()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [])
+
+  // Reset to page 1 whenever the filter set changes — otherwise the user
+  // ends up on an empty page after narrowing.
+  useEffect(() => {
+    setPage(1)
+  }, [query, brandFilter, statusFilter, activityFilter, showNewOnly, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const clampedPage = Math.min(page, totalPages)
+  const pageStart = (clampedPage - 1) * pageSize
+  const paged = filtered.slice(pageStart, pageStart + pageSize)
+  const pageStartLabel = filtered.length === 0 ? 0 : pageStart + 1
+  const pageEndLabel = Math.min(filtered.length, pageStart + pageSize)
 
   function onSaved(ok: boolean, msg: string) {
     setEditing(null)
@@ -259,130 +349,111 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
     }
   }
 
-  const totals = useMemo(() => {
-    let active = 0
-    let missingPassword = 0
-    for (const r of rows) {
-      if (r.status === "active") active += 1
-      if (!r.has_password) missingPassword += 1
-    }
-    return { total: rows.length, active, missingPassword }
-  }, [rows])
+  const newStores = useMemo(
+    () => rows.filter((r) => !r.qr_downloaded_at),
+    [rows],
+  )
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
       {/* Page header --------------------------------------------------- */}
-      <header className="mb-6">
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
-          Pilot · ABFRL
-        </p>
-        <div className="mt-1 flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
-              Stores
-            </h1>
-            <p className="mt-1 text-[13px] text-slate-600">
-              All {totals.total} pilot stores · {totals.active} active ·{" "}
-              {totals.missingPassword === 0 ? (
-                <span className="text-teal-700">all have manager passwords</span>
-              ) : (
-                <span className="text-orange-700">
-                  {totals.missingPassword} missing password
-                </span>
-              )}
-              {newCount > 0 && (
-                <>
-                  {" · "}
-                  <span className="text-indigo-700 font-medium">
-                    {newCount} new (QR not distributed)
+      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
+            Stores
+          </h1>
+          <p className="mt-1 text-[13px] text-slate-600">
+            Manage all retail locations and monitor engagement
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => downloadAllQrs(newStores)}
+            disabled={bulkBusy !== null || newStores.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              newStores.length > 0
+                ? `Download ${newStores.length} QR poster(s) for stores without a distributed QR`
+                : "All stores already have a distributed QR poster"
+            }
+          >
+            {bulkBusy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {bulkBusy.done}/{bulkBusy.total}
+              </>
+            ) : (
+              <>
+                <QrCode className="h-4 w-4" />
+                Download new QRs
+                {newStores.length > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center rounded bg-indigo-50 text-indigo-700 px-1.5 text-[10.5px] font-bold tabular-nums">
+                    {newStores.length}
                   </span>
-                </>
-              )}
-            </p>
-            <p className="mt-1 text-[12px] text-slate-500">
-              <ActivityIcon className="h-3 w-3 inline -mt-0.5 mr-1 text-slate-400" />
-              Adoption:{" "}
-              <span className="text-teal-700 font-medium">
-                {activityCounts.active} active
-              </span>{" "}
-              ·{" "}
-              <span className="text-sky-700 font-medium">
-                {activityCounts.quiet} quiet
-              </span>{" "}
-              ·{" "}
-              <span className="text-slate-600 font-medium">
-                {activityCounts.dormant} dormant
-              </span>{" "}
-              ·{" "}
-              <span className="text-slate-500">
-                {activityCounts.never} never reported
-              </span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() =>
-                downloadAllQrs(
-                  showNewOnly || newCount > 0
-                    ? rows.filter((r) => !r.qr_downloaded_at)
-                    : rows,
-                )
-              }
-              disabled={bulkBusy !== null}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              title={
-                newCount > 0
-                  ? `Download ${newCount} QR code(s) for stores without a distributed QR`
-                  : "Download QR codes for all stores"
-              }
-            >
-              {bulkBusy ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {bulkBusy.done}/{bulkBusy.total}
-                </>
-              ) : (
-                <>
-                  <QrCode className="h-4 w-4" />
-                  {newCount > 0
-                    ? `Download ${newCount} new QR${newCount === 1 ? "" : "s"}`
-                    : "Download all QRs"}
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
-            >
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-indigo-700 hover:bg-indigo-800 px-3 py-2 text-[13px] font-semibold text-white"
-            >
-              <Plus className="h-4 w-4" />
-              Add store
-            </button>
-          </div>
+                )}
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadAllQrs(rows)}
+            disabled={bulkBusy !== null}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            title="Download QR posters for every store in the pilot"
+          >
+            <QrCode className="h-4 w-4" />
+            Download all QRs
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-700 hover:bg-indigo-800 px-3 py-2 text-[13px] font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Add store
+          </button>
         </div>
       </header>
 
+      {/* Stats cards --------------------------------------------------- */}
+      <StatsCards
+        summary={summary}
+        activityCounts={activityCounts}
+        newCount={newCount}
+      />
+
       {/* Filter bar --------------------------------------------------- */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 mb-4">
+        {/* Row 1 — search + New-only + Reset.
+            Dense single row; the search input grows to fill remaining width. */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[260px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
+              ref={searchRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search SAP code, store, city, manager, phone…"
-              className="w-full h-9 pl-9 pr-3 text-[13.5px] border border-slate-300 rounded-md focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              placeholder="Search stores, address, manager…"
+              className="w-full h-9 pl-9 pr-14 text-[13.5px] border border-slate-300 rounded-md focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              aria-label="Search stores"
             />
+            <kbd
+              aria-hidden
+              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500"
+              title="Focus search"
+            >
+              ⌘K
+            </kbd>
           </div>
           <button
             type="button"
@@ -392,12 +463,13 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                 ? "bg-indigo-700 text-white border-indigo-700"
                 : "bg-white text-slate-700 border-slate-300 hover:border-indigo-400"
             }`}
+            title="Filter to stores whose QR poster has not been downloaded yet"
           >
             <Sparkles className="h-3.5 w-3.5" />
             New only
             {newCount > 0 && (
               <span
-                className={`ml-1 inline-flex items-center justify-center rounded px-1.5 text-[10.5px] font-bold ${
+                className={`ml-1 inline-flex items-center justify-center rounded px-1.5 text-[10.5px] font-bold tabular-nums ${
                   showNewOnly
                     ? "bg-white text-indigo-700"
                     : "bg-indigo-100 text-indigo-700"
@@ -407,75 +479,92 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
               </span>
             )}
           </button>
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap mt-3">
-          <span className="text-[11px] text-slate-500 mr-1">Activity:</span>
-          {ACTIVITY_OPTIONS.map((a) => (
-            <FilterChip
-              key={a}
-              active={activityFilter === a}
-              onClick={() => setActivityFilter(a)}
-            >
-              <span className="inline-flex items-center gap-1">
-                {a !== "all" && (
-                  <span
-                    aria-hidden
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      a === "active"
-                        ? "bg-teal-700"
-                        : a === "quiet"
-                          ? "bg-sky-700"
-                          : a === "dormant"
-                            ? "bg-slate-500"
-                            : "bg-slate-300 ring-1 ring-slate-400"
-                    }`}
-                  />
-                )}
-                {a === "all"
-                  ? "All"
-                  : a === "active"
-                    ? `Active · ${activityCounts.active}`
-                    : a === "quiet"
-                      ? `Quiet · ${activityCounts.quiet}`
-                      : a === "dormant"
-                        ? `Dormant · ${activityCounts.dormant}`
-                        : `Never · ${activityCounts.never}`}
-              </span>
-            </FilterChip>
-          ))}
-          <span className="text-[10.5px] text-slate-400 ml-1">
-            Active ≤ 7d · Quiet 8–30d · Dormant &gt; 30d
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          <span className="text-[11px] text-slate-500 mr-1">Status:</span>
-          {STATUS_OPTIONS.map((s) => (
-            <FilterChip
-              key={s}
-              active={statusFilter === s}
-              onClick={() => setStatusFilter(s)}
-            >
-              {s === "all" ? "All" : humanStatus(s)}
-            </FilterChip>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          <span className="text-[11px] text-slate-500 mr-1">Brand:</span>
-          <FilterChip
-            active={brandFilter === null}
-            onClick={() => setBrandFilter(null)}
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!filtersActive}
+            className={`inline-flex items-center gap-1.5 px-3 h-9 text-[12.5px] font-medium rounded-md border transition-colors ${
+              filtersActive
+                ? "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                : "bg-white text-slate-400 border-slate-200 cursor-not-allowed"
+            }`}
+            title="Clear all filters and search"
           >
-            All
-          </FilterChip>
-          {brands.map((b) => (
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
+          </button>
+        </div>
+
+        {/* Row 2 — three chip groups on one tight line.
+            Each group renders inline (dimension label · chips), separated
+            by a hairline divider. The Brand group is allowed to wrap onto
+            its own line when there are many brands. */}
+        <div className="mt-2.5 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-[11.5px]">
+          <FilterGroup label="Activity">
+            {ACTIVITY_OPTIONS.map((a) => (
+              <FilterChip
+                key={a}
+                active={activityFilter === a}
+                onClick={() => setActivityFilter(a)}
+              >
+                <span className="inline-flex items-center gap-1">
+                  {a !== "all" && (
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        a === "active"
+                          ? "bg-teal-700"
+                          : a === "quiet"
+                            ? "bg-sky-700"
+                            : a === "dormant"
+                              ? "bg-slate-500"
+                              : "bg-slate-300 ring-1 ring-slate-400"
+                      }`}
+                    />
+                  )}
+                  {a === "all"
+                    ? "All"
+                    : a === "active"
+                      ? `Active · ${activityCounts.active}`
+                      : a === "quiet"
+                        ? `Quiet · ${activityCounts.quiet}`
+                        : a === "dormant"
+                          ? `Dormant · ${activityCounts.dormant}`
+                          : `Never · ${activityCounts.never}`}
+                </span>
+              </FilterChip>
+            ))}
+          </FilterGroup>
+          <FilterDivider />
+          <FilterGroup label="Status">
+            {STATUS_OPTIONS.map((s) => (
+              <FilterChip
+                key={s}
+                active={statusFilter === s}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s === "all" ? "All" : humanStatus(s)}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+          <FilterDivider />
+          <FilterGroup label="Brand">
             <FilterChip
-              key={b}
-              active={brandFilter === b}
-              onClick={() => setBrandFilter(b)}
+              active={brandFilter === null}
+              onClick={() => setBrandFilter(null)}
             >
-              {b}
+              All
             </FilterChip>
-          ))}
+            {brands.map((b) => (
+              <FilterChip
+                key={b}
+                active={brandFilter === b}
+                onClick={() => setBrandFilter(b)}
+              >
+                {b}
+              </FilterChip>
+            ))}
+          </FilterGroup>
         </div>
       </div>
 
@@ -506,30 +595,30 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
+              paged.map((r) => (
                 <tr key={r.sap_code} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-[12px] text-slate-800">
-                        {r.sap_code}
-                      </span>
-                      {!r.qr_downloaded_at && (
-                        <span
-                          title="QR not yet downloaded — distribute to this store"
-                          className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 border border-indigo-200"
-                        >
-                          <Sparkles className="h-2.5 w-2.5" />
-                          New
-                        </span>
-                      )}
-                    </div>
+                  <td className="px-4 py-3 align-top">
+                    <span className="font-mono text-[12px] text-slate-800">
+                      {r.sap_code}
+                    </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 align-top">
                     <div className="flex items-start gap-2">
                       <StoreIcon className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
                       <div className="min-w-0">
-                        <div className="text-slate-900 font-medium truncate">
-                          {r.name}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-slate-900 font-medium truncate">
+                            {r.name}
+                          </span>
+                          {!r.qr_downloaded_at && (
+                            <span
+                              title="QR not yet downloaded — distribute to this store"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-indigo-700 border border-indigo-200"
+                            >
+                              <Sparkles className="h-2.5 w-2.5" />
+                              New
+                            </span>
+                          )}
                         </div>
                         {r.location && (
                           <div className="text-[11px] text-slate-500 mt-0.5 truncate">
@@ -539,18 +628,19 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{r.brand}</td>
-                  <td className="px-4 py-3 text-slate-700 text-[12.5px]">
-                    {r.city} · {r.state}
+                  <td className="px-4 py-3 align-top text-slate-700">{r.brand}</td>
+                  <td className="px-4 py-3 align-top text-slate-700 text-[12.5px] leading-tight">
+                    <div>{r.city}</div>
+                    <div className="text-slate-500">{r.state}</div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 align-top">
                     {r.manager_name ? (
                       <div>
                         <div className="text-slate-800 truncate">
                           {r.manager_name}
                         </div>
                         {r.manager_phone && (
-                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate font-mono">
                             {r.manager_phone}
                           </div>
                         )}
@@ -565,20 +655,24 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <StatusPill status={r.status} />
+                  <td className="px-4 py-3 align-top">
+                    <StatusPill
+                      tier={tiersByCode.get(r.sap_code) ?? "never"}
+                      storeStatus={r.status}
+                    />
                   </td>
                   <ActivityCell
                     row={r}
                     tier={tiersByCode.get(r.sap_code) ?? "never"}
                   />
                   <EngagementCell row={r} />
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 align-top text-right">
                     <div className="inline-flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => downloadQr(r.sap_code)}
                         title="Download QR poster"
+                        aria-label={`Download QR poster for ${r.sap_code}`}
                         className="inline-flex items-center gap-1 px-2 h-8 text-[11.5px] text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50"
                       >
                         <QrCode className="h-3.5 w-3.5" />
@@ -587,10 +681,11 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
                       <button
                         type="button"
                         onClick={() => setEditing(r)}
-                        className="inline-flex items-center gap-1 px-2 h-8 text-[11.5px] text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50"
+                        title="Edit store"
+                        aria-label={`Edit ${r.sap_code}`}
+                        className="inline-flex items-center justify-center w-8 h-8 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50"
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                        Edit
                       </button>
                     </div>
                   </td>
@@ -599,6 +694,19 @@ export function StoresClient({ rows }: { rows: StoreRow[] }) {
             )}
           </tbody>
         </table>
+
+        {/* Pagination footer ------------------------------------------- */}
+        <PaginationFooter
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+          pageStart={pageStartLabel}
+          pageEnd={pageEndLabel}
+          page={clampedPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          onPageChange={(p) => setPage(p)}
+          onPageSizeChange={(s) => setPageSize(s)}
+        />
       </div>
 
       {editing && (
@@ -1168,7 +1276,8 @@ function FilterChip({
 
 /**
  * Activity cell — left bar colour-coded by tier, this-month count with
- * month-over-month delta arrow, and a "Last Xd ago · N total" subline.
+ * month-over-month delta arrow, and an "N last 30d" rolling subline (more
+ * useful mid-month than the original "last calendar month" figure).
  *
  * Tier colours follow the project palette (no green / no red):
  *   Active → teal-700, Quiet → sky-700, Dormant → slate-600, Never → slate-400.
@@ -1186,26 +1295,16 @@ function ActivityCell({
     <td className={`px-4 py-3 align-top border-l-[3px] ${cfg.bar}`}>
       {tier === "never" ? (
         <div className="space-y-1">
-          <span
-            className={`inline-flex items-center px-2 h-5 text-[10.5px] font-medium rounded-md border border-dashed ${cfg.pill}`}
-          >
-            Never
-          </span>
           <div className="text-[11px] text-slate-500">
             {row.qr_downloaded_at
-              ? `QR distributed ${formatRelative(row.qr_downloaded_at)} · 0 total`
-              : "No QR distributed yet"}
+              ? `Last reported never · QR sent ${formatRelative(row.qr_downloaded_at)}`
+              : "No reports yet · QR not distributed"}
           </div>
         </div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           <div className="flex items-baseline gap-1.5 flex-wrap">
-            <span
-              className={`inline-flex items-center px-2 h-5 text-[10.5px] font-medium rounded-md ${cfg.pill}`}
-            >
-              {cfg.label}
-            </span>
-            <span className={`text-[14px] font-semibold tabular-nums ${cfg.num}`}>
+            <span className={`text-[15px] font-semibold tabular-nums ${cfg.num}`}>
               {row.reports_this_month}
             </span>
             <span className="text-[10.5px] text-slate-500">this month</span>
@@ -1226,8 +1325,16 @@ function ActivityCell({
             )}
           </div>
           <div className="text-[11px] text-slate-500">
-            Last {formatRelative(row.last_report_at)} ·{" "}
-            <span className="tabular-nums">{row.report_count}</span> total
+            <span className="tabular-nums font-medium text-slate-700">
+              {row.reports_last_30d}
+            </span>{" "}
+            last 30d
+            {row.report_count !== row.reports_last_30d && (
+              <>
+                {" · "}
+                <span className="tabular-nums">{row.report_count}</span> total
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1309,24 +1416,42 @@ const ACTIVITY_PILL: Record<
   },
 }
 
-function StatusPill({ status }: { status: StoreStatus }) {
-  const cfg = {
-    active: {
-      label: "Active",
-      cls: "bg-teal-50 text-teal-800 border-teal-200",
-    },
-    temporarily_closed: {
-      label: "Temp. closed",
-      cls: "bg-orange-50 text-orange-800 border-orange-200",
-    },
-    permanently_closed: {
-      label: "Closed",
-      cls: "bg-slate-100 text-slate-600 border-slate-200",
-    },
-  }[status]
+/**
+ * Status column pill.
+ *
+ * The mockup shows two states — "Active" (teal) and "Quiet" (slate) — which
+ * are activity tiers, not the underlying `stores.status` enum. So the pill
+ * normally reflects the activity tier (which is the more interesting signal
+ * during the pilot ramp-up). Store-level closure still has to surface
+ * somewhere, so when the row is `temporarily_closed` or `permanently_closed`
+ * we override and render the closure state instead — those are uncommon
+ * and worth flagging explicitly.
+ */
+function StatusPill({
+  tier,
+  storeStatus,
+}: {
+  tier: ActivityTier
+  storeStatus: StoreStatus
+}) {
+  if (storeStatus === "temporarily_closed") {
+    return (
+      <span className="inline-flex items-center px-2 h-6 text-[11px] rounded-md border bg-orange-50 text-orange-800 border-orange-200">
+        Temp. closed
+      </span>
+    )
+  }
+  if (storeStatus === "permanently_closed") {
+    return (
+      <span className="inline-flex items-center px-2 h-6 text-[11px] rounded-md border bg-slate-100 text-slate-600 border-slate-200">
+        Closed
+      </span>
+    )
+  }
+  const cfg = ACTIVITY_PILL[tier]
   return (
     <span
-      className={`inline-flex items-center px-2 h-6 text-[11px] rounded-md border ${cfg.cls}`}
+      className={`inline-flex items-center px-2 h-6 text-[11px] rounded-md border ${cfg.pill}`}
     >
       {cfg.label}
     </span>
@@ -1365,4 +1490,302 @@ function humanStatus(s: StoreStatus): string {
     case "permanently_closed":
       return "Closed"
   }
+}
+
+/* ------------------------------ Stats cards ------------------------------ */
+
+type ActivityCounts = {
+  active: number
+  quiet: number
+  dormant: number
+  never: number
+}
+
+/**
+ * Six-card metric strip rendered above the filter bar.
+ *
+ * Cards (left → right):
+ *   1. All stores          — total pilot footprint
+ *   2. Active              — activity-tier "active" (reported ≤ 7d)
+ *   3. Quiet               — everything else (quiet + dormant + never)
+ *   4. Active this month   — stores with ≥ 1 report this calendar month +
+ *                            month-over-month % delta arrow
+ *   5. Total reporters     — distinct phones across every report, lifetime
+ *   6. Mgr ack ≤ 2h        — global % of reports acknowledged within 2h
+ *
+ * The cards are pilot-wide totals on purpose — not filtered. They give HO a
+ * fixed reference frame at the top of the page while they slice the table
+ * below.
+ */
+function StatsCards({
+  summary,
+  activityCounts,
+  newCount,
+}: {
+  summary: StoresSummary
+  activityCounts: ActivityCounts
+  newCount: number
+}) {
+  const activeTier = activityCounts.active
+  const quietTier =
+    activityCounts.quiet + activityCounts.dormant + activityCounts.never
+  const totalActiveQuiet = activeTier + quietTier
+  const activePct = totalActiveQuiet > 0
+    ? Math.round((activeTier / totalActiveQuiet) * 10000) / 100
+    : null
+  const quietPct = totalActiveQuiet > 0
+    ? Math.round((quietTier / totalActiveQuiet) * 10000) / 100
+    : null
+  const mom = summary.mom_growth_pct
+  const ack = summary.pct_acked_within_2h
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      <StatCard
+        icon={<Archive className="h-4 w-4" />}
+        accent="indigo"
+        label="All stores"
+        value={summary.total_stores}
+        sub={
+          newCount > 0
+            ? `${newCount} new`
+            : `${summary.active_status} active`
+        }
+        infoTitle="Total stores in the pilot roster, regardless of activity"
+      />
+      <StatCard
+        icon={<CheckCircle2 className="h-4 w-4" />}
+        accent="teal"
+        label="Active"
+        value={activeTier}
+        sub={activePct != null ? `${formatPct(activePct)}%` : "—"}
+      />
+      <StatCard
+        icon={<MessageSquare className="h-4 w-4" />}
+        accent="slate"
+        label="Quiet"
+        value={quietTier}
+        sub={quietPct != null ? `${formatPct(quietPct)}%` : "—"}
+      />
+      <StatCard
+        icon={<TrendingUp className="h-4 w-4" />}
+        accent="sky"
+        label="Active this month"
+        value={summary.reports_this_month}
+        sub={
+          mom == null ? (
+            <span className="text-slate-500">—</span>
+          ) : mom === 0 ? (
+            <span className="text-slate-500">flat</span>
+          ) : mom > 0 ? (
+            <span className="inline-flex items-center gap-0.5 text-teal-700 font-medium">
+              <TrendingUp className="h-3 w-3" />
+              {mom}%
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-0.5 text-orange-700 font-medium">
+              <TrendingDown className="h-3 w-3" />
+              {mom}%
+            </span>
+          )
+        }
+      />
+      <StatCard
+        icon={<Users className="h-4 w-4" />}
+        accent="slate"
+        label="Total reporters"
+        value={summary.total_reporters}
+        sub="All time"
+      />
+      <StatCard
+        icon={<Clock className="h-4 w-4" />}
+        accent="indigo"
+        label="Mgr ack ≤ 2h"
+        value={ack == null ? "—" : `${ack}%`}
+        sub={ack == null ? "no data yet" : ack >= 80 ? "on target" : "needs lift"}
+      />
+    </div>
+  )
+}
+
+function formatPct(p: number): string {
+  // 54.5454… → "54.55" / 54 → "54". Trims trailing zeros for tidy display.
+  const fixed = p.toFixed(2)
+  return fixed.replace(/\.?0+$/, "")
+}
+
+function StatCard({
+  icon,
+  accent,
+  label,
+  value,
+  sub,
+  infoTitle,
+}: {
+  icon: React.ReactNode
+  accent: "indigo" | "teal" | "slate" | "sky" | "orange"
+  label: string
+  value: number | string
+  sub: React.ReactNode
+  infoTitle?: string
+}) {
+  const tone = {
+    indigo: "bg-indigo-50 text-indigo-700",
+    teal: "bg-teal-50 text-teal-700",
+    slate: "bg-slate-100 text-slate-600",
+    sky: "bg-sky-50 text-sky-700",
+    orange: "bg-orange-50 text-orange-700",
+  }[accent]
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+      <span
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${tone}`}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+          <span className="truncate">{label}</span>
+          {infoTitle && (
+            <span title={infoTitle} className="text-slate-400">
+              <Info className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-[22px] font-semibold tabular-nums text-slate-900 leading-none">
+            {value}
+          </span>
+          {sub != null && (
+            <span className="text-[11px] text-slate-500">{sub}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------------- Filter helpers ----------------------------- */
+
+function FilterGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="inline-flex items-center gap-1.5 flex-wrap">
+      <span className="text-slate-500 font-medium">{label}:</span>
+      {children}
+    </div>
+  )
+}
+
+function FilterDivider() {
+  return (
+    <span
+      aria-hidden
+      className="hidden md:inline-block h-3.5 w-px bg-slate-200"
+    />
+  )
+}
+
+/* --------------------------- Pagination footer --------------------------- */
+
+/**
+ * Table pagination footer.
+ *
+ * Shows "Showing X to Y of Z" (filtered total — falls back to overall total
+ * when no filter is active), prev/next page nav, the current page number,
+ * and a page-size selector. With 11 pilot stores at the default 20/page,
+ * this renders as a single page and the arrows are disabled; the controls
+ * activate naturally once HO grows the roster past the page size.
+ */
+function PaginationFooter({
+  filteredCount,
+  totalCount,
+  pageStart,
+  pageEnd,
+  page,
+  totalPages,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  filteredCount: number
+  totalCount: number
+  pageStart: number
+  pageEnd: number
+  page: number
+  totalPages: number
+  pageSize: number
+  onPageChange: (p: number) => void
+  onPageSizeChange: (s: 10 | 20 | 50 | 100) => void
+}) {
+  const showingFiltered = filteredCount !== totalCount
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3 border-t border-slate-200 bg-white text-[12px] text-slate-600">
+      <div>
+        Showing{" "}
+        <span className="tabular-nums font-medium text-slate-800">
+          {pageStart}
+        </span>{" "}
+        to{" "}
+        <span className="tabular-nums font-medium text-slate-800">
+          {pageEnd}
+        </span>{" "}
+        of{" "}
+        <span className="tabular-nums font-medium text-slate-800">
+          {filteredCount}
+        </span>{" "}
+        {filteredCount === 1 ? "store" : "stores"}
+        {showingFiltered && (
+          <span className="text-slate-400"> (of {totalCount} total)</span>
+        )}
+      </div>
+      <div className="inline-flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          aria-label="Previous page"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <span
+          className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-md bg-indigo-50 text-indigo-700 text-[11.5px] font-semibold tabular-nums"
+          aria-label={`Page ${page} of ${totalPages}`}
+        >
+          {page}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <label className="ml-2 inline-flex items-center gap-1.5">
+          <select
+            value={pageSize}
+            onChange={(e) =>
+              onPageSizeChange(Number(e.target.value) as 10 | 20 | 50 | 100)
+            }
+            className="h-7 pl-2 pr-6 text-[11.5px] border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            aria-label="Stores per page"
+          >
+            <option value={10}>10 / page</option>
+            <option value={20}>20 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  )
 }
