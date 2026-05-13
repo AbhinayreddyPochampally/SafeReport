@@ -86,7 +86,7 @@ export function QueueList({
   return (
     <section
       aria-label={config.title}
-      className={`bg-white rounded-xl border border-slate-200 mb-8 overflow-hidden`}
+      className="bg-white rounded-xl border border-slate-200 overflow-hidden h-full flex flex-col"
     >
       {/* Header */}
       <header className="px-6 pt-5 pb-4 border-b border-slate-100">

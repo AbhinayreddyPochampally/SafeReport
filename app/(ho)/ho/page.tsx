@@ -329,19 +329,22 @@ export default async function HoLandingPage() {
         />
       </div>
 
-      {/* Approval queue (action-required) ---------------------------------- */}
-      <QueueList
-        variant="approval"
-        rows={data.approvalRows}
-        viewAllHref="/ho/all-reports?status=awaiting_ho"
-      />
-
-      {/* Reported queue (pipeline awareness) ------------------------------- */}
-      <QueueList
-        variant="pipeline"
-        rows={data.pipelineRows}
-        viewAllHref="/ho/all-reports?status=open"
-      />
+      {/* Queues — side-by-side on xl+, stacked below.
+          Approval (action-required) on the left, Reported (pipeline
+          awareness) on the right. items-stretch keeps both cards the same
+          height even when one queue has more rows than the other. */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-8 items-stretch">
+        <QueueList
+          variant="approval"
+          rows={data.approvalRows}
+          viewAllHref="/ho/all-reports?status=awaiting_ho"
+        />
+        <QueueList
+          variant="pipeline"
+          rows={data.pipelineRows}
+          viewAllHref="/ho/all-reports?status=open"
+        />
+      </div>
 
     </div>
   )

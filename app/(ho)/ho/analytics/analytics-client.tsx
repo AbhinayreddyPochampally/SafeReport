@@ -15,9 +15,15 @@ import {
   Calendar,
   Clock,
   Download,
+  Gauge,
+  Info,
   Loader2,
+  MessageCircle,
+  Target,
+  Timer,
   TrendingDown,
   TrendingUp,
+  type LucideIcon,
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { CATEGORIES } from "@/lib/categories"
@@ -413,95 +419,151 @@ export function AnalyticsClient() {
         </div>
       )}
 
-      {/* Time analytics cards */}
-      <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-slate-600 flex items-center gap-1">
-        <Clock className="h-3 w-3" />
-        Time analytics
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <TimeCard
-          label="Median time to acknowledge"
-          value={data?.time_analytics.median_ack_hours ?? null}
-          prev={data?.time_analytics_prev.median_ack_hours ?? null}
-          format="hours"
-          subline={
-            data
-              ? `P90 ${formatHours(data.time_analytics.p90_ack_hours)} · ${data.time_analytics.acked_count} acked`
-              : "—"
-          }
-          sparkline={
-            data?.time_series_medians.map((b) => b.median_ack_hours) ?? []
-          }
-          sparklineColor="#0F766E"
-          lowerIsBetter
-        />
-        <TimeCard
-          label="Median resolution time"
-          value={data?.time_analytics.median_resolution_hours ?? null}
-          prev={data?.time_analytics_prev.median_resolution_hours ?? null}
-          format="hours"
-          subline={
-            data
-              ? `P90 ${formatHours(data.time_analytics.p90_resolution_hours)} · reported → closed`
-              : "—"
-          }
-          sparkline={
-            data?.time_series_medians.map(
-              (b) => b.median_resolution_hours,
-            ) ?? []
-          }
-          sparklineColor="#4338CA"
-          lowerIsBetter
-        />
-        <TimeCard
-          label="First-attempt resolution"
-          value={data?.time_analytics.first_attempt_rate ?? null}
-          prev={data?.time_analytics_prev.first_attempt_rate ?? null}
-          format="percent"
-          subline={
-            data
-              ? `${Math.round((data.time_analytics.first_attempt_rate ?? 0) * data.time_analytics.closed_count)} first-try / ${data.time_analytics.closed_count}`
-              : "—"
-          }
-          sparkline={
-            data?.time_series_medians.map((b) => b.first_attempt_rate) ?? []
-          }
-          sparklineColor="#0F766E"
-        />
-        <TimeCard
-          label={`Resolved within ${data?.sla_hours ?? 48}h`}
-          value={data?.time_analytics.pct_within_48h ?? null}
-          prev={data?.time_analytics_prev.pct_within_48h ?? null}
-          format="percent"
-          subline={
-            data
-              ? `${Math.round((data.time_analytics.pct_within_48h ?? 0) * data.time_analytics.closed_count)} within 48h / ${data.time_analytics.closed_count}`
-              : "—"
-          }
-          sparkline={
-            data?.time_series_medians.map((b) => b.pct_within_48h) ?? []
-          }
-          sparklineColor="#0F766E"
-        />
-      </div>
+      {/* Time analytics — section header + 4 KPI cards.
+          Restyled per the v3 mockup: a flat icon-led header, then four
+          freestanding cards (no outer wrapper card). Each KPI card carries
+          an iconified label, a large teal value, a sentence-style delta
+          line, a small trend sparkline (kept per HO ask — direction within
+          the range matters on top of the prior-period delta), and a
+          contextual "supporting band" at the bottom. */}
+      <header className="flex items-start gap-3 mb-4">
+        <span
+          aria-hidden
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700 shrink-0"
+        >
+          <Clock className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="font-display text-[20px] font-semibold text-slate-900 leading-tight">
+            Time Analytics
+          </h2>
+          <p className="mt-0.5 text-[13px] text-slate-600">
+            Track how quickly your team acknowledges and resolves safety
+            reports.
+          </p>
+        </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <TimeCard
+            icon={MessageCircle}
+            label="Median time to acknowledge"
+            tooltip="Median time between a report being filed and the store manager acknowledging it."
+            value={data?.time_analytics.median_ack_hours ?? null}
+            prev={data?.time_analytics_prev.median_ack_hours ?? null}
+            format="hours"
+            sparkline={
+              data?.time_series_medians.map((b) => b.median_ack_hours) ?? []
+            }
+            sparklineColor="#0F766E"
+            lowerIsBetter
+            supportPrimary={
+              data
+                ? `90% acknowledged within ${formatHours(data.time_analytics.p90_ack_hours)}`
+                : "—"
+            }
+            supportSecondary={
+              data ? `${data.time_analytics.acked_count} reports acknowledged` : ""
+            }
+          />
+          <TimeCard
+            icon={Timer}
+            label="Median resolution time"
+            tooltip="Median time from a report being filed to it being closed (resolved end-to-end)."
+            value={data?.time_analytics.median_resolution_hours ?? null}
+            prev={data?.time_analytics_prev.median_resolution_hours ?? null}
+            format="hours"
+            sparkline={
+              data?.time_series_medians.map(
+                (b) => b.median_resolution_hours,
+              ) ?? []
+            }
+            sparklineColor="#4338CA"
+            lowerIsBetter
+            supportPrimary={
+              data
+                ? `90% resolved within ${formatHours(data.time_analytics.p90_resolution_hours)}`
+                : "—"
+            }
+            supportSecondary="From reported to closed"
+          />
+          <TimeCard
+            icon={Target}
+            label="First-attempt resolution"
+            tooltip="Share of closed reports that were resolved without being returned for rework."
+            value={data?.time_analytics.first_attempt_rate ?? null}
+            prev={data?.time_analytics_prev.first_attempt_rate ?? null}
+            format="percent"
+            sparkline={
+              data?.time_series_medians.map((b) => b.first_attempt_rate) ?? []
+            }
+            sparklineColor="#0F766E"
+            supportProgress={
+              data && data.time_analytics.closed_count > 0
+                ? {
+                    numerator: Math.round(
+                      (data.time_analytics.first_attempt_rate ?? 0) *
+                        data.time_analytics.closed_count,
+                    ),
+                    denominator: data.time_analytics.closed_count,
+                    label: "resolved on first attempt",
+                  }
+                : null
+            }
+          />
+          <TimeCard
+            icon={Gauge}
+            label={`Resolved within ${data?.sla_hours ?? 48}h`}
+            tooltip={`Share of closed reports resolved within the ${data?.sla_hours ?? 48}-hour SLA.`}
+            value={data?.time_analytics.pct_within_48h ?? null}
+            prev={data?.time_analytics_prev.pct_within_48h ?? null}
+            format="percent"
+            sparkline={
+              data?.time_series_medians.map((b) => b.pct_within_48h) ?? []
+            }
+            sparklineColor="#0F766E"
+            supportProgress={
+              data && data.time_analytics.closed_count > 0
+                ? {
+                    numerator: Math.round(
+                      (data.time_analytics.pct_within_48h ?? 0) *
+                        data.time_analytics.closed_count,
+                    ),
+                    denominator: data.time_analytics.closed_count,
+                    label: `resolved within ${data.sla_hours ?? 48} hours`,
+                  }
+                : null
+            }
+          />
+        </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <ChartCard
           title={`Reports per ${data?.granularity === "weekly" ? "week" : "day"}, stacked by status`}
           subtitle="Stacked from closed (bottom) upward."
+          yAxisLabel="Reports"
         >
           <StatusBars rows={data?.time_series_status ?? []} />
         </ChartCard>
 
         <ChartCard
           title={`Category mix per ${data?.granularity === "weekly" ? "week" : "day"}`}
-          subtitle="Observations slate, incidents amber."
+          subtitle="Observations, incidents, and outcomes."
+          yAxisLabel="Reports"
         >
           <CategoryBars rows={data?.time_series_categories ?? []} />
         </ChartCard>
       </div>
 
-      <div className="mt-5">
+      {/* Footer note matching the mockup. Helpful because reports come in
+          from store managers in their local time and the chart bars are
+          bucketed in the viewer's local time too. */}
+      <p className="mt-4 flex items-center justify-center gap-1.5 text-[11.5px] text-slate-500">
+        <Clock className="h-3 w-3" aria-hidden />
+        All times are shown in your local time zone.
+      </p>
+
+      <div className="mt-6">
         <ChartCard
           title="Store leaderboard"
           subtitle="Top 20 by report volume. First-attempt rate = share of closed reports resolved on attempt 1."
@@ -570,67 +632,196 @@ function FilterChip({
   )
 }
 
+/**
+ * Time-analytics KPI card.
+ *
+ * Mockup-aligned layout (v3):
+ *  • Header row — icon in a tinted circle + label + info tooltip.
+ *  • Big teal value, line-broken at the bottom by a sentence-style delta:
+ *      "2.0h faster vs previous period" / "Down 7.7 pts vs previous period".
+ *  • Sparkline strip (kept per HO ask — direction within the range matters
+ *    on top of the prior-period delta).
+ *  • Support band — either a two-line "primary | secondary" pill set for
+ *    median-time cards, or a "N of M" progress bar for share-of-whole
+ *    percentages (first-attempt and within-SLA).
+ *
+ * Polarity: a "lowerIsBetter" flag drives the colour of the delta. The big
+ * value stays teal regardless of polarity — keeps the cards visually
+ * balanced; the delta carries the goodness signal.
+ */
 function TimeCard({
+  icon: Icon,
   label,
+  tooltip,
   value,
   prev,
   format,
-  subline,
   sparkline,
   sparklineColor,
   lowerIsBetter,
+  supportPrimary,
+  supportSecondary,
+  supportProgress,
 }: {
+  icon: LucideIcon
   label: string
+  tooltip: string
   value: number | null
   prev: number | null
   format: "hours" | "percent"
-  subline: string
   sparkline: (number | null)[]
   sparklineColor: string
   lowerIsBetter?: boolean
+  supportPrimary?: string
+  supportSecondary?: string
+  supportProgress?: {
+    numerator: number
+    denominator: number
+    label: string
+  } | null
 }) {
   const hasValue = value !== null
   const hasDelta = hasValue && prev !== null
   const delta = hasDelta ? (value as number) - (prev as number) : 0
   const better = lowerIsBetter ? delta < 0 : delta > 0
   const worse = lowerIsBetter ? delta > 0 : delta < 0
+  const deltaMagnitude =
+    format === "hours" ? formatDelta(delta, "h") : `${Math.abs(delta * 100).toFixed(1)} pts`
+  const deltaPhrase = !hasDelta
+    ? ""
+    : Math.abs(delta) < (format === "hours" ? 0.005 : 0.0005)
+      ? "Unchanged vs previous period"
+      : better
+        ? `${deltaMagnitude} ${format === "hours" ? "faster" : "up"} vs previous period`
+        : worse
+          ? `Down ${deltaMagnitude} vs previous period`
+          : `${deltaMagnitude} vs previous period`
   return (
-    <div className="bg-white border border-slate-200 rounded-md p-3">
-      <div className="text-[11px] text-slate-600">{label}</div>
-      <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span
+            aria-hidden
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-teal-50 text-teal-700 shrink-0"
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <span className="text-[12.5px] font-medium text-slate-700 leading-tight">
+            {label}
+          </span>
+        </div>
         <span
-          className={`text-[22px] font-semibold tabular-nums ${
-            hasValue
-              ? lowerIsBetter
-                ? "text-teal-700"
-                : "text-slate-900"
-              : "text-slate-400"
+          title={tooltip}
+          aria-label={tooltip}
+          className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5 cursor-help"
+        >
+          <Info className="h-3.5 w-3.5" />
+        </span>
+      </div>
+
+      {/* Big value */}
+      <div
+        className={`mt-3 text-[34px] font-semibold tabular-nums leading-none ${
+          hasValue ? "text-teal-700" : "text-slate-400"
+        }`}
+      >
+        {format === "hours" ? formatHours(value) : formatPercent(value)}
+      </div>
+
+      {/* Delta line */}
+      {hasDelta ? (
+        <div
+          className={`mt-2 inline-flex items-center gap-1.5 text-[11.5px] ${
+            better
+              ? "text-teal-700"
+              : worse
+                ? "text-orange-700"
+                : "text-slate-500"
           }`}
         >
-          {format === "hours" ? formatHours(value) : formatPercent(value)}
-        </span>
-        {hasDelta && Math.abs(delta) > 0.005 && (
-          <span
-            className={`inline-flex items-center gap-0.5 text-[10.5px] font-medium ${
-              better ? "text-teal-700" : worse ? "text-orange-700" : "text-slate-500"
-            }`}
-          >
-            {delta > 0 ? (
-              <TrendingUp className="h-3 w-3" />
-            ) : (
-              <TrendingDown className="h-3 w-3" />
-            )}
-            {format === "hours"
-              ? `${formatDelta(delta, "h")}`
-              : `${(delta * 100).toFixed(1)}pt`}{" "}
-            vs prev
-          </span>
-        )}
-      </div>
-      <div className="mt-2">
+          {Math.abs(delta) < (format === "hours" ? 0.005 : 0.0005) ? (
+            <Info className="h-3 w-3" />
+          ) : better === lowerIsBetter && lowerIsBetter ? (
+            <TrendingDown className="h-3 w-3" />
+          ) : better ? (
+            <TrendingUp className="h-3 w-3" />
+          ) : (
+            <TrendingDown className="h-3 w-3" />
+          )}
+          <span className="font-medium">{deltaPhrase}</span>
+        </div>
+      ) : (
+        <div className="mt-2 text-[11.5px] text-slate-400">
+          No prior-period comparison
+        </div>
+      )}
+
+      {/* Sparkline */}
+      <div className="mt-3">
         <Sparkline data={sparkline} color={sparklineColor} />
       </div>
-      <div className="text-[10.5px] text-slate-500 mt-1">{subline}</div>
+
+      {/* Support band */}
+      <div className="mt-3 rounded-md bg-slate-50 border border-slate-100 px-3 py-2">
+        {supportProgress ? (
+          <SupportProgress {...supportProgress} />
+        ) : (
+          <SupportPills primary={supportPrimary} secondary={supportSecondary} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SupportPills({
+  primary,
+  secondary,
+}: {
+  primary?: string
+  secondary?: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5 text-[10.5px] text-slate-600">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Clock className="h-3 w-3 text-slate-400 shrink-0" aria-hidden />
+        <span className="truncate">{primary || "—"}</span>
+      </div>
+      {secondary && (
+        <>
+          <span className="h-3 w-px bg-slate-200" aria-hidden />
+          <span className="truncate">{secondary}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+function SupportProgress({
+  numerator,
+  denominator,
+  label,
+}: {
+  numerator: number
+  denominator: number
+  label: string
+}) {
+  const pct = denominator > 0 ? Math.min(1, Math.max(0, numerator / denominator)) : 0
+  return (
+    <div>
+      <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
+        <div
+          className="h-full bg-teal-600 rounded-full transition-[width]"
+          style={{ width: `${(pct * 100).toFixed(1)}%` }}
+          aria-hidden
+        />
+      </div>
+      <p className="mt-1.5 text-[10.5px] text-slate-600">
+        <span className="font-medium text-slate-800 tabular-nums">
+          {numerator} of {denominator}
+        </span>{" "}
+        {label}
+      </p>
     </div>
   )
 }
@@ -738,21 +929,53 @@ function Sparkline({
 function ChartCard({
   title,
   subtitle,
+  yAxisLabel,
   children,
 }: {
   title: string
   subtitle?: string
+  /** Optional small axis-name label rendered above the chart canvas
+   * (e.g. "Reports"). Matches the mockup's tiny axis-name treatment. */
+  yAxisLabel?: string
   children: React.ReactNode
 }) {
   return (
     <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <header className="px-4 py-3 border-b border-slate-200">
-        <h3 className="text-[13px] font-semibold text-slate-900">{title}</h3>
-        {subtitle && (
-          <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
-        )}
+      <header className="px-5 py-4 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-display text-[15px] font-semibold text-slate-900">
+              {title}
+            </h3>
+            <Info
+              className="h-3.5 w-3.5 text-slate-400 shrink-0"
+              aria-hidden
+            />
+          </div>
+          {subtitle && (
+            <p className="text-[12px] text-slate-500 mt-0.5">{subtitle}</p>
+          )}
+        </div>
+        {/* Decorative 3-dot menu placeholder. No menu wired yet — the
+            export-to-Excel button at the top of the page already covers
+            the only meaningful action HO would reach for from here. */}
+        <span
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 text-slate-500"
+          aria-hidden
+        >
+          <span className="flex flex-col gap-0.5">
+            <span className="h-0.5 w-0.5 rounded-full bg-current" />
+            <span className="h-0.5 w-0.5 rounded-full bg-current" />
+            <span className="h-0.5 w-0.5 rounded-full bg-current" />
+          </span>
+        </span>
       </header>
-      <div className="p-4">{children}</div>
+      <div className="px-5 pb-5">
+        {yAxisLabel && (
+          <p className="text-[10.5px] text-slate-500 mb-1">{yAxisLabel}</p>
+        )}
+        {children}
+      </div>
     </section>
   )
 }
