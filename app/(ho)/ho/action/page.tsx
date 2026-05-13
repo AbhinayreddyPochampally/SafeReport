@@ -111,8 +111,8 @@ export default async function HoActionPage({
     return (
       <ActionClient
         list={[]}
-        detail={null}
-        selectedId={null}
+        detailsById={{}}
+        initialSelectedId={null}
         counts={{ sla_breached: 0, awaiting: 0, stale_new: 0, resubmitted: 0 }}
         viewer={{ display_name: session.display_name }}
       />
@@ -222,56 +222,62 @@ export default async function HoActionPage({
     resubmitted: bucketed.filter((b) => b.item.resubmitted).length,
   }
 
-  // Resolve the selected detail row.
-  const requestedId = searchParams?.id ?? null
-  const inList = requestedId
-    ? list.find((l) => l.id === requestedId)
-    : undefined
-  const selectedId = inList?.id ?? list[0]?.id ?? null
+  // Pre-build detail for EVERY list row, so client-side keyboard navigation
+  // (J/K) flips between them instantly without a server round-trip. List is
+  // bounded by the size of the action queue (~30 items at pilot scale), so
+  // the payload stays cheap.
+  const reportById = new Map<string, ReportRow>()
+  for (const r of rawReports) reportById.set(r.id, r)
 
-  let detail: ActionDetail | null = null
-  if (selectedId) {
-    const r = rawReports.find((x) => x.id === selectedId)
-    if (r) {
-      detail = {
-        id: r.id,
-        store: {
-          sap_code: r.stores.sap_code,
-          name: r.stores.name,
-          brand: r.stores.brand,
-          city: r.stores.city,
-          state: r.stores.state,
-        },
-        type: r.type,
-        category: r.category,
-        status: r.status,
-        description: r.description,
-        transcript: r.transcript,
-        transcript_error: r.transcript_error,
-        photo_url: r.photo_url,
-        audio_url: r.audio_url,
-        incident_datetime: r.incident_datetime,
-        reported_at: r.reported_at,
-        acknowledged_at: r.acknowledged_at,
-        reporter_name: r.reporter_name,
-        reporter_phone: r.reporter_phone,
-        resolutions: resByReport.get(r.id) ?? [],
-        history: (histByReport.get(r.id) ?? []).map((h) => ({
-          id: h.id,
-          action: h.action,
-          rejection_reason: h.rejection_reason,
-          acted_at: h.acted_at,
-          actor_display_name: h.ho_users?.display_name ?? null,
-        })),
-      }
+  const detailsById: Record<string, ActionDetail> = {}
+  for (const item of list) {
+    const r = reportById.get(item.id)
+    if (!r) continue
+    detailsById[item.id] = {
+      id: r.id,
+      store: {
+        sap_code: r.stores.sap_code,
+        name: r.stores.name,
+        brand: r.stores.brand,
+        city: r.stores.city,
+        state: r.stores.state,
+      },
+      type: r.type,
+      category: r.category,
+      status: r.status,
+      description: r.description,
+      transcript: r.transcript,
+      transcript_error: r.transcript_error,
+      photo_url: r.photo_url,
+      audio_url: r.audio_url,
+      incident_datetime: r.incident_datetime,
+      reported_at: r.reported_at,
+      acknowledged_at: r.acknowledged_at,
+      reporter_name: r.reporter_name,
+      reporter_phone: r.reporter_phone,
+      resolutions: resByReport.get(r.id) ?? [],
+      history: (histByReport.get(r.id) ?? []).map((h) => ({
+        id: h.id,
+        action: h.action,
+        rejection_reason: h.rejection_reason,
+        acted_at: h.acted_at,
+        actor_display_name: h.ho_users?.display_name ?? null,
+      })),
     }
   }
+
+  // Initial selection — from URL if it points at a row in the list, else the
+  // first row.
+  const requestedId = searchParams?.id ?? null
+  const initialSelectedId =
+    (requestedId && detailsById[requestedId] ? requestedId : list[0]?.id) ??
+    null
 
   return (
     <ActionClient
       list={list}
-      detail={detail}
-      selectedId={selectedId}
+      detailsById={detailsById}
+      initialSelectedId={initialSelectedId}
       counts={counts}
       viewer={{ display_name: session.display_name }}
     />

@@ -29,6 +29,9 @@ import {
 } from "react"
 import { CATEGORIES } from "@/lib/categories"
 
+const FULL_VIEW_SHORTCUT_HINT =
+  "A approve · R return · V void · Esc back"
+
 /**
  * HO-side report detail. Structurally mirrors the manager view so the codebase
  * stays coherent (same audio player, same lightbox pattern, same status badge
@@ -127,6 +130,50 @@ export function HoReportDetail({
   const cat = CATEGORIES.find((c) => c.key === report.category)
   const tone: "slate" | "amber" = report.type === "incident" ? "amber" : "slate"
 
+  // Keyboard shortcuts on the full-page view.
+  //   A      → approve   (awaiting_ho only)
+  //   R      → return    (awaiting_ho only)
+  //   V      → void      (any non-terminal status)
+  //   Esc    → navigate back to the inferred origin (?from= hint)
+  // Inputs / textareas / modals don't trap.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (returnOpen || voidOpen || photoOpen) return
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      if (key === "a" && report.status === "awaiting_ho") {
+        e.preventDefault()
+        void submitAction("approve")
+      } else if (key === "r" && report.status === "awaiting_ho") {
+        e.preventDefault()
+        setReturnOpen(true)
+      } else if (
+        key === "v" &&
+        report.status !== "closed" &&
+        report.status !== "voided"
+      ) {
+        e.preventDefault()
+        setVoidOpen(true)
+      } else if (key === "Escape") {
+        e.preventDefault()
+        router.push(back.href)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // submitAction depends on this closure but is stable enough; we only need
+    // to re-bind when status/modal flags change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.status, returnOpen, voidOpen, photoOpen, back.href])
+
   async function submitAction(
     action: "approve" | "return" | "void",
     comment?: string,
@@ -179,13 +226,18 @@ export function HoReportDetail({
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8">
-      <Link
-        href={back.href}
-        className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-indigo-700"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        {back.label}
-      </Link>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Link
+          href={back.href}
+          className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-indigo-700"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          {back.label}
+        </Link>
+        <p className="text-[11px] text-slate-400 tabular-nums hidden md:block">
+          {FULL_VIEW_SHORTCUT_HINT}
+        </p>
+      </div>
 
       {/* Header */}
       <div className="mt-5">

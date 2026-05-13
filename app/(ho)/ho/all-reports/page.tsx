@@ -189,15 +189,27 @@ export default async function AllReportsPage({
     new Set((brandsRaw ?? []).map((r) => r.brand as string)),
   ).sort()
 
-  // Selected row detail — server-fetched so the right pane is populated on
-  // first paint (no flash, no client round-trip). The selection is also
-  // permitted to be outside the current page of filtered results — e.g. when
-  // the user lands here from a URL someone shared.
-  const selectedId = readSingle(searchParams, "id") ?? ""
-  let detail: ReportDetail | null = null
-  if (selectedId && REPORT_ID_RE.test(selectedId)) {
-    detail = await fetchDetail(admin, selectedId)
+  // Pre-load detail for every row on the visible page in one shot. This makes
+  // J/K keyboard navigation between rows instant (no per-keypress fetch).
+  // 50 rows × ~5KB per detail = ~250KB payload, acceptable.
+  // We also fetch a row that's referenced via ?id= but isn't on the current
+  // page, so direct permalinks still work.
+  const visibleIds = rows.map((r) => r.id)
+  const requestedId = readSingle(searchParams, "id") ?? ""
+  const idsToLoad: string[] = [...visibleIds]
+  if (
+    requestedId &&
+    REPORT_ID_RE.test(requestedId) &&
+    !idsToLoad.includes(requestedId)
+  ) {
+    idsToLoad.push(requestedId)
   }
+  const detailsById = await fetchDetailsBulk(admin, idsToLoad)
+
+  // Initial selection — from URL if it points at a row we managed to load,
+  // else null (no detail pane shown until the user clicks a row).
+  const selectedId =
+    requestedId && detailsById[requestedId] ? requestedId : null
 
   return (
     <AllReportsClient
@@ -215,94 +227,118 @@ export default async function AllReportsPage({
       }}
       statusCounts={allStatusCounts}
       availableBrands={brands}
-      detail={detail}
-      selectedId={detail ? selectedId : null}
+      detailsById={detailsById}
+      initialSelectedId={selectedId}
     />
   )
 }
 
-/* --------------------------- Selected-row detail ------------------------- */
+/* --------------------------- Bulk row-detail fetch ----------------------- */
 
-async function fetchDetail(
+/**
+ * Fetch report detail (plus resolutions + HO history) for every id in `ids`,
+ * in three round-trips instead of N. Returns a keyed map.
+ *
+ * The whole point is to pre-populate the right pane so client-side
+ * keyboard navigation never blocks on the network.
+ */
+async function fetchDetailsBulk(
   admin: AdminClient,
-  reportId: string,
-): Promise<ReportDetail | null> {
-  const { data: rep, error: repErr } = await admin
-    .from("reports")
-    .select(
-      "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
-    )
-    .eq("id", reportId)
-    .maybeSingle()
-  if (repErr || !rep) return null
-
-  const storeRaw = (rep as unknown as {
-    stores: {
-      sap_code: string
-      name: string
-      brand: string
-      city: string
-      state: string
-    }
-  }).stores
-
-  const [{ data: resRows }, { data: histRows }] = await Promise.all([
+  ids: string[],
+): Promise<Record<string, ReportDetail>> {
+  if (ids.length === 0) return {}
+  const [repsResp, resResp, histResp] = await Promise.all([
+    admin
+      .from("reports")
+      .select(
+        "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
+      )
+      .in("id", ids),
     admin
       .from("resolutions")
-      .select("id, attempt_number, note, photo_url, resolved_at")
-      .eq("report_id", reportId)
+      .select("id, report_id, attempt_number, note, photo_url, resolved_at")
+      .in("report_id", ids)
       .order("attempt_number", { ascending: true }),
     admin
       .from("ho_actions")
       .select(
-        "id, action, rejection_reason, acted_at, ho_users!left(display_name)",
+        "id, report_id, action, rejection_reason, acted_at, ho_users!left(display_name)",
       )
-      .eq("report_id", reportId)
+      .in("report_id", ids)
       .order("acted_at", { ascending: true }),
   ])
 
-  return {
-    id: rep.id as string,
-    store: {
-      sap_code: storeRaw.sap_code,
-      name: storeRaw.name,
-      brand: storeRaw.brand,
-      city: storeRaw.city,
-      state: storeRaw.state,
-    },
-    type: rep.type as ReportDetail["type"],
-    category: rep.category as string,
-    status: rep.status as ReportStatus,
-    description: rep.description as string | null,
-    transcript: rep.transcript as string | null,
-    transcript_error: rep.transcript_error as string | null,
-    photo_url: rep.photo_url as string,
-    audio_url: rep.audio_url as string | null,
-    incident_datetime: rep.incident_datetime as string,
-    reported_at: rep.reported_at as string,
-    acknowledged_at: rep.acknowledged_at as string | null,
-    reporter_name: rep.reporter_name as string | null,
-    reporter_phone: rep.reporter_phone as string | null,
-    resolutions: (resRows ?? []).map((r) => ({
+  const resByReport = new Map<
+    string,
+    ReportDetail["resolutions"]
+  >()
+  for (const r of resResp.data ?? []) {
+    const rid = r.report_id as string
+    const arr = resByReport.get(rid) ?? []
+    arr.push({
       id: r.id as string,
       attempt_number: r.attempt_number as number,
       note: r.note as string,
       photo_url: r.photo_url as string | null,
       resolved_at: r.resolved_at as string,
-    })),
-    history: (histRows ?? []).map((h) => {
-      const user = (h as unknown as {
-        ho_users: { display_name: string } | null
-      }).ho_users
-      return {
-        id: h.id as string,
-        action: h.action as ReportDetail["history"][number]["action"],
-        rejection_reason: h.rejection_reason as string | null,
-        acted_at: h.acted_at as string,
-        actor_display_name: user?.display_name ?? null,
-      }
-    }),
+    })
+    resByReport.set(rid, arr)
   }
+  const histByReport = new Map<string, ReportDetail["history"]>()
+  for (const h of histResp.data ?? []) {
+    const rid = h.report_id as string
+    const user = (h as unknown as {
+      ho_users: { display_name: string } | null
+    }).ho_users
+    const arr = histByReport.get(rid) ?? []
+    arr.push({
+      id: h.id as string,
+      action: h.action as ReportDetail["history"][number]["action"],
+      rejection_reason: h.rejection_reason as string | null,
+      acted_at: h.acted_at as string,
+      actor_display_name: user?.display_name ?? null,
+    })
+    histByReport.set(rid, arr)
+  }
+
+  const out: Record<string, ReportDetail> = {}
+  for (const rep of repsResp.data ?? []) {
+    const storeRaw = (rep as unknown as {
+      stores: {
+        sap_code: string
+        name: string
+        brand: string
+        city: string
+        state: string
+      }
+    }).stores
+    out[rep.id as string] = {
+      id: rep.id as string,
+      store: {
+        sap_code: storeRaw.sap_code,
+        name: storeRaw.name,
+        brand: storeRaw.brand,
+        city: storeRaw.city,
+        state: storeRaw.state,
+      },
+      type: rep.type as ReportDetail["type"],
+      category: rep.category as string,
+      status: rep.status as ReportStatus,
+      description: rep.description as string | null,
+      transcript: rep.transcript as string | null,
+      transcript_error: rep.transcript_error as string | null,
+      photo_url: rep.photo_url as string,
+      audio_url: rep.audio_url as string | null,
+      incident_datetime: rep.incident_datetime as string,
+      reported_at: rep.reported_at as string,
+      acknowledged_at: rep.acknowledged_at as string | null,
+      reporter_name: rep.reporter_name as string | null,
+      reporter_phone: rep.reporter_phone as string | null,
+      resolutions: resByReport.get(rep.id as string) ?? [],
+      history: histByReport.get(rep.id as string) ?? [],
+    }
+  }
+  return out
 }
 
 /* -------------------------- Status count helper -------------------------- */

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
@@ -27,13 +27,20 @@ import { CATEGORIES } from "@/lib/categories"
  * endpoint; on success we router.refresh() so the list re-shapes (the row
  * leaves the queue, the next-most-urgent surfaces).
  *
- * Keyboard shortcuts:
- *   J / ↓     → select next row
- *   K / ↑     → select previous row
+ * Keyboard shortcuts (J = up, K = down per design choice — not vim):
+ *   J / ↑     → select previous row
+ *   K / ↓     → select next row
  *   A         → approve (awaiting_ho only)
  *   R         → open return-reason modal
  *   V         → open void-reason modal
- *   Esc       → close any open modal
+ *   F         → open full /ho/reports/[id] view in a new tab
+ *   Esc       → close detail / close any open modal
+ *
+ * Selection is React state; the URL is kept in sync via window.history's
+ * replaceState (shallow). This avoids a server-side re-fetch per keypress —
+ * all detail data for the visible list is loaded once on first paint, so
+ * J/K navigation is instant. Permalinks (?id=SR-...) still work because the
+ * server reads the initial selection from searchParams.
  */
 
 export type ActionBucket = "sla_breached" | "awaiting" | "stale_new"
@@ -103,14 +110,14 @@ type Filter = "all" | "sla_breached" | "awaiting" | "stale_new" | "resubmitted"
 
 export function ActionClient({
   list,
-  detail,
-  selectedId,
+  detailsById,
+  initialSelectedId,
   counts,
   viewer,
 }: {
   list: ListItemWithBucket[]
-  detail: ActionDetail | null
-  selectedId: string | null
+  detailsById: Record<string, ActionDetail>
+  initialSelectedId: string | null
   counts: {
     sla_breached: number
     awaiting: number
@@ -120,10 +127,13 @@ export function ActionClient({
   viewer: { display_name: string }
 }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [filter, setFilter] = useState<Filter>("all")
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialSelectedId,
+  )
   const [busy, setBusy] = useState<null | "approve" | "return" | "void">(null)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const [returnOpen, setReturnOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
 
@@ -133,18 +143,57 @@ export function ActionClient({
     return list.filter((l) => l.bucket === filter)
   }, [list, filter])
 
+  // Keep selection valid after a server refresh (after approve/return/void
+  // the row leaves the list, so `selectedId` would point at a missing entry).
+  useEffect(() => {
+    if (selectedId && detailsById[selectedId]) return
+    // Pick the next visible row (or null if the queue is empty).
+    const next = visible[0]?.id ?? list[0]?.id ?? null
+    setSelectedId(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsById])
+
+  // Resolve the detail for the current selection from the pre-loaded map.
+  const detail: ActionDetail | null = selectedId
+    ? (detailsById[selectedId] ?? null)
+    : null
+
   function navigateTo(id: string | null) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "")
-    if (id) params.set("id", id)
-    else params.delete("id")
-    router.replace(`/ho/action${params.size ? `?${params.toString()}` : ""}`, {
-      scroll: false,
-    })
+    setSelectedId(id)
+    // Keep the URL permalinkable but DON'T trigger a Next.js refetch.
+    // Shallow update so the back button still works.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (id) params.set("id", id)
+      else params.delete("id")
+      const qs = params.toString()
+      window.history.replaceState(
+        null,
+        "",
+        `/ho/action${qs ? `?${qs}` : ""}`,
+      )
+    }
+  }
+
+  // Auto-dismiss the success toast after 2 seconds.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Helper used by both the F shortcut and the "Open full view" button.
+  function openFullView(id: string) {
+    if (typeof window === "undefined") return
+    window.open(`/ho/reports/${id}?from=action`, "_blank", "noopener")
   }
 
   // Keyboard navigation. Bound at the window so it fires regardless of which
   // element has focus, then gates on focused-input + key.toLowerCase() so
   // shift / caps-lock can't break the shortcut.
+  //
+  // Per project convention: J = up, K = down (opposite of vim). Arrow keys
+  // follow their natural meaning.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null
@@ -156,16 +205,21 @@ export function ActionClient({
       ) {
         return
       }
-      if (returnOpen || voidOpen) return
+      if (returnOpen || voidOpen) {
+        if (e.key === "Escape") {
+          // Modals own their own Esc handling — let it through.
+        }
+        return
+      }
       if (visible.length === 0) return
 
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
       const currentIndex = visible.findIndex((l) => l.id === selectedId)
-      if (key === "j" || key === "ArrowDown") {
+      if (key === "k" || key === "ArrowDown") {
         e.preventDefault()
         const next = visible[Math.min(visible.length - 1, currentIndex + 1)]
         if (next) navigateTo(next.id)
-      } else if (key === "k" || key === "ArrowUp") {
+      } else if (key === "j" || key === "ArrowUp") {
         e.preventDefault()
         const prev = visible[Math.max(0, currentIndex - 1)]
         if (prev) navigateTo(prev.id)
@@ -178,6 +232,9 @@ export function ActionClient({
       } else if (key === "v" && detail && detail.status !== "voided") {
         e.preventDefault()
         setVoidOpen(true)
+      } else if (key === "f" && detail) {
+        e.preventDefault()
+        openFullView(detail.id)
       }
     }
     window.addEventListener("keydown", onKey)
@@ -218,6 +275,13 @@ export function ActionClient({
       }
       setReturnOpen(false)
       setVoidOpen(false)
+      setToast(
+        action === "approve"
+          ? `${detail.id} approved`
+          : action === "return"
+            ? `${detail.id} returned`
+            : `${detail.id} voided`,
+      )
       // Pre-emptively pick the next row so the right pane doesn't flash empty
       // during refresh. The next visible row that isn't this one.
       const nextRow =
@@ -259,7 +323,7 @@ export function ActionClient({
             </p>
           </div>
           <p className="text-[11px] text-slate-500">
-            J / K to move · A to approve · R to return · V to void
+            J / K to move · A approve · R return · V void · F full view · Esc close
           </p>
         </div>
 
@@ -357,6 +421,17 @@ export function ActionClient({
           onSubmit={(c) => submitAction("void", c)}
           warning
         />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-md bg-teal-50 border border-teal-200 text-teal-900 shadow-md px-4 py-2.5 text-[13px]"
+        >
+          <Check className="h-4 w-4 text-teal-700" />
+          {toast}
+        </div>
       )}
     </div>
   )

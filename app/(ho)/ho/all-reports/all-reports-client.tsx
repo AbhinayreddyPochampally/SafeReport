@@ -137,8 +137,8 @@ export function AllReportsClient({
   filters,
   statusCounts,
   availableBrands,
-  detail,
-  selectedId,
+  detailsById,
+  initialSelectedId,
 }: {
   rows: AllReportsRow[]
   total: number
@@ -147,30 +147,123 @@ export function AllReportsClient({
   filters: Filters
   statusCounts: Record<ReportStatus, number>
   availableBrands: string[]
-  detail: ReportDetail | null
-  selectedId: string | null
+  detailsById: Record<string, ReportDetail>
+  initialSelectedId: string | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [searchDraft, setSearchDraft] = useState(filters.q)
+  // Selection lives in React state. URL is kept in sync via shallow
+  // replaceState so refresh/permalink works, but we don't trigger a Next
+  // server re-fetch on every keypress.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialSelectedId,
+  )
   // Action bar state for the inline detail pane.
   const [actionBusy, setActionBusy] = useState<
     null | "approve" | "return" | "void"
   >(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionToast, setActionToast] = useState<string | null>(null)
   const [returnOpen, setReturnOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
 
+  // Reconcile selection with the latest server data — if the selected row
+  // disappeared (filter changed, mutation closed it, paginated away), drop
+  // the selection.
+  useEffect(() => {
+    if (selectedId && !detailsById[selectedId]) {
+      setSelectedId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsById])
+
+  // Resolve detail from the pre-loaded map.
+  const detail: ReportDetail | null = selectedId
+    ? (detailsById[selectedId] ?? null)
+    : null
+
   function selectRow(id: string | null) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "")
-    if (id) params.set("id", id)
-    else params.delete("id")
-    startTransition(() => {
+    setSelectedId(id)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (id) params.set("id", id)
+      else params.delete("id")
       const qs = params.toString()
-      router.replace(`/ho/all-reports${qs ? `?${qs}` : ""}`, { scroll: false })
-    })
+      window.history.replaceState(
+        null,
+        "",
+        `/ho/all-reports${qs ? `?${qs}` : ""}`,
+      )
+    }
   }
+
+  function openFullView(id: string) {
+    if (typeof window === "undefined") return
+    window.open(`/ho/reports/${id}?from=reports`, "_blank", "noopener")
+  }
+
+  // Auto-dismiss the success toast.
+  useEffect(() => {
+    if (!actionToast) return
+    const t = setTimeout(() => setActionToast(null), 2000)
+    return () => clearTimeout(t)
+  }, [actionToast])
+
+  // Keyboard navigation. Same conventions as the Action tab:
+  // J = up, K = down, A/R/V where applicable, F = full view, Esc = close.
+  // Only active when a detail pane is currently visible.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (returnOpen || voidOpen) return
+      if (!detail) return
+
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      const currentIndex = rows.findIndex((r) => r.id === selectedId)
+
+      if (key === "k" || key === "ArrowDown") {
+        e.preventDefault()
+        const next = rows[Math.min(rows.length - 1, currentIndex + 1)]
+        if (next) selectRow(next.id)
+      } else if (key === "j" || key === "ArrowUp") {
+        e.preventDefault()
+        const prev = rows[Math.max(0, currentIndex - 1)]
+        if (prev) selectRow(prev.id)
+      } else if (key === "a" && detail.status === "awaiting_ho") {
+        e.preventDefault()
+        void submitAction("approve")
+      } else if (key === "r" && detail.status === "awaiting_ho") {
+        e.preventDefault()
+        setReturnOpen(true)
+      } else if (
+        key === "v" &&
+        detail.status !== "closed" &&
+        detail.status !== "voided"
+      ) {
+        e.preventDefault()
+        setVoidOpen(true)
+      } else if (key === "f") {
+        e.preventDefault()
+        openFullView(detail.id)
+      } else if (key === "Escape") {
+        e.preventDefault()
+        selectRow(null)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, selectedId, detail, returnOpen, voidOpen])
 
   async function submitAction(
     action: "approve" | "return" | "void",
@@ -203,6 +296,13 @@ export function AllReportsClient({
       }
       setReturnOpen(false)
       setVoidOpen(false)
+      setActionToast(
+        action === "approve"
+          ? `${detail.id} approved`
+          : action === "return"
+            ? `${detail.id} returned`
+            : `${detail.id} voided`,
+      )
       router.refresh()
     } catch (e) {
       setActionError(
@@ -212,18 +312,6 @@ export function AllReportsClient({
       setActionBusy(null)
     }
   }
-
-  // Esc closes the detail pane (when no modal is open).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && selectedId && !returnOpen && !voidOpen) {
-        selectRow(null)
-      }
-    }
-    document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, returnOpen, voidOpen])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = (page - 1) * pageSize + (rows.length === 0 ? 0 : 1)
@@ -742,6 +830,17 @@ export function AllReportsClient({
           onSubmit={(c) => submitAction("void", c)}
           warning
         />
+      )}
+
+      {actionToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-md bg-teal-50 border border-teal-200 text-teal-900 shadow-md px-4 py-2.5 text-[13px]"
+        >
+          <Check className="h-4 w-4 text-teal-700" />
+          {actionToast}
+        </div>
       )}
     </div>
   )
