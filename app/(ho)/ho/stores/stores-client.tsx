@@ -1813,27 +1813,3 @@ function PaginationFooter({
     </div>
   )
 }
--label="Next page"
-          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-        <label className="ml-2 inline-flex items-center gap-1.5">
-          <select
-            value={pageSize}
-            onChange={(e) =>
-              onPageSizeChange(Number(e.target.value) as 10 | 20 | 50 | 100)
-            }
-            className="h-7 pl-2 pr-6 text-[11.5px] border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            aria-label="Stores per page"
-          >
-            <option value={10}>10 / page</option>
-            <option value={20}>20 / page</option>
-            <option value={50}>50 / page</option>
-            <option value={100}>100 / page</option>
-          </select>
-        </label>
-      </div>
-    </div>
-  )
-}
