@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   FileText,
   Inbox,
+  MoonStar,
   RotateCcw,
   Store as StoreIcon,
   type LucideIcon,
@@ -32,6 +33,7 @@ export const dynamic = "force-dynamic"
  */
 
 const ATTENTION_HOURS = 48
+const QUIET_DAYS = 7
 
 type AttentionStore = {
   sap_code: string
@@ -40,6 +42,16 @@ type AttentionStore = {
   past_48h_count: number
   oldest_report_id: string
   oldest_hours: number
+}
+
+type QuietStore = {
+  sap_code: string
+  store_name: string
+  brand: string
+  /** ISO timestamp of the last report, or null if the store has never had one. */
+  last_report_at: string | null
+  /** Whole days since last report — Infinity for never-reported stores. */
+  days_since: number
 }
 
 function startOfThisMonthISO(): string {
@@ -57,6 +69,8 @@ async function fetchLandingData(monthStart: string) {
     closedThisMonth,
     returnedThisMonth,
     activeRowsRaw,
+    activeStoresRaw,
+    allReportsTimestamps,
   ] = await Promise.all([
     admin
       .from("reports")
@@ -89,6 +103,15 @@ async function fetchLandingData(monthStart: string) {
       .in("status", ["new", "in_progress", "awaiting_ho", "returned"])
       .order("reported_at", { ascending: true })
       .limit(100),
+    // Active store roster — drives the 'no recent traffic' computation.
+    admin
+      .from("stores")
+      .select("sap_code, name, brand, created_at")
+      .eq("status", "active"),
+    // (store_code, reported_at) for every report — used only to compute each
+    // active store's most-recent-report timestamp. At pilot scale this is
+    // small (a few hundred rows). If it grows we'll move to a SQL view.
+    admin.from("reports").select("store_code, reported_at"),
   ])
 
   const allOpen: QueueRow[] = (activeRowsRaw.data ?? []).map((r) => {
@@ -171,6 +194,58 @@ async function fetchLandingData(monthStart: string) {
       oldest_hours: (nowMs - a.oldest_at_ms) / 36e5,
     }))
 
+  // Quiet stores = active stores whose most-recent report is older than
+  // QUIET_DAYS, OR who have never had a report. We don't flag stores that
+  // were created less than QUIET_DAYS ago — those just haven't had time.
+  const lastReportByStore = new Map<string, number>()
+  for (const r of allReportsTimestamps.data ?? []) {
+    const code = r.store_code as string
+    const ts = Date.parse(r.reported_at as string)
+    if (Number.isNaN(ts)) continue
+    const prev = lastReportByStore.get(code) ?? 0
+    if (ts > prev) lastReportByStore.set(code, ts)
+  }
+  const quietCutoffMs = nowMs - QUIET_DAYS * 24 * 36e5
+  const quietCandidates: Array<{
+    sap_code: string
+    name: string
+    brand: string
+    last_ts: number | null
+    created_ts: number
+  }> = []
+  for (const s of activeStoresRaw.data ?? []) {
+    const sap = s.sap_code as string
+    const lastTs = lastReportByStore.get(sap) ?? null
+    const createdTs = s.created_at
+      ? Date.parse(s.created_at as string)
+      : 0
+    if (lastTs !== null && lastTs > quietCutoffMs) continue // had recent traffic
+    if (lastTs === null && createdTs > quietCutoffMs) continue // too new to flag
+    quietCandidates.push({
+      sap_code: sap,
+      name: s.name as string,
+      brand: s.brand as string,
+      last_ts: lastTs,
+      created_ts: createdTs,
+    })
+  }
+  // Sort: never-reported first (most concerning), then oldest last-report.
+  quietCandidates.sort((a, b) => {
+    if (a.last_ts === null && b.last_ts !== null) return -1
+    if (a.last_ts !== null && b.last_ts === null) return 1
+    if (a.last_ts !== null && b.last_ts !== null) return a.last_ts - b.last_ts
+    return a.created_ts - b.created_ts
+  })
+  const quietStores: QuietStore[] = quietCandidates.slice(0, 6).map((c) => ({
+    sap_code: c.sap_code,
+    store_name: c.name,
+    brand: c.brand,
+    last_report_at:
+      c.last_ts === null ? null : new Date(c.last_ts).toISOString(),
+    days_since:
+      c.last_ts === null ? Infinity : (nowMs - c.last_ts) / (24 * 36e5),
+  }))
+
   return {
     reportsThisMonth: reportsThisMonth.count ?? 0,
     awaitingHo: awaitingHo.count ?? 0,
@@ -179,6 +254,7 @@ async function fetchLandingData(monthStart: string) {
     approvalRows,
     pipelineRows,
     attentionStores,
+    quietStores,
   }
 }
 
@@ -218,6 +294,12 @@ export default async function HoLandingPage() {
           </p>
         </div>
       </header>
+
+      {/* Stores needing attention (TOP — actionable, fresh on refresh) ----- */}
+      <AttentionPanel
+        attentionStores={data.attentionStores}
+        quietStores={data.quietStores}
+      />
 
       {/* Summary cards ------------------------------------------------------ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -261,84 +343,6 @@ export default async function HoLandingPage() {
         viewAllHref="/ho/all-reports?status=open"
       />
 
-      {/* Stores needing attention ----------------------------------------- */}
-      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4.5 w-4.5 text-orange-700" aria-hidden />
-            <div>
-              <h2 className="font-display text-base font-semibold text-slate-900">
-                Stores needing attention
-              </h2>
-              <p className="text-[12px] text-slate-500 mt-0.5">
-                Stores with reports waiting more than {ATTENTION_HOURS} hours.
-                Click a store to open its oldest report.
-              </p>
-            </div>
-          </div>
-          {data.attentionStores.length > 0 && (
-            <Link
-              href="/ho/action?filter=sla_breached"
-              className="inline-flex items-center gap-1 text-[12.5px] font-medium text-indigo-700 hover:text-indigo-900"
-            >
-              Open Action queue
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
-          )}
-        </div>
-        {data.attentionStores.length === 0 ? (
-          <div className="px-6 py-10 text-center">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700 mb-2">
-              <CheckCircle2 className="h-5 w-5" aria-hidden />
-            </div>
-            <p className="text-[14px] text-slate-700">All caught up</p>
-            <p className="text-[12px] text-slate-500 mt-0.5">
-              No store has reports older than {ATTENTION_HOURS} hours.
-            </p>
-          </div>
-        ) : (
-          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4">
-            {data.attentionStores.map((s) => (
-              <li key={s.sap_code}>
-                <Link
-                  href={`/ho/action?id=${s.oldest_report_id}`}
-                  className="group block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-orange-300 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-start gap-2.5">
-                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-700 ring-1 ring-orange-100">
-                      <StoreIcon className="h-4 w-4" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-[11px] text-slate-500 truncate">
-                        {s.sap_code}
-                      </p>
-                      <p className="text-[13px] font-medium text-slate-900 truncate group-hover:text-orange-800">
-                        {s.store_name}
-                      </p>
-                      <p className="text-[10.5px] text-slate-500 truncate">
-                        {s.brand}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-baseline justify-between gap-2 tabular-nums">
-                    <span className="text-[12px] text-slate-700">
-                      <span className="text-[16px] font-semibold text-orange-700">
-                        {s.past_48h_count}
-                      </span>{" "}
-                      <span className="text-[11px] text-slate-500">
-                        past 48h
-                      </span>
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      oldest {formatHours(s.oldest_hours)}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   )
 }
@@ -347,6 +351,264 @@ export default async function HoLandingPage() {
 function formatHours(h: number): string {
   if (h < 24) return `${Math.round(h)}h`
   return `${Math.round(h / 24)}d`
+}
+
+/* --------------------------- Attention panel ----------------------------- */
+/**
+ * Top-of-page panel. Two subsections live inside one card:
+ *
+ *   1. Past-48h waiting — orange-tinted store cards, click opens the oldest
+ *      report on that store in the Action queue.
+ *   2. No recent traffic — slate-tinted store cards for stores that haven't
+ *      had a report in {@link QUIET_DAYS} days (or never, if the store has
+ *      been live longer than the quiet window). Click opens the Stores tab
+ *      filtered to that SAP code so HO can investigate.
+ *
+ * Whole panel is hidden only when BOTH subsections are empty AND HO has zero
+ * past-48h reports — otherwise we render the surviving subsection plus the
+ * empty state for the other half so the layout doesn't shift.
+ */
+function AttentionPanel({
+  attentionStores,
+  quietStores,
+}: {
+  attentionStores: AttentionStore[]
+  quietStores: QuietStore[]
+}) {
+  const bothEmpty =
+    attentionStores.length === 0 && quietStores.length === 0
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-orange-700" aria-hidden />
+          <div>
+            <h2 className="font-display text-base font-semibold text-slate-900">
+              Stores needing attention
+            </h2>
+            <p className="text-[12px] text-slate-500 mt-0.5">
+              Two checks that surface stores worth a call this morning.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {bothEmpty ? (
+        <div className="px-6 py-10 text-center">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700 mb-2">
+            <CheckCircle2 className="h-5 w-5" aria-hidden />
+          </div>
+          <p className="text-[14px] text-slate-700">All caught up</p>
+          <p className="text-[12px] text-slate-500 mt-0.5">
+            No backlog and no quiet stores. Have a good day.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {/* Subsection 1: Past 48h waiting */}
+          <AttentionSubsection
+            icon={
+              <AlertCircle
+                className="h-3.5 w-3.5 text-orange-700"
+                aria-hidden
+              />
+            }
+            title="Reports waiting past 48 hours"
+            subtitle="Backlog is concentrating on these stores. Open the oldest report and decide."
+            countLabel={
+              attentionStores.length > 0
+                ? `${attentionStores.length} ${attentionStores.length === 1 ? "store" : "stores"}`
+                : null
+            }
+            ctaHref="/ho/action"
+            ctaLabel="Open Action queue"
+            empty="No store has reports waiting more than 48 hours."
+            cards={attentionStores.map((s) => (
+              <Link
+                key={s.sap_code}
+                href={`/ho/action?id=${s.oldest_report_id}`}
+                className="group block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-orange-300 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-start gap-2.5">
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-700 ring-1 ring-orange-100">
+                    <StoreIcon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[11px] text-slate-500 truncate">
+                      {s.sap_code}
+                    </p>
+                    <p className="text-[13px] font-medium text-slate-900 truncate group-hover:text-orange-800">
+                      {s.store_name}
+                    </p>
+                    <p className="text-[10.5px] text-slate-500 truncate">
+                      {s.brand}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-baseline justify-between gap-2 tabular-nums">
+                  <span className="text-[12px] text-slate-700">
+                    <span className="text-[16px] font-semibold text-orange-700">
+                      {s.past_48h_count}
+                    </span>{" "}
+                    <span className="text-[11px] text-slate-500">
+                      past 48h
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    oldest {formatHours(s.oldest_hours)}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          />
+
+          {/* Subsection 2: No recent traffic */}
+          <AttentionSubsection
+            icon={
+              <MoonStar
+                className="h-3.5 w-3.5 text-slate-600"
+                aria-hidden
+              />
+            }
+            title={`No reports in ${QUIET_DAYS}+ days`}
+            subtitle="Could be QR-poster damage, manager turnover, or a quiet floor. Worth a check-in."
+            countLabel={
+              quietStores.length > 0
+                ? `${quietStores.length} ${quietStores.length === 1 ? "store" : "stores"}`
+                : null
+            }
+            ctaHref="/ho/stores"
+            ctaLabel="Open Stores"
+            empty={`Every active store has filed a report in the last ${QUIET_DAYS} days.`}
+            cards={quietStores.map((s) => {
+              const never = s.last_report_at === null
+              return (
+                <Link
+                  key={s.sap_code}
+                  href={`/ho/stores?q=${encodeURIComponent(s.sap_code)}`}
+                  className="group block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-slate-400 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600 ring-1 ring-slate-200">
+                      <StoreIcon className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] text-slate-500 truncate">
+                        {s.sap_code}
+                      </p>
+                      <p className="text-[13px] font-medium text-slate-900 truncate group-hover:text-slate-700">
+                        {s.store_name}
+                      </p>
+                      <p className="text-[10.5px] text-slate-500 truncate">
+                        {s.brand}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-baseline justify-between gap-2 tabular-nums">
+                    {never ? (
+                      <span className="text-[12px] text-slate-700">
+                        <span className="text-[13px] font-semibold text-slate-700">
+                          Never
+                        </span>{" "}
+                        <span className="text-[11px] text-slate-500">
+                          reported
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-[12px] text-slate-700">
+                        <span className="text-[16px] font-semibold text-slate-700">
+                          {Math.round(s.days_since)}
+                        </span>{" "}
+                        <span className="text-[11px] text-slate-500">
+                          days quiet
+                        </span>
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-500">
+                      {never
+                        ? "since QR drop"
+                        : `last ${formatDateShort(s.last_report_at)}`}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          />
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** A subsection inside the AttentionPanel — header strip + card grid. */
+function AttentionSubsection({
+  icon,
+  title,
+  subtitle,
+  countLabel,
+  ctaHref,
+  ctaLabel,
+  empty,
+  cards,
+}: {
+  icon: React.ReactNode
+  title: string
+  subtitle: string
+  countLabel: string | null
+  ctaHref: string
+  ctaLabel: string
+  empty: string
+  cards: React.ReactNode[]
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 px-6 pt-4 pb-2 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            {icon}
+            <h3 className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-slate-600">
+              {title}
+            </h3>
+            {countLabel && (
+              <span className="text-[10.5px] text-slate-500">· {countLabel}</span>
+            )}
+          </div>
+          <p className="text-[11.5px] text-slate-500 mt-0.5">{subtitle}</p>
+        </div>
+        {cards.length > 0 && (
+          <Link
+            href={ctaHref}
+            className="inline-flex items-center gap-1 text-[11.5px] font-medium text-indigo-700 hover:text-indigo-900"
+          >
+            {ctaLabel}
+            <ArrowRight className="h-3 w-3" aria-hidden />
+          </Link>
+        )}
+      </div>
+      {cards.length === 0 ? (
+        <p className="px-6 pb-4 text-[12px] text-slate-500 italic">{empty}</p>
+      ) : (
+        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 px-4 pb-4">
+          {cards.map((c, i) => (
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Short date — "12 Apr" or "12 Apr 2025" if older than this year. */
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear()
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: sameYear ? undefined : "numeric",
+  })
 }
 
 /* ----------------------------- Summary card ------------------------------ */

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Activity as ActivityIcon,
   AlertTriangle,
@@ -119,7 +119,9 @@ const ACTIVITY_OPTIONS: ReadonlyArray<"all" | ActivityTier> = [
 
 export function StoresClient({ rows }: { rows: StoreRow[] }) {
   const router = useRouter()
-  const [query, setQuery] = useState("")
+  const searchParams = useSearchParams()
+  // Allow deep-linking via ?q=... (e.g. from the Overview quiet-stores card).
+  const [query, setQuery] = useState(() => searchParams?.get("q") ?? "")
   const [brandFilter, setBrandFilter] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<"all" | StoreStatus>("all")
   const [activityFilter, setActivityFilter] = useState<"all" | ActivityTier>(
