@@ -168,7 +168,19 @@ export function StoresClient({
   // controls activate once HO grows the roster past the page size.
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<10 | 20 | 50 | 100>(20)
-  const searchRef = useRef<HTMLInputElement>(null)
+  /**
+   * SAP codes the HO has already seen as NEW on a previous visit.
+   *
+   * The NEW badge is meant as a "since you last looked" indicator, not a
+   * permanent "QR not distributed yet" flag (that one's surfaced by the
+   * "New only" filter and the count badge in the action button). So we
+   * persist the codes the user has been shown into localStorage, and any
+   * future render hides their NEW badge — they'll only see it the first
+   * time. The CSV-import / Add-store flows will add new SAP codes that
+   * aren't in this set yet, so the badge reappears for genuinely new rows.
+   */
+  const [seenNewCodes, setSeenNewCodes] = useState<Set<string>>(new Set())
+  const [hydratedSeen, setHydratedSeen] = useState(false)
 
   /**
    * True iff any filter / search is non-default. Drives whether the Reset
@@ -247,31 +259,50 @@ export function StoresClient({
     return () => clearTimeout(t)
   }, [toast])
 
-  // ⌘K / Ctrl+K focuses the search input. Matches the hint shown in the
-  // input's trailing badge. Skips when the user is already typing in an
-  // editable element so we don't steal focus mid-edit.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const isMod = e.metaKey || e.ctrlKey
-      if (!isMod || e.key.toLowerCase() !== "k") return
-      const t = e.target as HTMLElement | null
-      const tag = t?.tagName?.toLowerCase()
-      if (tag === "input" || tag === "textarea" || t?.isContentEditable) {
-        if (t !== searchRef.current) return
-      }
-      e.preventDefault()
-      searchRef.current?.focus()
-      searchRef.current?.select()
-    }
-    document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
-  }, [])
-
   // Reset to page 1 whenever the filter set changes — otherwise the user
   // ends up on an empty page after narrowing.
   useEffect(() => {
     setPage(1)
   }, [query, brandFilter, statusFilter, activityFilter, showNewOnly, pageSize])
+
+  // Hydrate seen-NEW set from localStorage on mount. SSR returns an empty
+  // set so the markup matches; the client effect then loads stored codes.
+  // This causes a one-frame flash where every NEW badge shows before the
+  // already-seen ones hide — acceptable for a once-per-session render.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("sr_stores_new_seen")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          setSeenNewCodes(new Set(parsed as string[]))
+        }
+      }
+    } catch {
+      // localStorage may be disabled; the badge will then just behave as
+      // "always-on while QR is undistributed", which is the old behaviour.
+    }
+    setHydratedSeen(true)
+  }, [])
+
+  // After rows render, persist the set of currently-undistributed SAP codes
+  // so the badge auto-clears on the next visit. We wait for the hydration
+  // pass to finish to avoid clobbering localStorage with an empty set
+  // before the read effect has run.
+  useEffect(() => {
+    if (!hydratedSeen) return
+    try {
+      const undistributed = rows
+        .filter((r) => !r.qr_downloaded_at)
+        .map((r) => r.sap_code)
+      window.localStorage.setItem(
+        "sr_stores_new_seen",
+        JSON.stringify(undistributed),
+      )
+    } catch {
+      // Ignore — see above.
+    }
+  }, [rows, hydratedSeen])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const clampedPage = Math.min(page, totalPages)
@@ -432,74 +463,67 @@ export function StoresClient({
       />
 
       {/* Filter bar --------------------------------------------------- */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 mb-4">
-        {/* Row 1 — search + New-only + Reset.
-            Dense single row; the search input grows to fill remaining width. */}
+      {/* Two lines flat: line 1 is search + New-only + Reset, line 2 is
+          all three chip groups on a single dense row. Chips are h-6 with
+          tight padding so the full set (Activity + Status + Brand) fits
+          well within the 1400px content frame; flex-wrap is on as a
+          fallback for unusually narrow viewports. */}
+      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[260px]">
+          <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
-              ref={searchRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search stores, address, manager…"
-              className="w-full h-9 pl-9 pr-14 text-[13.5px] border border-slate-300 rounded-md focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              className="w-full h-8 pl-9 pr-3 text-[13px] border border-slate-300 rounded-md focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               aria-label="Search stores"
             />
-            <kbd
-              aria-hidden
-              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500"
-              title="Focus search"
-            >
-              ⌘K
-            </kbd>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowNewOnly(!showNewOnly)}
-            className={`inline-flex items-center gap-1.5 px-3 h-9 text-[12.5px] font-medium rounded-md border transition-colors ${
-              showNewOnly
-                ? "bg-indigo-700 text-white border-indigo-700"
-                : "bg-white text-slate-700 border-slate-300 hover:border-indigo-400"
-            }`}
-            title="Filter to stores whose QR poster has not been downloaded yet"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            New only
-            {newCount > 0 && (
-              <span
-                className={`ml-1 inline-flex items-center justify-center rounded px-1.5 text-[10.5px] font-bold tabular-nums ${
-                  showNewOnly
-                    ? "bg-white text-indigo-700"
-                    : "bg-indigo-100 text-indigo-700"
-                }`}
-              >
-                {newCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={resetFilters}
-            disabled={!filtersActive}
-            className={`inline-flex items-center gap-1.5 px-3 h-9 text-[12.5px] font-medium rounded-md border transition-colors ${
-              filtersActive
-                ? "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                : "bg-white text-slate-400 border-slate-200 cursor-not-allowed"
-            }`}
-            title="Clear all filters and search"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reset
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={() => setShowNewOnly(!showNewOnly)}
+              className={`inline-flex items-center gap-1.5 px-2.5 h-8 text-[12px] font-medium rounded-md border transition-colors ${
+                showNewOnly
+                  ? "bg-indigo-700 text-white border-indigo-700"
+                  : "bg-white text-slate-700 border-slate-300 hover:border-indigo-400"
+              }`}
+              title="Filter to stores whose QR poster has not been downloaded yet"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              New only
+              {newCount > 0 && (
+                <span
+                  className={`ml-0.5 inline-flex items-center justify-center rounded px-1.5 text-[10.5px] font-bold tabular-nums ${
+                    showNewOnly
+                      ? "bg-white text-indigo-700"
+                      : "bg-indigo-100 text-indigo-700"
+                  }`}
+                >
+                  {newCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!filtersActive}
+              className={`inline-flex items-center gap-1.5 px-2.5 h-8 text-[12px] font-medium rounded-md border transition-colors ${
+                filtersActive
+                  ? "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                  : "bg-white text-slate-400 border-slate-200 cursor-not-allowed"
+              }`}
+              title="Clear all filters and search"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </button>
+          </div>
         </div>
 
-        {/* Row 2 — three chip groups on one tight line.
-            Each group renders inline (dimension label · chips), separated
-            by a hairline divider. The Brand group is allowed to wrap onto
-            its own line when there are many brands. */}
-        <div className="mt-2.5 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-[11.5px]">
+        <div className="mt-2 flex items-center gap-x-2.5 gap-y-1 flex-wrap text-[10.5px]">
           <FilterGroup label="Activity">
             {ACTIVITY_OPTIONS.map((a) => (
               <FilterChip
@@ -606,20 +630,20 @@ export function StoresClient({
                     <div className="flex items-start gap-2">
                       <StoreIcon className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-slate-900 font-medium truncate">
-                            {r.name}
-                          </span>
-                          {!r.qr_downloaded_at && (
+                        <div className="text-slate-900 font-medium truncate">
+                          {r.name}
+                        </div>
+                        {!r.qr_downloaded_at && !seenNewCodes.has(r.sap_code) && (
+                          <div className="mt-0.5">
                             <span
-                              title="QR not yet downloaded — distribute to this store"
+                              title="QR not yet distributed — visible until your next visit"
                               className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-indigo-700 border border-indigo-200"
                             >
                               <Sparkles className="h-2.5 w-2.5" />
                               New
                             </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                         {r.location && (
                           <div className="text-[11px] text-slate-500 mt-0.5 truncate">
                             {r.location}
@@ -1263,7 +1287,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={
-        "px-2.5 h-7 text-[11.5px] rounded-full border transition-colors " +
+        "px-2 h-6 text-[10.5px] rounded-full border transition-colors whitespace-nowrap " +
         (active
           ? "bg-indigo-700 border-indigo-700 text-white"
           : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50")
@@ -1676,8 +1700,8 @@ function FilterGroup({
   children: React.ReactNode
 }) {
   return (
-    <div className="inline-flex items-center gap-1.5 flex-wrap">
-      <span className="text-slate-500 font-medium">{label}:</span>
+    <div className="inline-flex items-center gap-1 flex-wrap">
+      <span className="text-slate-500 font-medium mr-0.5">{label}:</span>
       {children}
     </div>
   )
@@ -1766,6 +1790,30 @@ function PaginationFooter({
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           aria-label="Next page"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <label className="ml-2 inline-flex items-center gap-1.5">
+          <select
+            value={pageSize}
+            onChange={(e) =>
+              onPageSizeChange(Number(e.target.value) as 10 | 20 | 50 | 100)
+            }
+            className="h-7 pl-2 pr-6 text-[11.5px] border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            aria-label="Stores per page"
+          >
+            <option value={10}>10 / page</option>
+            <option value={20}>20 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  )
+}
+-label="Next page"
           className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronRight className="h-3.5 w-3.5" />
