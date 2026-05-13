@@ -154,8 +154,10 @@ export function AnalyticsClient() {
   const [from, setFrom] = useState<string>(isoDaysAgo(29))
   const [to, setTo] = useState<string>(isoToday())
   const [brands, setBrands] = useState<string[]>([])
-  const [cities, setCities] = useState<string[]>([])
   const [categories, setCategories] = useState<string[]>([])
+  // City filter exists on the API but isn't wired to UI yet — keep it
+  // off the client until the mockup calls for it. The state below was
+  // intentionally removed.
   const [data, setData] = useState<Payload | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -187,7 +189,6 @@ export function AnalyticsClient() {
         qs.set("from", from)
         qs.set("to", to)
         for (const b of brands) qs.append("brand", b)
-        for (const c of cities) qs.append("city", c)
         for (const k of categories) qs.append("category", k)
         const res = await fetch(`/api/ho-analytics?${qs.toString()}`, {
           cache: "no-store",
@@ -207,7 +208,7 @@ export function AnalyticsClient() {
     return () => {
       cancelled = true
     }
-  }, [from, to, brands, cities, categories])
+  }, [from, to, brands, categories])
 
   function toggle(key: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(key) ? list.filter((x) => x !== key) : [...list, key])
@@ -222,7 +223,6 @@ export function AnalyticsClient() {
       qs.set("from", from)
       qs.set("to", to)
       for (const b of brands) qs.append("brand", b)
-      for (const c of cities) qs.append("city", c)
       for (const k of categories) qs.append("category", k)
       const res = await fetch(`/api/excel/export?${qs.toString()}`, {
         cache: "no-store",

@@ -10,7 +10,6 @@ import {
   Bell,
   Check,
   ImageOff,
-  Image as ImageIcon,
   Inbox,
   Loader2,
   Mic,
