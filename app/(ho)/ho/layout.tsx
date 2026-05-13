@@ -132,22 +132,43 @@ function SidebarCountsFallback() {
 async function fetchSidebarCounts(): Promise<SidebarCounts> {
   try {
     const admin = createSupabaseAdminClient()
-    const [awaitingHo, openTotal, activeStores] = await Promise.all([
-      admin
-        .from("reports")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "awaiting_ho"),
-      admin
-        .from("reports")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["new", "in_progress", "awaiting_ho", "returned"]),
-      admin
-        .from("stores")
-        .select("sap_code", { count: "exact", head: true })
-        .eq("status", "active"),
-    ])
+    // Action queue = awaiting_ho (regardless of age) + stale-new (status=new,
+    // no ack, > 24h old). The breached subcount is the awaiting_ho rows older
+    // than 48h, which the sidebar uses to tint the badge orange.
+    const SLA_BREACH_CUTOFF = new Date(Date.now() - 48 * 36e5).toISOString()
+    const STALE_NEW_CUTOFF = new Date(Date.now() - 24 * 36e5).toISOString()
+    const [awaitingHo, awaitingHoBreached, staleNew, openTotal, activeStores] =
+      await Promise.all([
+        admin
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "awaiting_ho"),
+        admin
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "awaiting_ho")
+          .lte("reported_at", SLA_BREACH_CUTOFF),
+        admin
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "new")
+          .is("acknowledged_at", null)
+          .lte("reported_at", STALE_NEW_CUTOFF),
+        admin
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .in("status", ["new", "in_progress", "awaiting_ho", "returned"]),
+        admin
+          .from("stores")
+          .select("sap_code", { count: "exact", head: true })
+          .eq("status", "active"),
+      ])
+    const awaiting = awaitingHo.count ?? 0
+    const stale = staleNew.count ?? 0
     return {
-      overview: awaitingHo.count ?? 0,
+      overview: awaiting,
+      action: awaiting + stale,
+      action_breached: awaitingHoBreached.count ?? 0,
       reports: openTotal.count ?? 0,
       stores: activeStores.count ?? 0,
     }

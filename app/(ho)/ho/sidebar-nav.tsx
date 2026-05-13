@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  AlertCircle,
   BarChart3,
   FileText,
   LayoutDashboard,
@@ -27,6 +28,8 @@ export type SidebarCounts = {
   overview?: number
   reports?: number
   stores?: number
+  action?: number
+  action_breached?: number
 }
 
 type Item = {
@@ -37,6 +40,8 @@ type Item = {
   countKey?: keyof SidebarCounts
   /** When pathname starts with this (in addition to exact match), treat as active. */
   matchPrefix?: string
+  /** When true and the badge count > 0, tint the badge orange to signal urgency. */
+  urgentKey?: keyof SidebarCounts
 }
 
 const ITEMS: Item[] = [
@@ -45,6 +50,14 @@ const ITEMS: Item[] = [
     label: "Overview",
     icon: LayoutDashboard,
     countKey: "overview",
+  },
+  {
+    href: "/ho/action",
+    label: "Action",
+    icon: AlertCircle,
+    countKey: "action",
+    urgentKey: "action_breached",
+    matchPrefix: "/ho/action",
   },
   {
     href: "/ho/all-reports",
@@ -80,6 +93,8 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
         {ITEMS.map((item) => {
           const active = isActive(item)
           const count = item.countKey ? counts[item.countKey] : undefined
+          const urgent =
+            item.urgentKey && (counts[item.urgentKey] ?? 0) > 0
           return (
             <li key={item.href}>
               <Link
@@ -92,7 +107,11 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
               >
                 <item.icon
                   className={`h-4 w-4 shrink-0 ${
-                    active ? "text-indigo-700" : "text-slate-500 group-hover:text-slate-700"
+                    active
+                      ? "text-indigo-700"
+                      : urgent
+                        ? "text-orange-700"
+                        : "text-slate-500 group-hover:text-slate-700"
                   }`}
                   strokeWidth={1.8}
                   aria-hidden
@@ -101,9 +120,11 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
                 {typeof count === "number" && count > 0 && (
                   <span
                     className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums ${
-                      active
-                        ? "bg-white text-slate-700 ring-1 ring-slate-200"
-                        : "bg-slate-100 text-slate-600"
+                      urgent
+                        ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200"
+                        : active
+                          ? "bg-white text-slate-700 ring-1 ring-slate-200"
+                          : "bg-slate-100 text-slate-600"
                     }`}
                   >
                     {count}
