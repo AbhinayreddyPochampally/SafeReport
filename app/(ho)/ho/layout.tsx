@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
 import { Suspense } from "react"
@@ -6,6 +7,33 @@ import { getHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { HoSignOutButton } from "./sign-out-button"
 import { SidebarNav, type SidebarCounts } from "./sidebar-nav"
+
+// HO-scoped PWA metadata.
+//
+// Without this, every /ho/* page inherits the root manifest from
+// app/manifest.ts whose start_url is "/". Root then redirects to
+// /r/PNT-MUM-047 (the demo store reporter landing). Net effect: an HO
+// user who hit "Install" on /ho/stores got an installed launcher icon
+// that opened the demo store's reporter flow on tap, not the HO console.
+//
+// Pointing every /ho/* page at /ho/manifest.webmanifest fixes that —
+// the HO manifest binds start_url + id to /ho, so the launcher tile
+// reopens the HO console where the user installed it.
+//
+// `icons.apple` is split out because iOS Safari ignores the manifest's
+// icon list for the home-screen tile and reads <link rel="apple-touch-
+// icon"> instead.
+export const metadata: Metadata = {
+  manifest: "/ho/manifest.webmanifest",
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SafeReport HO",
+  },
+}
 
 /**
  * Layout for every /ho/* route.

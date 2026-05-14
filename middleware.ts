@@ -56,8 +56,13 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const isHoRoute = pathname.startsWith("/ho")
   const isHoLogin = pathname === "/ho/login" || pathname.startsWith("/ho/login/")
+  // The PWA manifest is fetched by the browser BEFORE the user is signed
+  // in (when they tap "Install" from /ho/login), so it can't sit behind
+  // the auth gate or Chromium gets HTML for the redirect and silently
+  // rejects the install. The body of the manifest contains no PII.
+  const isHoManifest = pathname === "/ho/manifest.webmanifest"
 
-  if (isHoRoute && !isHoLogin && !user) {
+  if (isHoRoute && !isHoLogin && !isHoManifest && !user) {
     const url = req.nextUrl.clone()
     url.pathname = "/ho/login"
     // Preserve the originally-requested path so we can bounce back after login.
@@ -67,8 +72,9 @@ export async function middleware(req: NextRequest) {
 
   // Authed but trying to reach a protected /ho/* page — verify they're in
   // ho_users. We use an admin (service-role) client for the lookup so we
-  // don't depend on RLS policies being in place yet.
-  if (isHoRoute && !isHoLogin && user) {
+  // don't depend on RLS policies being in place yet. Manifest is exempt
+  // (it's a static file regardless of auth state).
+  if (isHoRoute && !isHoLogin && !isHoManifest && user) {
     const admin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
