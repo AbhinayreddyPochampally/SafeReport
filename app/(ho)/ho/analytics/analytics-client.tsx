@@ -1,16 +1,6 @@
 "use client"
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
+import dynamic from "next/dynamic"
 import {
   Calendar,
   Clock,
@@ -28,6 +18,33 @@ import {
 import { memo, useEffect, useMemo, useState } from "react"
 import { CATEGORIES } from "@/lib/categories"
 import { MetricInfo } from "@/components/metric-info"
+
+// Recharts is ~70KB gzipped and the only place we use it is these two
+// stacked bar charts. Load them lazily so the KPI tiles, filter card, and
+// store leaderboard can paint without waiting on Recharts to download.
+// ssr:false because Recharts needs window to measure and there's no SEO
+// reason to render these on the server. A small skeleton holds the layout
+// height so the page doesn't reflow when the chart streams in.
+const StatusBars = dynamic(
+  () => import("./analytics-charts").then((m) => m.StatusBars),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  },
+)
+const CategoryBars = dynamic(
+  () => import("./analytics-charts").then((m) => m.CategoryBars),
+  {
+    ssr: false,
+    loading: () => <ChartSkeleton />,
+  },
+)
+
+function ChartSkeleton() {
+  return (
+    <div className="h-[240px] rounded-md bg-gradient-to-b from-slate-50 to-white border border-slate-100 animate-pulse" />
+  )
+}
 
 /**
  * HO analytics client (v2).
@@ -118,34 +135,6 @@ type Payload = {
   leaderboard: LeaderboardRow[]
   sla_hours: number
 }
-
-// ---- Palette tokens (hex; Recharts needs strings) -----------------------
-const STATUS_FILL: Record<keyof Omit<BucketedStatus, "date">, string> = {
-  new: "#475569",
-  in_progress: "#4338CA",
-  awaiting_ho: "#0369A1",
-  returned: "#C2410C",
-  closed: "#0F766E",
-  voided: "#94A3B8",
-}
-
-const STATUS_LABEL: Record<keyof Omit<BucketedStatus, "date">, string> = {
-  new: "New",
-  in_progress: "Acknowledged",
-  awaiting_ho: "Awaiting HO",
-  returned: "Returned",
-  closed: "Closed",
-  voided: "Voided",
-}
-
-const STATUS_ORDER: readonly (keyof Omit<BucketedStatus, "date">)[] = [
-  "closed",
-  "awaiting_ho",
-  "returned",
-  "in_progress",
-  "new",
-  "voided",
-]
 
 type RangePreset = "7d" | "30d" | "90d" | "custom"
 
@@ -1081,113 +1070,6 @@ function ChartCard({
   )
 }
 
-const StatusBars = memo(StatusBarsImpl)
-function StatusBarsImpl({ rows }: { rows: BucketedStatus[] }) {
-  if (rows.length === 0) {
-    return <EmptyState label="No reports in range." />
-  }
-  return (
-    <div className="h-[240px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={rows}
-          margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-          <XAxis
-            dataKey="date"
-            tickFormatter={tickDateFmt}
-            fontSize={11}
-            stroke="#94A3B8"
-          />
-          <YAxis
-            allowDecimals={false}
-            fontSize={11}
-            stroke="#94A3B8"
-            width={28}
-          />
-          <Tooltip
-            labelFormatter={(v) => prettyDate(v as string)}
-            contentStyle={{
-              fontSize: 12,
-              borderRadius: 6,
-              border: "1px solid #E2E8F0",
-            }}
-          />
-          <Legend
-            wrapperStyle={{ fontSize: 11 }}
-            formatter={(value) =>
-              STATUS_LABEL[value as keyof typeof STATUS_LABEL] ?? value
-            }
-          />
-          {STATUS_ORDER.map((s) => (
-            <Bar key={s} dataKey={s} stackId="a" fill={STATUS_FILL[s]} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-const CategoryBars = memo(CategoryBarsImpl)
-function CategoryBarsImpl({ rows }: { rows: BucketedCategory[] }) {
-  if (rows.length === 0) {
-    return <EmptyState label="No reports in range." />
-  }
-  const stackOrder = [
-    { key: "near_miss", fill: "#475569", label: "Near miss" },
-    { key: "unsafe_act", fill: "#64748B", label: "Unsafe act" },
-    { key: "unsafe_condition", fill: "#94A3B8", label: "Unsafe condition" },
-    { key: "first_aid_case", fill: "#FEF3C7", label: "First aid" },
-    { key: "medical_treatment_case", fill: "#F59E0B", label: "Medical" },
-    { key: "restricted_work_case", fill: "#D97706", label: "Restricted work" },
-    { key: "lost_time_injury", fill: "#B45309", label: "Lost time" },
-    { key: "fatality", fill: "#7C2D12", label: "Fatality" },
-  ]
-  return (
-    <div className="h-[240px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={rows}
-          margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-          <XAxis
-            dataKey="date"
-            tickFormatter={tickDateFmt}
-            fontSize={11}
-            stroke="#94A3B8"
-          />
-          <YAxis
-            allowDecimals={false}
-            fontSize={11}
-            stroke="#94A3B8"
-            width={28}
-          />
-          <Tooltip
-            labelFormatter={(v) => prettyDate(v as string)}
-            contentStyle={{
-              fontSize: 12,
-              borderRadius: 6,
-              border: "1px solid #E2E8F0",
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          {stackOrder.map((s) => (
-            <Bar
-              key={s.key}
-              dataKey={s.key}
-              name={s.label}
-              stackId="b"
-              fill={s.fill}
-            />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
 const StoreLeaderboard = memo(StoreLeaderboardImpl)
 function StoreLeaderboardImpl({ rows }: { rows: LeaderboardRow[] }) {
   if (rows.length === 0) {
@@ -1304,9 +1186,6 @@ function EmptyState({ label }: { label: string }) {
     </div>
   )
 }
-
-// Recharts' Cell import is required for tree-shake. Reference it once.
-void Cell
 
 /* ----------------------------- Formatters -------------------------------- */
 

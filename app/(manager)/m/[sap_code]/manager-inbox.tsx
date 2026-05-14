@@ -12,8 +12,9 @@ import {
   X,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CATEGORIES, type CategoryDef } from "@/lib/categories"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CATEGORY_BY_KEY, type CategoryDef } from "@/lib/categories"
+import type { ReportCategory } from "@/lib/reporter-state"
 import { ManagerPwaPrompt } from "@/components/manager-pwa-prompt"
 import {
   ensurePushSubscription,
@@ -407,14 +408,23 @@ export function ManagerInbox({ store }: { store: Store }) {
     return () => window.removeEventListener("keydown", onKey)
   }, [isDesktop, reports, selectedId, store.sap_code])
 
-  function handleRowClick(reportId: string, ev: React.MouseEvent) {
-    // Honour middle-click, modifier-click, etc. — the anchor's default
-    // navigation handles those cases naturally.
-    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) return
-    if (!isDesktop) return // mobile: let the link navigate
-    ev.preventDefault()
-    setSelectedId(reportId)
-  }
+  // Stable across renders so the memoized <ReportCard> below doesn't
+  // invalidate its memo cache on every poll tick. setSelectedId is already
+  // stable, and we read `isDesktop` through a ref-style closure that
+  // captures the latest value via useCallback's dep array — when the
+  // viewport flips, we get a new callback identity (correct: each row
+  // needs to re-render to drop its prevent-default).
+  const handleRowClick = useCallback(
+    (reportId: string, ev: React.MouseEvent) => {
+      // Honour middle-click, modifier-click, etc. — the anchor's default
+      // navigation handles those cases naturally.
+      if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) return
+      if (!isDesktop) return // mobile: let the link navigate
+      ev.preventDefault()
+      setSelectedId(reportId)
+    },
+    [isDesktop],
+  )
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -537,7 +547,7 @@ export function ManagerInbox({ store }: { store: Store }) {
                       r={r}
                       sap_code={store.sap_code}
                       selected={selectedId === r.id && isDesktop}
-                      onClick={(ev) => handleRowClick(r.id, ev)}
+                      onSelect={handleRowClick}
                     />
                   </li>
                 ))}
@@ -617,18 +627,26 @@ export function ManagerInbox({ store }: { store: Store }) {
 
 // ---- Row card --------------------------------------------------------------
 
-function ReportCard({
+// Memoized so the inbox poll (every 30s) doesn't tear down every card just
+// because parent state changed. The card props are primitives / a stable
+// callback, so memo cache hits cleanly between renders that didn't actually
+// affect this row.
+const ReportCard = memo(ReportCardImpl)
+function ReportCardImpl({
   r,
   sap_code,
   selected,
-  onClick,
+  onSelect,
 }: {
   r: InboxReport
   sap_code: string
   selected: boolean
-  onClick: (ev: React.MouseEvent) => void
+  // (id, event) — stable callback from the parent. Taking the id as an
+  // argument is what lets React.memo skip re-renders for rows whose data
+  // hasn't changed (otherwise the per-row click closure would bust memo).
+  onSelect: (id: string, ev: React.MouseEvent) => void
 }) {
-  const cat = CATEGORIES.find((c) => c.key === r.category)
+  const cat = CATEGORY_BY_KEY.get(r.category as ReportCategory)
   const tone: "slate" | "amber" = r.type === "incident" ? "amber" : "slate"
 
   return (
@@ -636,7 +654,7 @@ function ReportCard({
       // Real href so middle-click / open-in-new-tab works. The handler
       // intercepts plain left-clicks on desktop and uses inline state.
       href={`/m/${sap_code}/r/${r.id}`}
-      onClick={onClick}
+      onClick={(ev) => onSelect(r.id, ev)}
       aria-current={selected ? "true" : undefined}
       className={`flex items-stretch gap-3 rounded-2xl border bg-white p-3 transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 ${
         selected

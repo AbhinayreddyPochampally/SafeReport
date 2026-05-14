@@ -19,8 +19,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
-import { CATEGORIES } from "@/lib/categories"
+import { memo, useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { CATEGORIES, CATEGORY_BY_KEY } from "@/lib/categories"
 import type { ReportCategory } from "@/lib/reporter-state"
 
 /**
@@ -184,7 +184,12 @@ export function AllReportsClient({
     ? (detailsById[selectedId] ?? null)
     : null
 
-  function selectRow(id: string | null) {
+  // Stable selectRow — wrapped in useCallback so the row components below
+  // can be memoized without their `onSelect` prop invalidating cache on
+  // every parent render. setSelectedId is already stable from React, and
+  // we only touch window.history which doesn't depend on any closed-over
+  // state.
+  const selectRow = useCallback((id: string | null) => {
     setSelectedId(id)
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search)
@@ -197,7 +202,7 @@ export function AllReportsClient({
         `/ho/all-reports${qs ? `?${qs}` : ""}`,
       )
     }
-  }
+  }, [])
 
   function openFullView(id: string) {
     if (typeof window === "undefined") return
@@ -692,7 +697,7 @@ export function AllReportsClient({
                     <CompactRow
                       row={r}
                       active={r.id === selectedId}
-                      onSelect={() => selectRow(r.id)}
+                      onSelect={selectRow}
                     />
                   </li>
                 ))}
@@ -760,7 +765,7 @@ export function AllReportsClient({
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <ReportRow key={r.id} row={r} onSelect={() => selectRow(r.id)} />
+                    <ReportRow key={r.id} row={r} onSelect={selectRow} />
                   ))
                 )}
               </tbody>
@@ -848,14 +853,17 @@ export function AllReportsClient({
 
 /* ------------------------------- Rows ------------------------------- */
 
-function ReportRow({
+const ReportRow = memo(ReportRowImpl)
+function ReportRowImpl({
   row,
   onSelect,
 }: {
   row: AllReportsRow
-  onSelect: () => void
+  // Stable callback from the parent. Taking the id parameter (instead of
+  // a per-row closure) is what makes React.memo actually save renders here.
+  onSelect: (id: string) => void
 }) {
-  const cat = CATEGORIES.find((c) => c.key === row.category)
+  const cat = CATEGORY_BY_KEY.get(row.category)
   const isIncident = cat?.kind === "incident"
   const catTone = isIncident
     ? "bg-amber-50 text-amber-800 border-amber-200"
@@ -863,7 +871,7 @@ function ReportRow({
 
   return (
     <tr
-      onClick={onSelect}
+      onClick={() => onSelect(row.id)}
       className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 transition-colors cursor-pointer"
     >
       <td className="py-3 pl-5">
@@ -871,7 +879,7 @@ function ReportRow({
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            onSelect()
+            onSelect(row.id)
           }}
           className="font-mono text-[12px] font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
         >
@@ -920,24 +928,26 @@ function ReportRow({
   )
 }
 
-/** Compact list row for the split-pane view. */
-function CompactRow({
+/** Compact list row for the split-pane view. Memoized — see ReportRow above. */
+const CompactRow = memo(CompactRowImpl)
+function CompactRowImpl({
   row,
   active,
   onSelect,
 }: {
   row: AllReportsRow
   active: boolean
-  onSelect: () => void
+  // Stable callback that receives the row id.
+  onSelect: (id: string) => void
 }) {
-  const cat = CATEGORIES.find((c) => c.key === row.category)
+  const cat = CATEGORY_BY_KEY.get(row.category)
   const isIncident = cat?.kind === "incident"
   return (
     <button
       type="button"
       role="option"
       aria-selected={active}
-      onClick={onSelect}
+      onClick={() => onSelect(row.id)}
       className={`w-full text-left px-3 py-2.5 border-b border-slate-100 transition-colors block ${
         active ? "bg-indigo-50/70" : "hover:bg-slate-50"
       }`}

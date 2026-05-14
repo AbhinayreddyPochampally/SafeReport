@@ -667,6 +667,10 @@ function TodayPanel({ events }: { events: TodayEvent[] }) {
             <li key={e.id}>
               <Link
                 href={`/ho/reports/${e.id}`}
+                // Up to 5 events render here; auto-prefetch fires a server
+                // RSC call per row that HO almost certainly won't open. Skip
+                // it — clicking still navigates as fast as expected.
+                prefetch={false}
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors"
               >
                 <span

@@ -174,6 +174,11 @@ function QueueRowItem({
     <li>
       <Link
         href={`/ho/reports/${row.id}?from=overview`}
+        // prefetch=false because the Overview shows up to ~20 rows and
+        // each prefetch would warm a separate /ho/reports/[id] RSC payload
+        // on the server. HO only clicks a fraction of these; the wasted
+        // server work was a real chunk of the perceived slow-Overview-load.
+        prefetch={false}
         className="group grid grid-cols-[6px_44px_minmax(0,1fr)_auto] items-center gap-4 px-6 py-4 hover:bg-slate-50/80 transition-colors"
       >
         {/* Tone marker (vertical bar) */}

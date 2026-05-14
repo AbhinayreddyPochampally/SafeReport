@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Suspense } from "react"
+import { unstable_cache } from "next/cache"
 import { Shield } from "lucide-react"
 import { getHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -129,7 +130,33 @@ function SidebarCountsFallback() {
   )
 }
 
+/**
+ * Cache key for the sidebar-count fetch. The counts are pilot-wide
+ * (not per-user) and decorative — refreshing every 30 seconds is plenty.
+ *
+ * Why this matters perf-wise: previously every navigation between Overview /
+ * Reports / Analytics / Stores fired five COUNT(*) queries against Supabase
+ * in parallel. Each query is small, but Railway → Supabase (a different
+ * region) round-trips end up dominating perceived nav latency. With a 30s
+ * server-side cache, back-to-back navs inside the same minute hit memory
+ * instead of the DB, and the user feels the page "snap" rather than reload.
+ *
+ * Bypass: nothing — the data is non-sensitive and a 30s stale window is
+ * within tolerance. If a count ever needs to update instantly (e.g. after
+ * an HO approval), the page that triggered the change can call
+ * revalidateTag("ho-sidebar-counts") to bust the cache.
+ */
+const getCachedSidebarCounts = unstable_cache(
+  fetchSidebarCountsImpl,
+  ["ho-sidebar-counts"],
+  { revalidate: 30, tags: ["ho-sidebar-counts"] },
+)
+
 async function fetchSidebarCounts(): Promise<SidebarCounts> {
+  return getCachedSidebarCounts()
+}
+
+async function fetchSidebarCountsImpl(): Promise<SidebarCounts> {
   try {
     const admin = createSupabaseAdminClient()
     // Action queue = awaiting_ho (regardless of age) + stale-new (status=new,

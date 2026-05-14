@@ -122,6 +122,17 @@ export const CATEGORIES: readonly CategoryDef[] = [
   },
 ] as const
 
+/**
+ * O(1) lookup by key. Built once at module load. Components that render
+ * many rows (HO Reports table, Manager inbox, queue lists, etc.) used to
+ * call `CATEGORIES.find(c => c.key === row.category)` per row per render
+ * — fine for one card but O(N × rows × renders) once you've got 50 rows
+ * in a sortable table and a filter chip that toggles frequently. Use this
+ * map instead for hot render paths.
+ */
+export const CATEGORY_BY_KEY: ReadonlyMap<ReportCategory, CategoryDef> =
+  new Map(CATEGORIES.map((c) => [c.key, c]))
+
 /** Localised label for a category. Falls back to English copy. */
 export function labelFor(cat: CategoryDef, locale: Locale): string {
   return t(locale, cat.labelKey)
