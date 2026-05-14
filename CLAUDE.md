@@ -5,13 +5,20 @@ Aditya Birla Fashion & Retail (ABFRL). The pilot covers 20 retail stores and goe
 live tomorrow. This file is your single source of truth — read it end-to-end before
 touching the codebase.
 
-Two companion references:
+Companion references:
 - `docs/DESIGN.md` — product, screens, flows, data model
 - `docs/VISUAL_LANGUAGE.md` — palette, typography, components
+- `docs/STATE.md` · `docs/CHANGELOG.md` · `docs/STALE.md` — live ledger, change log, pruning queue
+- `docs/Agents.md` — master agent catalogue (coding, doc maintenance, operations)
+- `docs/hooks/` — Claude Code hooks for pre-commit guard, doc-drift nags, session status
+- `agents.md` (repo root) — coding agent roster and orchestration patterns
 
 The long-form product-design PDF lives at
 `/mnt/user-data/outputs/SafeReport_Design_Document_v6.pdf` — use it when you need
 context on why a decision was made.
+
+When you ship a change that touches this brief, add a `CHANGELOG.md` entry
+and bump the `STATE.md` row's Verified date.
 
 ---
 
@@ -130,25 +137,37 @@ needs `role: "service_role"`.
 
 ---
 
-## Manager auth — phone + password
+## Manager auth — email + phone (two-factor identity)
 
-The pilot used to ship a 4-digit PIN keypad. As of migration 002 it's a phone +
-password flow:
+The pilot has been through two auth migrations. Current shape (migration 004):
 
-- The store row carries `manager_phone` (display + identity) and
-  `manager_password_hash` (bcrypt, cost 10). The legacy `manager_pin_hash` column is
-  dropped at the end of the migration; if you re-add it as a hot-patch, drop it
-  again once the new code is verified live (`ALTER TABLE stores DROP COLUMN IF
-  EXISTS manager_pin_hash;`).
-- `POST /api/auth/manager` takes `{ sap_code, phone, password }`. Phone is
-  normalised to digits-only and we compare on the trailing 10 digits, so `+91 98200
-  11234`, `9820011234`, and `(98200) 11234` all match. Password is 6–128 characters.
-- A legacy `{ pin }` body is rejected with `410 Gone` so old clients surface a
-  clear "update the app" message rather than a generic 400.
+- The store row carries `manager_email` (case-insensitive identity, added in
+  mig 004) and `manager_phone` (digits-only, trailing 10 digits canonical).
+  Both are required for a store to accept manager logins. The `manager_password_hash`
+  column from mig 002 is now **deprecated** — kept around for one cutover window
+  in case auth needs to roll back, then dropped by a later migration. New API code
+  does not read it. The earlier `manager_pin_hash` column is gone.
+- `POST /api/auth/manager` takes `{ sap_code, email, phone }`. **There is no
+  password.** Both submitted values must match the store row exactly — email
+  case-insensitive (trimmed + lowered on both sides), phone compared on the
+  trailing 10 digits so `+91 98200 11234`, `9820011234`, and `(98200) 11234`
+  all match. This is a pilot-grade identity check, not cryptographic auth:
+  anyone who knows a manager's email AND phone can sign in. The trade-off was
+  approved for launch — 20 retail stores, low-sensitivity workflow, dramatically
+  lower friction for non-tech-savvy floor managers.
+- Legacy `{ pin }` and `{ password }` bodies are both rejected with `410 Gone`
+  and a tailored "refresh the page" message, so old clients fail loudly rather
+  than confusingly.
 - Three-strikes lockout per SAP code (15-minute TTL) lives in process memory.
-  Adequate for a single-instance pilot; if you ever scale horizontally, move it.
-- Passwords are set by HO from the Stores page (Add store, or Edit → password
-  field at the bottom of the modal). There's no self-service reset in the pilot.
+  Adequate for a single-instance pilot; move it if you ever scale horizontally.
+- Both identifiers are set by HO from the Stores page — Add store (required at
+  create time) or Edit (modal). There's no self-service flow in the pilot. To
+  "rotate credentials" for a store, change the email or phone in HO; the new
+  value takes effect on the next login attempt.
+
+The reporter screens that send the auth body (the `/m/[sap_code]` login form)
+were updated alongside mig 004 — if you find a screen still asking for a
+password, that's a stray render path, fix it rather than re-adding the field.
 
 HO auth is unchanged — Supabase Auth email + password, gated by middleware on
 `/ho/*`.
@@ -300,6 +319,29 @@ doesn't break the prompt's own state machine.
 **Localised.** All copy (eyebrow, title, step titles + subtitles, CTAs,
 dismiss aria-label) comes from `lib/reporter-i18n.ts` via the
 `useReporterLocale()` hook — see §"Reporter localisation".
+
+**Manifest (per-store).** The reporter landing advertises a per-store
+manifest at `/r/[sap_code]/manifest.webmanifest`. The reporter `page.tsx`
+sets it via `generateMetadata` so the rendered HTML carries a
+`<link rel="manifest" href="/r/PNT-MUM-047/manifest.webmanifest">` for
+each store. The manifest route handler
+(`app/(reporter)/r/[sap_code]/manifest.webmanifest/route.ts`) validates
+the SAP code with a regex + a `v_store_public` lookup, then returns JSON
+with `start_url` and `id` both set to `/r/[sap_code]`. Setting `id`
+distinct per store is what lets two stores live as two installable apps
+on the same device (a manager covering two locations gets two
+home-screen icons that each reopen their own store). The root
+`app/manifest.ts` is the fallback, kept for QA / dev traffic that lands
+on `/` directly — its `start_url` is `/`. Don't unify them; the
+per-store manifest is the whole reason a reporter's icon doesn't dump
+them on the dev landing page. Icons live at `public/icons/icon-{192,512}.png`
+plus `icon-maskable-512.png` (60% safe zone for Android adaptive
+icons) and `public/apple-touch-icon.png` (180×180; iOS reads this from
+`<link rel="apple-touch-icon">`, not the manifest, so the same
+`generateMetadata` block sets it). Regenerate with
+`python3 scripts/gen_icons.py` — DejaVu Sans Bold for the SR monogram,
+since IBM Plex isn't on the build env and the launcher tile doesn't
+inherit the runtime font.
 
 ---
 
@@ -453,12 +495,18 @@ palette-compliant.
 
 ## Schema additions you should know about
 
-Beyond `supabase/schema.sql`, two migrations have run:
+Beyond `supabase/schema.sql`, three migrations have run:
 
 - **`002_manager_password.sql`** — adds `stores.manager_password_hash` and
-  `stores.qr_downloaded_at`, drops `stores.manager_pin_hash`. Idempotent.
+  `stores.qr_downloaded_at`, drops `stores.manager_pin_hash`. Idempotent. The
+  password column is now deprecated by mig 004 but retained for one cutover
+  window.
 - **`003_transcript_source.sql`** — adds `reports.transcript_source` and
   `reports.transcript_source_lang`. Idempotent.
+- **`004_manager_email.sql`** — adds `stores.manager_email` (case-insensitive,
+  with a permissive format CHECK constraint and a `lower(manager_email)` index)
+  and flips manager auth from phone+password to email+phone. The password hash
+  column from 002 is left in place for now. Idempotent. Run AFTER 002 and 003.
 
 Demo data wipe: `supabase/wipe_demo_data.sql` clears reports, resolutions, HO
 actions, push subscriptions, and notification logs but preserves stores and HO
@@ -531,9 +579,10 @@ This section is tactical. Pilot launches tomorrow. Know where every dial is.
 
 HO logs in → Stores tab in the sidebar → **Add store** (top right). Fill SAP code
 (uppercase letters/digits/dashes — used in the QR URL), name, brand, city, state,
-manager name, manager phone, and an initial password (6–128 chars). The password
-is required at creation — without one the store can't accept manager logins. The
-modal blocks submission with a clear error if you try.
+manager name, manager email, and manager phone. Both email and phone are
+required at creation — together they're the manager's login credentials
+(mig 004), so without them the store can't accept manager logins. The modal
+blocks submission with a clear error if either is missing or malformed.
 
 ## Distribute QR posters
 
@@ -546,15 +595,18 @@ page clears the "New" badge on those rows.
 For a one-off reprint, use the per-row **QR** button — it streams a single A4
 PDF for that store.
 
-## Reset a manager password
+## Rotate manager credentials
 
-HO → Stores → click **Edit** on the row → scroll to the password panel at the
-bottom of the modal. Enter the new password (6–128 chars). The old password
-stops working immediately on save. Share the new password by phone, not text.
+There's no password to reset under mig 004. To "rotate" the credentials for
+a store — manager changes, phone gets reassigned, email typo — HO → Stores →
+**Edit** on the row → update `manager_email` and/or `manager_phone` → save.
+The new pair takes effect on the next login attempt; any open `sr_mgr` cookie
+on the old device is invalidated when the store's `manager_session_epoch` is
+bumped (the auth route embeds the current epoch in the JWT).
 
-If a store row shows the orange "No password set" warning under the manager
-column, the manager will fail every login attempt until you set one — fix it
-the same way.
+If a store row shows the orange "No email/phone set" warning under the manager
+column, the manager will fail every login attempt until both fields are
+populated — fix it the same way.
 
 ## Investigate a failed transcription
 
@@ -592,16 +644,23 @@ needs `OPENAI_API_KEY`.
 
 ## Sandbox cleanup
 
-Once new auth is verified live in production and no client is sending PIN
-payloads:
+Once new auth (mig 004 — email + phone) is verified live in production and no
+client is sending password or PIN payloads:
 
 ```sql
+-- Legacy PIN column — already dropped by mig 002, but was hot-patched back
+-- during the earlier cutover. Drop again if it's somehow lingering.
 ALTER TABLE stores DROP COLUMN IF EXISTS manager_pin_hash;
+
+-- Password hash column — kept around by mig 004 as a rollback safety net
+-- after the email+phone cutover. Drop once you're certain the email+phone
+-- flow is staying. Reports / resolutions / HO actions are unaffected.
+ALTER TABLE stores DROP COLUMN IF EXISTS manager_password_hash;
 ```
 
-The migration already does this on a clean run, but the column was hot-patched
-back in temporarily during the cutover — drop it again once you're sure
-no rollback is on the table.
+The mig 004 commentary in `supabase/migrations/004_manager_email.sql` calls
+out the password-hash retention explicitly; a follow-up migration should do
+the actual drop rather than running the SQL ad-hoc.
 
 ## Incident response checklist
 
@@ -653,8 +712,10 @@ Storage and inserting a `reports` row with a fresh `SR-NNNNNN` id.
 ## Phase C — Manager flow (~5h)
 
 PIN keypad → inbox with 30s visibility-gated polling → report detail → resolution
-form. Note: PIN auth has since been replaced by phone+password (migration 002);
-the keypad component is gone.
+form. Note: PIN auth was replaced by phone+password (migration 002), which was
+in turn replaced by email+phone two-factor identity (migration 004). The keypad
+component is gone; the password field is also gone. See §Manager auth for the
+current shape.
 
 ## Phase D — HO dashboard (~5h)
 
@@ -681,4 +742,4 @@ the user's "See Something? Say Something" template (single via
 `/api/qr/[sap_code]`, bulk via `/api/qr/bulk`). Smoke tests automated as
 `npm run smoke:api` and `npm run smoke:translate`.
 
-— Team Alpha, IIM Mumbai · 17 April 2026 (original) · 12 May 2026 (this revision)
+— Team Alpha, IIM Mumbai · 17 April 2026 (original) · 12 May 2026 (phone+password rev) · 14 May 2026 (email+phone rev, mig 004)

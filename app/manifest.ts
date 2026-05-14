@@ -1,9 +1,15 @@
 import type { MetadataRoute } from "next"
 
-// Web app manifest. Next 14 picks this up at /manifest.webmanifest. We don't
-// ship custom icons yet (favicon only) — the install banner uses the
-// default Next.js favicon, which is good enough for the pilot. Add proper
-// 192/512 PNGs to /public/icons/ later and reference them in `icons` below.
+// Root web app manifest (served at /manifest.webmanifest).
+//
+// This is the FALLBACK manifest. The reporter landing at /r/[sap_code]
+// overrides it via generateMetadata to point at a per-store manifest
+// (see app/(reporter)/r/[sap_code]/manifest.webmanifest/route.ts).
+//
+// In practice this root manifest only kicks in if someone hits the root
+// page directly -- internal testing, QA, deep links to /m or /ho. The
+// pilot's real entry point is the QR poster, which always lands on
+// /r/[sap_code] where the per-store manifest takes over.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "SafeReport",
@@ -17,9 +23,22 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#4338CA",
     icons: [
       {
-        src: "/favicon.ico",
-        sizes: "any",
-        type: "image/x-icon",
+        src: "/icons/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
   }

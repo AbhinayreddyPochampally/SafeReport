@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { KeyRound, ShieldCheck, Store } from "lucide-react"
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -14,6 +15,28 @@ type StoreRow = {
   city: string
   state: string
   status: "active" | "temporarily_closed" | "permanently_closed"
+}
+
+// Per-store metadata.
+//
+// The manifest link is the load-bearing bit here. It points Chromium at
+// /r/[sap_code]/manifest.webmanifest, whose start_url reopens this exact
+// store when the reporter taps the installed home-screen icon. Without
+// this override the install would inherit the root /manifest.webmanifest
+// (start_url "/") and land users on the developer-only root page.
+//
+// icons.apple is split out because iOS Safari doesn't use the manifest
+// for the home-screen icon -- it reads the apple-touch-icon link tag
+// separately.
+type MetadataProps = { params: { sap_code: string } }
+
+export function generateMetadata(props: MetadataProps): Metadata {
+  return {
+    manifest: `/r/${props.params.sap_code}/manifest.webmanifest`,
+    icons: {
+      apple: "/apple-touch-icon.png",
+    },
+  }
 }
 
 export default async function ReporterLandingPage({
@@ -40,7 +63,7 @@ export default async function ReporterLandingPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-10">
-      {/* Brand bar — SafeReport logo on the left, discreet manager-login button on the right */}
+      {/* Brand bar - SafeReport logo on the left, discreet manager-login button on the right */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-indigo-900">
           <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
@@ -58,7 +81,7 @@ export default async function ReporterLandingPage({
         </Link>
       </header>
 
-      {/* Store card — store identity stays in source language; safe to leave
+      {/* Store card - store identity stays in source language; safe to leave
           unlocalised because the brand name + city + SAP code are universal. */}
       <section className="mt-8 rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex items-center gap-2 text-slate-600">
@@ -76,12 +99,12 @@ export default async function ReporterLandingPage({
         </p>
       </section>
 
-      {/* PWA setup nag — persistent until both notifications and home-screen
+      {/* PWA setup nag - persistent until both notifications and home-screen
           install are done. Re-shows on every fresh visit if either is still
           missing, even though the reporter may have been here before. */}
       <PwaInstallPrompt />
 
-      {/* Reporter form — owns the localised intro + name+phone form so the
+      {/* Reporter form - owns the localised intro + name+phone form so the
           language toggle inside it can re-render everything below it. */}
       <ReporterForm sap_code={store.sap_code} />
     </main>
