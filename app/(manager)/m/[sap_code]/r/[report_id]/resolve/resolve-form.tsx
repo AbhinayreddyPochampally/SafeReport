@@ -193,7 +193,7 @@ export function ResolveForm({
     (report.audio_url ? "Voice note attached — transcript pending." : "")
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 pb-10 pt-5">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-10 pt-5 lg:max-w-5xl lg:px-8">
       <Link
         href={`/m/${store.sap_code}/r/${report.id}`}
         className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -206,7 +206,7 @@ export function ResolveForm({
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
           {store.brand} · {store.city} · {report.id}
         </p>
-        <h1 className="mt-1 font-display text-[22px] font-bold leading-7 text-slate-900">
+        <h1 className="mt-1 font-display text-[22px] font-bold leading-7 text-slate-900 lg:text-[26px] lg:leading-8">
           {isRework ? "Re-file resolution" : "File resolution"}
         </h1>
         <p className="mt-1 text-[13px] leading-5 text-slate-600">
@@ -215,57 +215,105 @@ export function ResolveForm({
         </p>
       </div>
 
-      {/* What the reporter said — kept compact so the form remains in focus */}
-      <section
-        className="mt-4 rounded-2xl border border-slate-200 bg-white p-3"
-        aria-label="Original report summary"
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-              tone === "slate"
-                ? "border-slate-200 bg-slate-50 text-slate-700"
-                : "border-amber-200 bg-amber-50 text-amber-800"
-            }`}
+      {/*
+        * Body grid:
+        *   Mobile — single column. Source order is context first, form
+        *   second, so a manager scrolling top-to-bottom sees what the
+        *   reporter said before writing their fix.
+        *
+        *   Desktop (lg+) — two-column grid with the form on the left
+        *   (1fr) and context cards docked on the right (320px). The
+        *   aside sticks at top:24px so it stays in view while the
+        *   manager writes the note. `order` utilities swap visual
+        *   position only on lg+ — DOM order stays the same.
+        */}
+      <div className="mt-5 flex flex-col gap-5 lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-6">
+        {/* CONTEXT (mobile: top; desktop: right) ---------------------- */}
+        <aside className="space-y-3 lg:order-2 lg:sticky lg:top-6 lg:self-start">
+          {/* What the reporter said */}
+          <section
+            className="rounded-2xl border border-slate-200 bg-white p-3"
+            aria-label="Original report summary"
           >
-            {cat?.label ?? report.category}
-            {cat?.acronym ? ` · ${cat.acronym}` : ""}
-          </span>
-        </div>
-        {snippet && (
-          <p className="mt-2 line-clamp-3 text-[13px] leading-5 text-slate-600">
-            “{snippet}”
-          </p>
-        )}
-      </section>
-
-      {/* HO pushback — only for returned reports */}
-      {isRework && latestPrior && (
-        <section
-          className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-3"
-          aria-label="Head Office feedback"
-        >
-          <div className="flex items-center gap-2">
-            <RefreshCw
-              className="h-3.5 w-3.5 text-orange-700"
-              strokeWidth={1.8}
-              aria-hidden
-            />
-            <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
-              Your last attempt was returned
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              The original report
             </p>
-          </div>
-          <p className="mt-2 whitespace-pre-wrap text-[13px] leading-5 text-orange-900">
-            {latestPrior.note}
-          </p>
-          <p className="mt-1.5 text-[11px] text-orange-700/80">
-            Attempt {latestPrior.attempt_number} · filed{" "}
-            {formatRelative(latestPrior.resolved_at)}
-          </p>
-        </section>
-      )}
+            <div className="mt-2 flex items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  tone === "slate"
+                    ? "border-slate-200 bg-slate-50 text-slate-700"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                {cat?.label ?? report.category}
+                {cat?.acronym ? ` · ${cat.acronym}` : ""}
+              </span>
+            </div>
+            {snippet && (
+              <p className="mt-2 line-clamp-4 text-[13px] leading-5 text-slate-600">
+                “{snippet}”
+              </p>
+            )}
+          </section>
 
-      <form onSubmit={submit} className="mt-5 flex flex-col gap-5">
+          {/* HO pushback — only for returned reports */}
+          {isRework && latestPrior && (
+            <section
+              className="rounded-2xl border border-orange-200 bg-orange-50 p-3"
+              aria-label="Head Office feedback"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw
+                  className="h-3.5 w-3.5 text-orange-700"
+                  strokeWidth={1.8}
+                  aria-hidden
+                />
+                <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
+                  Your last attempt was returned
+                </p>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-5 text-orange-900">
+                {latestPrior.note}
+              </p>
+              <p className="mt-1.5 text-[11px] text-orange-700/80">
+                Attempt {latestPrior.attempt_number} · filed{" "}
+                {formatRelative(latestPrior.resolved_at)}
+              </p>
+            </section>
+          )}
+
+          {/* Prior attempts — collapsed so it doesn't dominate the rail */}
+          {priorAttempts.length > 0 && (
+            <details className="rounded-2xl border border-slate-200 bg-white">
+              <summary className="cursor-pointer list-none px-3 py-2.5 text-[12px] font-medium text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40">
+                <span className="inline-flex items-center gap-2">
+                  <ImageIcon
+                    className="h-3.5 w-3.5"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                  Your {priorAttempts.length} prior attempt
+                  {priorAttempts.length === 1 ? "" : "s"}
+                </span>
+              </summary>
+              <ul className="divide-y divide-slate-100 px-3 pb-3 text-[12px] leading-5 text-slate-600">
+                {priorAttempts.map((p) => (
+                  <li key={p.id} className="py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Attempt {p.attempt_number} ·{" "}
+                      {formatRelative(p.resolved_at)}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">{p.note}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </aside>
+
+        {/* FORM (mobile: below context; desktop: left column) ----------- */}
+        <form onSubmit={submit} className="flex flex-col gap-5 lg:order-1">
         {/* Proof photo */}
         <div>
           <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
@@ -388,29 +436,8 @@ export function ResolveForm({
           </div>
         </div>
 
-        {/* Prior attempts list (short, mostly for reference) */}
-        {priorAttempts.length > 0 && (
-          <details className="rounded-2xl border border-slate-200 bg-white">
-            <summary className="cursor-pointer list-none px-4 py-3 text-[12px] font-medium text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40">
-              <span className="inline-flex items-center gap-2">
-                <ImageIcon className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-                Your {priorAttempts.length} prior attempt
-                {priorAttempts.length === 1 ? "" : "s"}
-              </span>
-            </summary>
-            <ul className="divide-y divide-slate-100 px-4 pb-3 text-[12px] leading-5 text-slate-600">
-              {priorAttempts.map((p) => (
-                <li key={p.id} className="py-2.5">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    Attempt {p.attempt_number} ·{" "}
-                    {formatRelative(p.resolved_at)}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap">{p.note}</p>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        {/* Prior attempts moved to the context aside above — keeps the
+          * form column focused on inputs only. */}
 
         {error && (
           <p
@@ -433,11 +460,12 @@ export function ResolveForm({
           )}
           {busy ? "Submitting…" : "Send to Head Office"}
         </button>
-        <p className="text-center text-[11px] text-slate-400">
-          Sends the report to HO for approval. You&apos;ll hear back when
-          they approve, return, or void it.
-        </p>
-      </form>
+          <p className="text-center text-[11px] text-slate-400">
+            Sends the report to HO for approval. You&apos;ll hear back when
+            they approve, return, or void it.
+          </p>
+        </form>
+      </div>
     </main>
   )
 }

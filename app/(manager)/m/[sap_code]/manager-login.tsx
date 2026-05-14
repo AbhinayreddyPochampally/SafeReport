@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, LogIn, Mail, Phone, Shield } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { ManagerPwaPrompt } from "@/components/manager-pwa-prompt"
 
 /**
  * Email + phone login screen for a specific store.
@@ -101,7 +102,7 @@ export function ManagerLogin({ store }: { store: Store }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-8">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-8 md:max-w-md md:py-12">
       <Link
         href={`/r/${store.sap_code}`}
         className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -110,7 +111,11 @@ export function ManagerLogin({ store }: { store: Store }) {
         Back to store
       </Link>
 
-      <div className="mt-10 flex flex-col items-center">
+      <div className="mt-8">
+        <ManagerPwaPrompt variant="login" />
+      </div>
+
+      <div className="mt-8 flex flex-col items-center">
         <div
           className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-700"
           aria-hidden

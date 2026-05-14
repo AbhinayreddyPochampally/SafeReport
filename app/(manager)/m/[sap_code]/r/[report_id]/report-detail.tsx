@@ -18,6 +18,19 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { CATEGORIES } from "@/lib/categories"
 
 /**
+ * `mode` controls the chrome around the body of this view:
+ *
+ *   "page"     — standalone /m/[sap]/r/[id]: back link, fixed bottom
+ *                action bar, full-page header. Used on mobile and as a
+ *                deep-link target. Goes wider on desktop (lg breakpoint)
+ *                so the screen isn't wasted.
+ *   "embedded" — inside the two-pane inbox on desktop: no back link,
+ *                inline action bar (not fixed), scroll inside the pane.
+ *                The parent owns the surrounding chrome.
+ */
+export type ReportDetailMode = "page" | "embedded"
+
+/**
  * Manager-side detail view for one report.
  *
  * What's on screen:
@@ -78,16 +91,33 @@ export function ReportDetail({
   store,
   report: initialReport,
   resolutions,
+  mode = "page",
+  onStatusChange,
 }: {
   store: Store
   report: Report
   resolutions: Resolution[]
+  /** "page" = full-page chrome (default). "embedded" = lives inside the
+   * inbox right-pane on desktop; we skip the back link, render the action
+   * bar inline, and tighten the layout. */
+  mode?: ReportDetailMode
+  /** Called after a status transition (acknowledge / resolve) so an
+   * embedding parent can re-fetch its list. Optional. */
+  onStatusChange?: (next: Report["status"]) => void
 }) {
   const router = useRouter()
   const [report, setReport] = useState<Report>(initialReport)
   const [ackBusy, setAckBusy] = useState(false)
   const [ackError, setAckError] = useState<string | null>(null)
   const [photoOpen, setPhotoOpen] = useState(false)
+
+  // initialReport can change identity when the parent (the inbox right
+  // pane) swaps the selected report — keep local state in sync.
+  useEffect(() => {
+    setReport(initialReport)
+  }, [initialReport])
+
+  const isEmbedded = mode === "embedded"
 
   const cat = CATEGORIES.find((c) => c.key === report.category)
   const tone: "slate" | "amber" = report.type === "incident" ? "amber" : "slate"
@@ -112,11 +142,14 @@ export function ReportDetail({
       if (!res.ok || !body?.ok) {
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+      const nextStatus =
+        (body.status as Report["status"]) ?? "in_progress"
       setReport((prev) => ({
         ...prev,
-        status: (body.status as Report["status"]) ?? "in_progress",
+        status: nextStatus,
         acknowledged_at: body.acknowledged_at ?? new Date().toISOString(),
       }))
+      onStatusChange?.(nextStatus)
     } catch (e) {
       setAckError(e instanceof Error ? e.message : "Couldn't acknowledge.")
     } finally {
@@ -124,18 +157,30 @@ export function ReportDetail({
     }
   }
 
+  // Layout: full page vs. embedded pane.
+  // - Page mode (mobile + standalone desktop): max-w-xl phone shape on
+  //   mobile, max-w-3xl on lg+ so the desktop screen isn't wasted, with
+  //   a fixed bottom action bar. Padding bottom leaves room for that bar.
+  // - Embedded mode (inside inbox two-pane): no outer chrome, no fixed
+  //   bar, no min-h-screen — the parent's pane owns the height.
+  const rootClasses = isEmbedded
+    ? "flex flex-col px-5 pb-6 pt-5"
+    : "mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-32 pt-5 lg:max-w-3xl lg:px-8"
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 pb-32 pt-5">
-      <Link
-        href={`/m/${store.sap_code}`}
-        className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-        Back to inbox
-      </Link>
+    <main className={rootClasses}>
+      {!isEmbedded && (
+        <Link
+          href={`/m/${store.sap_code}`}
+          className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+          Back to inbox
+        </Link>
+      )}
 
       {/* Header */}
-      <div className="mt-5">
+      <div className={isEmbedded ? "" : "mt-5"}>
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
           {store.brand} · {store.city} · {store.sap_code}
         </p>
@@ -161,6 +206,19 @@ export function ReportDetail({
           </p>
         )}
       </div>
+
+      {/* Two-column body on desktop "page" mode — photo + audio on the
+        left, transcript + context + prior attempts on the right. On
+        mobile (and inside the embedded pane), this collapses to a
+        single column. */}
+      <div
+        className={
+          isEmbedded
+            ? ""
+            : "lg:mt-2 lg:grid lg:grid-cols-2 lg:gap-x-8 lg:items-start"
+        }
+      >
+        <div>
 
       {/* Photo */}
       <section className="mt-5" aria-label="Evidence photo">
@@ -194,8 +252,11 @@ export function ReportDetail({
         </section>
       )}
 
+        </div>
+        <div>
+
       {/* Transcript / description */}
-      <section className="mt-4" aria-label="What the reporter said">
+      <section className="mt-4 lg:mt-5" aria-label="What the reporter said">
         <h2 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
           <Mic className="h-3 w-3" strokeWidth={1.8} aria-hidden />
           {report.transcript ? "Transcript (English)" : "Reporter note"}
@@ -277,9 +338,22 @@ export function ReportDetail({
         </section>
       )}
 
-      {/* Acknowledge / resolve action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-sm">
-        <div className="mx-auto max-w-xl">
+        </div>
+      </div>
+
+      {/* Acknowledge / resolve action bar.
+        * Page mode: fixed at the bottom of the viewport, full width.
+        * Embedded mode: inline at the bottom of the pane (no fixed
+        *   positioning — the right-pane scroll handles its own room).
+        */}
+      <div
+        className={
+          isEmbedded
+            ? "mt-6 border-t border-slate-200 bg-white px-2 py-3"
+            : "fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-sm"
+        }
+      >
+        <div className={isEmbedded ? "" : "mx-auto max-w-xl lg:max-w-3xl"}>
           {report.status === "new" && (
             <>
               <button

@@ -11,29 +11,50 @@ import {
   RefreshCw,
   X,
 } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CATEGORIES, type CategoryDef } from "@/lib/categories"
-import { ensurePushSubscription, clearPushSubscription } from "@/lib/push-client"
+import { ManagerPwaPrompt } from "@/components/manager-pwa-prompt"
+import {
+  ensurePushSubscription,
+  clearPushSubscription,
+} from "@/lib/push-client"
+import { EmbeddedReportPanel } from "./embedded-report-panel"
 
 /**
- * Manager inbox.
+ * Manager inbox — responsive shell.
  *
- * Polls GET /api/reports every 30 s while the tab is visible, honours
- * `document.visibilityState` so a backgrounded tab doesn't drain Supabase,
- * and refreshes immediately when the tab comes back to the foreground. All
- * state transitions that matter (acknowledge, resolve) happen from the
- * detail page; the inbox is read-only.
+ * Mobile / narrow screens: single-column phone shape. Rows are anchor
+ * links to /m/[sap]/r/[id]; tapping navigates to the standalone detail
+ * page. PWA prompt sits above the filter chips so a brand-new manager
+ * can install + grant notifications before triaging anything.
  *
- * Filter pills:
- *   - Needs action (default): new + returned
- *   - In progress: in_progress
- *   - Awaiting HO: awaiting_ho
- *   - Closed: closed
+ * Desktop (≥lg): two-pane layout. Left rail keeps the list (~420px),
+ * right pane embeds the same `<ReportDetail>` component the standalone
+ * page uses, fetched client-side by id. Clicking a row sets the URL
+ * search-param `selected=SR-...` so refreshes and shared links keep
+ * the selection. The row's `<a href>` falls back to the standalone
+ * page if the user middle-clicks or drops below the lg breakpoint.
+ *
+ * Polling: still 30s while visible, but now we fetch ALL statuses in
+ * one call and bucket client-side. Two reasons: (a) we want live counts
+ * on every filter pill, (b) it's one round-trip per poll instead of one
+ * per filter, which scales better than asking the manager to choose.
+ *
+ * State transitions in the right pane (acknowledge, eventually resolve)
+ * fire `onStatusChange`, which prompts an immediate inbox refresh so the
+ * row hops into its new bucket without waiting for the next 30s tick.
+ *
+ * Filter pills no longer scroll horizontally — they're a 2-column grid
+ * on phones (which fits "Awaiting HO" without truncation) and a single
+ * row on sm+ screens. Each pill carries a count badge.
  */
 
 const POLL_MS = 30_000
+const LG_QUERY = "(min-width: 1024px)"
+const SELECTED_PARAM = "selected"
+
+const SR_ID = /^SR-\d{6,}$/
 
 type Store = {
   sap_code: string
@@ -56,18 +77,44 @@ type InboxReport = {
   has_audio: boolean
 }
 
+type FilterKey = "needs_action" | "in_progress" | "awaiting_ho" | "closed"
+
 type Filter = {
-  key: string
+  key: FilterKey
   label: string
+  /** Shorter label used when horizontal space is tight (lg < width < sm). */
+  shortLabel: string
   statuses: string[]
 }
 
 const FILTERS: readonly Filter[] = [
-  { key: "needs_action", label: "Needs action", statuses: ["new", "returned"] },
-  { key: "in_progress", label: "In progress", statuses: ["in_progress"] },
-  { key: "awaiting_ho", label: "Awaiting HO", statuses: ["awaiting_ho"] },
-  { key: "closed", label: "Closed", statuses: ["closed"] },
+  {
+    key: "needs_action",
+    label: "Needs action",
+    shortLabel: "Needs action",
+    statuses: ["new", "returned"],
+  },
+  {
+    key: "in_progress",
+    label: "In progress",
+    shortLabel: "In progress",
+    statuses: ["in_progress"],
+  },
+  {
+    key: "awaiting_ho",
+    label: "Awaiting HO",
+    shortLabel: "Awaiting",
+    statuses: ["awaiting_ho"],
+  },
+  {
+    key: "closed",
+    label: "Closed",
+    shortLabel: "Closed",
+    statuses: ["closed"],
+  },
 ] as const
+
+const ALL_STATUSES = FILTERS.flatMap((f) => f.statuses)
 
 type Toast = {
   kind: "resolution_sent"
@@ -78,15 +125,59 @@ type Toast = {
 
 export function ManagerInbox({ store }: { store: Store }) {
   const router = useRouter()
-  const [filter, setFilter] = useState<Filter>(FILTERS[0])
-  const [reports, setReports] = useState<InboxReport[] | null>(null)
+  const [filterKey, setFilterKey] = useState<FilterKey>("needs_action")
+  const [allReports, setAllReports] = useState<InboxReport[] | null>(null)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+  const [isDesktop, setIsDesktop] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // One-shot success toast passed from the resolve flow via sessionStorage.
+  const filter = useMemo(
+    () => FILTERS.find((f) => f.key === filterKey) ?? FILTERS[0],
+    [filterKey],
+  )
+
+  // --- Viewport: are we on a desktop-sized screen? -------------------------
+  // We use this to decide whether row clicks open inline (right pane) or
+  // navigate to the standalone detail page. Reactive via matchMedia so
+  // resizing or rotating immediately updates behavior.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia(LG_QUERY)
+    const apply = () => setIsDesktop(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
+  // --- Read `selected` from URL on mount so deep links work ----------------
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sp = new URLSearchParams(window.location.search)
+    const sel = sp.get(SELECTED_PARAM)
+    if (sel && SR_ID.test(sel)) {
+      setSelectedId(sel)
+    }
+  }, [])
+
+  // --- Push selection back into URL so it survives reload/share ------------
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    if (selectedId) {
+      url.searchParams.set(SELECTED_PARAM, selectedId)
+    } else {
+      url.searchParams.delete(SELECTED_PARAM)
+    }
+    // replaceState (not pushState) so back-button still goes to the
+    // previous page rather than between row selections.
+    window.history.replaceState(null, "", url.toString())
+  }, [selectedId])
+
+  // --- One-shot success toast from the resolve flow ------------------------
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("sr_mgr_toast")
@@ -102,7 +193,8 @@ export function ManagerInbox({ store }: { store: Store }) {
           kind: "resolution_sent",
           report_id: parsed.report_id,
           attempt: parsed.attempt,
-          warning: typeof parsed.warning === "string" ? parsed.warning : null,
+          warning:
+            typeof parsed.warning === "string" ? parsed.warning : null,
         })
       }
     } catch {
@@ -110,21 +202,13 @@ export function ManagerInbox({ store }: { store: Store }) {
     }
   }, [])
 
-  // Auto-dismiss the toast after ~6s so it doesn't linger forever.
   useEffect(() => {
     if (!toast) return
     const t = window.setTimeout(() => setToast(null), 6000)
     return () => window.clearTimeout(t)
   }, [toast])
 
-  // Track the current filter in a ref so the polling interval always reads
-  // the latest filter without needing to re-create the interval.
-  const filterRef = useRef(filter)
-  useEffect(() => {
-    filterRef.current = filter
-  }, [filter])
-
-  // Track in-flight request so a visibility change doesn't double-fetch.
+  // --- Inbox data fetch ----------------------------------------------------
   const inFlight = useRef(false)
 
   const fetchReports = useCallback(async () => {
@@ -133,13 +217,16 @@ export function ManagerInbox({ store }: { store: Store }) {
     setFetching(true)
     setError(null)
     try {
-      const statuses = filterRef.current.statuses.join(",")
+      // Pull every status in one call so we have live counts per filter
+      // without four parallel round-trips. Bucketing is cheap client-side.
+      const statuses = ALL_STATUSES.join(",")
       const res = await fetch(
-        `/api/reports?sap_code=${encodeURIComponent(store.sap_code)}&status=${encodeURIComponent(statuses)}`,
+        `/api/reports?sap_code=${encodeURIComponent(
+          store.sap_code,
+        )}&status=${encodeURIComponent(statuses)}`,
         { cache: "no-store" },
       )
       if (res.status === 401) {
-        // Cookie expired — bounce to login.
         router.refresh()
         return
       }
@@ -147,7 +234,7 @@ export function ManagerInbox({ store }: { store: Store }) {
         throw new Error(`HTTP ${res.status}`)
       }
       const body = (await res.json()) as { reports?: InboxReport[] }
-      setReports(body.reports ?? [])
+      setAllReports(body.reports ?? [])
       setLastUpdatedAt(Date.now())
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load."
@@ -158,18 +245,12 @@ export function ManagerInbox({ store }: { store: Store }) {
     }
   }, [store.sap_code, router])
 
-  // Initial fetch + refetch when the filter changes.
+  // Initial fetch
   useEffect(() => {
     void fetchReports()
-  }, [filter, fetchReports])
+  }, [fetchReports])
 
-  // Register the web-push subscription right after the inbox mounts,
-  // which in practice is right after successful PIN unlock (the server
-  // component only hands us this inbox when the cookie is valid).
-  //
-  // `ensurePushSubscription` is defensive — it no-ops if the browser
-  // doesn't support push, permission was previously denied, or the
-  // server has no VAPID keys configured. We fire it once per mount.
+  // Register web-push subscription on mount.
   useEffect(() => {
     void ensurePushSubscription({
       role: "manager",
@@ -177,10 +258,9 @@ export function ManagerInbox({ store }: { store: Store }) {
     })
   }, [store.sap_code])
 
-  // Poll every 30 s while visible; pause while hidden; refetch on return.
+  // Visibility-gated polling.
   useEffect(() => {
     let timer: number | null = null
-
     const start = () => {
       if (timer !== null) return
       timer = window.setInterval(() => {
@@ -203,7 +283,6 @@ export function ManagerInbox({ store }: { store: Store }) {
         stop()
       }
     }
-
     if (document.visibilityState === "visible") start()
     document.addEventListener("visibilitychange", onVisibility)
     return () => {
@@ -215,9 +294,6 @@ export function ManagerInbox({ store }: { store: Store }) {
   async function signOut() {
     setSigningOut(true)
     try {
-      // Unsubscribe push before we drop the cookie, so the dispatcher
-      // stops buzzing a device that no longer has a session. Best-effort —
-      // never blocks the actual sign-out on it.
       await clearPushSubscription()
       await fetch("/api/auth/manager", { method: "DELETE" })
       router.refresh()
@@ -226,140 +302,236 @@ export function ManagerInbox({ store }: { store: Store }) {
     }
   }
 
-  const hasReports = reports !== null && reports.length > 0
-
-  // When a toast appears, jump to "Awaiting HO" so the manager sees the
-  // report they just sent land in that bucket.
+  // After resolution, jump to "Awaiting HO" — same behavior as before so
+  // the manager sees the report they just sent land in that bucket.
   useEffect(() => {
     if (toast?.kind === "resolution_sent") {
-      const awaiting = FILTERS.find((f) => f.key === "awaiting_ho")
-      if (awaiting) setFilter(awaiting)
+      setFilterKey("awaiting_ho")
+      // Clear any inline selection because the resolved report just
+      // hopped into a different bucket and may have moved off-screen.
+      setSelectedId(null)
     }
   }, [toast])
 
+  // --- Derived: filtered list + counts -------------------------------------
+  const counts = useMemo(() => {
+    const out: Record<FilterKey, number> = {
+      needs_action: 0,
+      in_progress: 0,
+      awaiting_ho: 0,
+      closed: 0,
+    }
+    if (!allReports) return out
+    for (const r of allReports) {
+      for (const f of FILTERS) {
+        if (f.statuses.includes(r.status)) out[f.key]++
+      }
+    }
+    return out
+  }, [allReports])
+
+  const reports = useMemo(() => {
+    if (!allReports) return null
+    return allReports.filter((r) => filter.statuses.includes(r.status))
+  }, [allReports, filter])
+
+  const hasReports = reports !== null && reports.length > 0
+
+  // If the currently selected report is no longer in the inbox (filtered
+  // out, deleted server-side, etc.), don't keep a dangling selection.
+  useEffect(() => {
+    if (!selectedId || !allReports) return
+    const stillThere = allReports.some((r) => r.id === selectedId)
+    if (!stillThere) setSelectedId(null)
+  }, [selectedId, allReports])
+
+  function handleRowClick(reportId: string, ev: React.MouseEvent) {
+    // Honour middle-click, modifier-click, etc. — the anchor's default
+    // navigation handles those cases naturally.
+    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) return
+    if (!isDesktop) return // mobile: let the link navigate
+    ev.preventDefault()
+    setSelectedId(reportId)
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-6">
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mb-4 flex items-start gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-3 py-3 text-teal-900"
-        >
-          <CheckCircle2
-            className="mt-0.5 h-4 w-4 flex-shrink-0 text-teal-700"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold">
-              Sent {toast.report_id} to Head Office.
+    <main className="min-h-screen bg-slate-50">
+      {/* Top bar — full-width on desktop, phone-shaped on mobile. */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-3 px-4 py-3 md:px-6 lg:px-8">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              {store.brand} · {store.city}
             </p>
-            <p className="mt-0.5 text-[12px] leading-4 text-teal-800">
-              Attempt {toast.attempt} is now awaiting approval.
-              {toast.warning ? ` · ${toast.warning}` : ""}
+            <h1 className="mt-0.5 truncate font-display text-[20px] font-bold leading-7 text-slate-900 md:text-[22px]">
+              {store.name}
+            </h1>
+            <p className="mt-0.5 text-[11px] text-slate-400">
+              {store.sap_code}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setToast(null)}
-            aria-label="Dismiss"
-            className="flex-shrink-0 rounded-full p-1 text-teal-700 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
+            onClick={signOut}
+            disabled={signingOut}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-50"
           >
-            <X className="h-3.5 w-3.5" strokeWidth={2} />
+            <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+            Sign out
           </button>
         </div>
-      )}
-      <header className="flex items-start justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-            {store.brand} · {store.city}
-          </p>
-          <h1 className="mt-0.5 truncate font-display text-[22px] font-bold leading-7 text-slate-900">
-            {store.name}
-          </h1>
-          <p className="mt-0.5 text-[11px] text-slate-400">{store.sap_code}</p>
-        </div>
-        <button
-          type="button"
-          onClick={signOut}
-          disabled={signingOut}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-50"
-        >
-          <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-          Sign out
-        </button>
       </header>
 
-      <nav
-        className="mt-5 -mx-6 flex gap-2 overflow-x-auto px-6 pb-1"
-        aria-label="Filter reports by status"
-      >
-        {FILTERS.map((f) => {
-          const selected = f.key === filter.key
-          return (
+      {/* Toast (resolution-sent) sits below the header so it's not hidden
+        * by the desktop two-pane layout's scrolling content. */}
+      {toast && (
+        <div className="mx-auto w-full max-w-7xl px-4 pt-3 md:px-6 lg:px-8">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-start gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-3 py-3 text-teal-900"
+          >
+            <CheckCircle2
+              className="mt-0.5 h-4 w-4 flex-shrink-0 text-teal-700"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold">
+                Sent {toast.report_id} to Head Office.
+              </p>
+              <p className="mt-0.5 text-[12px] leading-4 text-teal-800">
+                Attempt {toast.attempt} is now awaiting approval.
+                {toast.warning ? ` · ${toast.warning}` : ""}
+              </p>
+            </div>
             <button
-              key={f.key}
               type="button"
-              onClick={() => setFilter(f)}
-              className={`flex-shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-medium transition ${
-                selected
-                  ? "border-indigo-700 bg-indigo-700 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-indigo-500"
-              } focus:outline-none focus:ring-4 focus:ring-indigo-500/40`}
-              aria-pressed={selected}
+              onClick={() => setToast(null)}
+              aria-label="Dismiss"
+              className="flex-shrink-0 rounded-full p-1 text-teal-700 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-500/40"
             >
-              {f.label}
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
-          )
-        })}
-      </nav>
-
-      <section className="mt-4 flex-1">
-        {reports === null ? (
-          <LoadingState />
-        ) : hasReports ? (
-          <ul className="space-y-2">
-            {reports.map((r) => (
-              <li key={r.id}>
-                <ReportCard r={r} sap_code={store.sap_code} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState filterLabel={filter.label} />
-        )}
-      </section>
-
-      {error && (
-        <p
-          role="alert"
-          className="mt-3 rounded-md bg-orange-100 px-3 py-2 text-[12px] text-orange-700"
-        >
-          {error}
-        </p>
+          </div>
+        </div>
       )}
 
-      <footer className="mt-6 flex items-center justify-between text-[11px] text-slate-400">
-        <span>
-          {lastUpdatedAt
-            ? `Updated ${relativeTime(lastUpdatedAt)}`
-            : "Loading…"}{" "}
-          · Auto-refreshes every 30 s
-        </span>
-        <button
-          type="button"
-          onClick={() => void fetchReports()}
-          disabled={fetching}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50"
-        >
-          {fetching ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.8} />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
+      {/* Two-pane on desktop. On mobile, only the list pane renders;
+        * the embedded panel never shows below lg. */}
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 px-4 py-4 md:px-6 lg:flex-row lg:items-start lg:gap-6 lg:px-8 lg:py-6">
+        {/* ---------------- LIST PANE ---------------- */}
+        <aside className="w-full lg:w-[420px] lg:shrink-0">
+          {/* PWA install prompt. Hidden when both gates have already been
+            * cleared, otherwise persistent across sessions. */}
+          <ManagerPwaPrompt variant="inbox" />
+
+          {/* Filter pills — 2-col grid on phone, single row on sm+. No
+            * horizontal scroll, so "Closed" never gets clipped. */}
+          <nav
+            className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            aria-label="Filter reports by status"
+          >
+            {FILTERS.map((f) => {
+              const selected = f.key === filter.key
+              const count = counts[f.key]
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilterKey(f.key)}
+                  className={`flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-medium transition ${
+                    selected
+                      ? "border-indigo-700 bg-indigo-700 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-indigo-500"
+                  } focus:outline-none focus:ring-4 focus:ring-indigo-500/40`}
+                  aria-pressed={selected}
+                >
+                  <span className="truncate">{f.label}</span>
+                  <span
+                    className={`inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px] font-bold tabular-nums ${
+                      selected
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                    aria-hidden
+                  >
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </nav>
+
+          {/* Report list */}
+          <section className="mt-4">
+            {reports === null ? (
+              <LoadingState />
+            ) : hasReports ? (
+              <ul className="space-y-2">
+                {reports.map((r) => (
+                  <li key={r.id}>
+                    <ReportCard
+                      r={r}
+                      sap_code={store.sap_code}
+                      selected={selectedId === r.id && isDesktop}
+                      onClick={(ev) => handleRowClick(r.id, ev)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState filterLabel={filter.label} />
+            )}
+          </section>
+
+          {error && (
+            <p
+              role="alert"
+              className="mt-3 rounded-md bg-orange-100 px-3 py-2 text-[12px] text-orange-700"
+            >
+              {error}
+            </p>
           )}
-          Refresh
-        </button>
-      </footer>
+
+          <footer className="mt-6 flex items-center justify-between text-[11px] text-slate-400">
+            <span>
+              {lastUpdatedAt
+                ? `Updated ${relativeTime(lastUpdatedAt)}`
+                : "Loading…"}{" "}
+              · Auto-refresh 30 s
+            </span>
+            <button
+              type="button"
+              onClick={() => void fetchReports()}
+              disabled={fetching}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 disabled:opacity-50"
+            >
+              {fetching ? (
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  strokeWidth={1.8}
+                />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
+              )}
+              Refresh
+            </button>
+          </footer>
+        </aside>
+
+        {/* ---------------- DETAIL PANE (desktop only) ---------------- */}
+        <section
+          className="hidden min-h-[600px] flex-1 rounded-3xl border border-slate-200 bg-white lg:block"
+          aria-label="Selected report"
+        >
+          <EmbeddedReportPanel
+            store={store}
+            selectedId={selectedId}
+            onStatusChange={() => void fetchReports()}
+          />
+        </section>
+      </div>
     </main>
   )
 }
@@ -369,17 +541,29 @@ export function ManagerInbox({ store }: { store: Store }) {
 function ReportCard({
   r,
   sap_code,
+  selected,
+  onClick,
 }: {
   r: InboxReport
   sap_code: string
+  selected: boolean
+  onClick: (ev: React.MouseEvent) => void
 }) {
   const cat = CATEGORIES.find((c) => c.key === r.category)
   const tone: "slate" | "amber" = r.type === "incident" ? "amber" : "slate"
 
   return (
-    <Link
+    <a
+      // Real href so middle-click / open-in-new-tab works. The handler
+      // intercepts plain left-clicks on desktop and uses inline state.
       href={`/m/${sap_code}/r/${r.id}`}
-      className="flex items-stretch gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+      onClick={onClick}
+      aria-current={selected ? "true" : undefined}
+      className={`flex items-stretch gap-3 rounded-2xl border bg-white p-3 transition focus:outline-none focus:ring-4 focus:ring-indigo-500/40 ${
+        selected
+          ? "border-indigo-500 ring-2 ring-indigo-500/30"
+          : "border-slate-200 hover:border-indigo-500"
+      }`}
     >
       <CategoryTile cat={cat} tone={tone} />
       <div className="min-w-0 flex-1">
@@ -421,7 +605,7 @@ function ReportCard({
         strokeWidth={1.8}
         aria-hidden
       />
-    </Link>
+    </a>
   )
 }
 
@@ -450,7 +634,7 @@ function CategoryTile({
 // ---- Status badge ---------------------------------------------------------
 
 function StatusBadge({ status }: { status: string }) {
-  // Palette rule: no green, no red. Colours:
+  // Palette rule: no green, no red. Colours mirror CLAUDE.md hard rules:
   //   new          → slate-600
   //   in_progress  → indigo-700
   //   awaiting_ho  → sky-700
