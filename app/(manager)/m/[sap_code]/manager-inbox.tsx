@@ -442,15 +442,39 @@ export function ManagerInbox({ store }: { store: Store }) {
               {store.sap_code}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={signOut}
-            disabled={signingOut}
-            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-50"
-          >
-            <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-            Sign out
-          </button>
+          {/* Right-hand controls: keyboard-shortcut hint sits to the left
+            * of Sign out on desktop only. Was previously at the bottom of
+            * the list pane below the auto-refresh footer, which scrolled
+            * off-screen as the inbox grew. Top-right is the corner the
+            * eye already lands on (Sign out is here), so the keys are
+            * always visible the moment the manager opens the inbox. */}
+          <div className="flex shrink-0 items-center gap-2">
+            {isDesktop && (
+              <div
+                aria-label="Keyboard shortcuts"
+                className="hidden lg:flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[10.5px] text-slate-500"
+              >
+                <KeyHint>J</KeyHint>
+                <KeyHint>K</KeyHint>
+                <span className="text-slate-500">navigate</span>
+                <span aria-hidden className="text-slate-300">·</span>
+                <KeyHint>F</KeyHint>
+                <span className="text-slate-500">open</span>
+                <span aria-hidden className="text-slate-300">·</span>
+                <KeyHint>Esc</KeyHint>
+                <span className="text-slate-500">close</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={signOut}
+              disabled={signingOut}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40 disabled:opacity-50"
+            >
+              <LogOut className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -591,22 +615,9 @@ export function ManagerInbox({ store }: { store: Store }) {
             </button>
           </footer>
 
-          {/* Keyboard-shortcut hint — desktop only, so it never shows up on
-            * the phone-shaped manager surface where the keys don't apply.
-            * Discoverability nudge for the J/K/F/Esc handlers above. */}
-          {isDesktop && (
-            <p className="mt-3 hidden lg:flex items-center justify-end gap-2 text-[10.5px] text-slate-400">
-              <KeyHint>J</KeyHint>
-              <KeyHint>K</KeyHint>
-              <span>navigate</span>
-              <span className="text-slate-300">·</span>
-              <KeyHint>F</KeyHint>
-              <span>open</span>
-              <span className="text-slate-300">·</span>
-              <KeyHint>Esc</KeyHint>
-              <span>close</span>
-            </p>
-          )}
+          {/* Keyboard-shortcut hint moved to the top-right of the page
+            * header — it was scrolling off-screen below this footer when
+            * the inbox got long. See the <KeyHint> row next to Sign out. */}
         </aside>
 
         {/* ---------------- DETAIL PANE (desktop only) ---------------- */}
