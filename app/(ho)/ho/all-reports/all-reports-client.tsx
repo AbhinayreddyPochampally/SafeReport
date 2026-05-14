@@ -206,7 +206,21 @@ export function AllReportsClient({
 
   function openFullView(id: string) {
     if (typeof window === "undefined") return
-    window.open(`/ho/reports/${id}?from=reports`, "_blank", "noopener")
+    // Pass the current filtered/sorted row ids as ?sibs= so the standalone
+    // Full View can offer J/K navigation across the same set without a
+    // server round-trip. Capped at 100 ids to keep the URL well under the
+    // browser's practical 2KB limit (avg SR-ID = ~10 chars, so 100 ids ~1KB).
+    const sibs = rows
+      .slice(0, 100)
+      .map((r) => r.id)
+      .join(",")
+    const params = new URLSearchParams({ from: "reports" })
+    if (sibs) params.set("sibs", sibs)
+    window.open(
+      `/ho/reports/${id}?${params.toString()}`,
+      "_blank",
+      "noopener",
+    )
   }
 
   // Auto-dismiss the success toast.
@@ -740,6 +754,7 @@ export function AllReportsClient({
             onReturnRequested={() => setReturnOpen(true)}
             onVoidRequested={() => setVoidOpen(true)}
             onClose={() => selectRow(null)}
+            siblingsParam={rows.slice(0, 100).map((r) => r.id).join(",")}
           />
         </div>
       ) : (
@@ -998,6 +1013,7 @@ function DetailPane({
   onReturnRequested,
   onVoidRequested,
   onClose,
+  siblingsParam,
 }: {
   detail: ReportDetail
   busy: null | "approve" | "return" | "void"
@@ -1006,6 +1022,11 @@ function DetailPane({
   onReturnRequested: () => void
   onVoidRequested: () => void
   onClose: () => void
+  /** Comma-joined SR-id list to thread into the Full View URL as `sibs=`
+   * so J/K navigation in the standalone tab walks the same set the user
+   * was browsing here. Empty string disables sibling nav (Full View
+   * gracefully falls back to A/R/V/Esc only). */
+  siblingsParam: string
 }) {
   const cat = CATEGORIES.find((c) => c.key === detail.category)
   const latestRes = detail.resolutions[detail.resolutions.length - 1] ?? null
@@ -1141,7 +1162,7 @@ function DetailPane({
             {detail.store.sap_code} · {detail.store.name} · {detail.store.city}
           </span>
           <Link
-            href={`/ho/reports/${detail.id}?from=reports`}
+            href={`/ho/reports/${detail.id}?from=reports${siblingsParam ? `&sibs=${siblingsParam}` : ""}`}
             className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-indigo-700 hover:text-indigo-900"
             target="_blank"
             rel="noopener noreferrer"

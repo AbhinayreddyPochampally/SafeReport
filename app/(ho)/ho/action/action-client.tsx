@@ -183,9 +183,19 @@ export function ActionClient({
   }, [toast])
 
   // Helper used by both the F shortcut and the "Open full view" button.
+  // Pass the current visible-list order as ?sibs= so the standalone Full
+  // View can offer J/K navigation across the same queue without a server
+  // round trip. Capped at 100 ids for URL-length safety.
   function openFullView(id: string) {
     if (typeof window === "undefined") return
-    window.open(`/ho/reports/${id}?from=action`, "_blank", "noopener")
+    const sibs = visible.slice(0, 100).map((l) => l.id).join(",")
+    const params = new URLSearchParams({ from: "action" })
+    if (sibs) params.set("sibs", sibs)
+    window.open(
+      `/ho/reports/${id}?${params.toString()}`,
+      "_blank",
+      "noopener",
+    )
   }
 
   // Keyboard navigation. Bound at the window so it fires regardless of which

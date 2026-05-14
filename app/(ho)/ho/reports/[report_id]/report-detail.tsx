@@ -19,10 +19,11 @@ import {
   X,
 } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -30,7 +31,12 @@ import {
 import { CATEGORIES } from "@/lib/categories"
 
 const FULL_VIEW_SHORTCUT_HINT =
-  "A approve · R return · V void · Esc back"
+  "J / K navigate · A approve · R return · V void · Esc back"
+
+// Compact SR-id format check used when parsing the ?sibs= URL param. Only
+// genuinely-SR-shaped tokens are accepted so a malicious URL can't redirect
+// the J/K nav to an arbitrary path.
+const SR_ID_RE = /^SR-\d{6,}$/
 
 /**
  * HO-side report detail. Structurally mirrors the manager view so the codebase
@@ -120,6 +126,21 @@ export function HoReportDetail({
 }) {
   const back = BACK_TARGETS[backTarget] ?? BACK_TARGETS.overview
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // The list of sibling report ids the caller stashed in ?sibs=. Used to
+  // walk J/K across the same filtered/sorted set the user was looking at
+  // in /ho/all-reports. Parsed once per render, validated against SR_ID_RE.
+  const siblingIds = useMemo<string[]>(() => {
+    const raw = searchParams?.get("sibs")
+    if (!raw) return []
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => SR_ID_RE.test(s))
+  }, [searchParams])
+  const currentSiblingIndex = useMemo<number>(() => {
+    return siblingIds.indexOf(initialReport.id)
+  }, [siblingIds, initialReport.id])
   const [report, setReport] = useState<Report>(initialReport)
   const [busy, setBusy] = useState<null | "approve" | "return" | "void">(null)
   const [error, setError] = useState<string | null>(null)
@@ -131,11 +152,14 @@ export function HoReportDetail({
   const tone: "slate" | "amber" = report.type === "incident" ? "amber" : "slate"
 
   // Keyboard shortcuts on the full-page view.
-  //   A      → approve   (awaiting_ho only)
-  //   R      → return    (awaiting_ho only)
-  //   V      → void      (any non-terminal status)
-  //   Esc    → navigate back to the inferred origin (?from= hint)
-  // Inputs / textareas / modals don't trap.
+  //   J / ArrowUp   → previous report in the sibling list (if ?sibs= present)
+  //   K / ArrowDown → next report in the sibling list (if ?sibs= present)
+  //   A             → approve   (awaiting_ho only)
+  //   R             → return    (awaiting_ho only)
+  //   V             → void      (any non-terminal status)
+  //   Esc           → navigate back to the inferred origin (?from= hint)
+  // Inputs / textareas / modals don't trap. J/K do nothing when sibs is
+  // empty so the keymap stays consistent even for direct-URL visits.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null
@@ -149,6 +173,31 @@ export function HoReportDetail({
       }
       if (returnOpen || voidOpen || photoOpen) return
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+
+      // J/K navigation across siblings. Preserves the existing search
+      // params (so ?from=reports&sibs=... carries to the next page),
+      // uses router.replace so back-button still returns the user to
+      // the originating list rather than walking back through every
+      // J/K hop they made.
+      if ((key === "j" || key === "ArrowUp") && currentSiblingIndex > 0) {
+        e.preventDefault()
+        const prevId = siblingIds[currentSiblingIndex - 1]
+        const qs = searchParams?.toString() ?? ""
+        router.replace(`/ho/reports/${prevId}${qs ? `?${qs}` : ""}`)
+        return
+      }
+      if (
+        (key === "k" || key === "ArrowDown") &&
+        currentSiblingIndex >= 0 &&
+        currentSiblingIndex < siblingIds.length - 1
+      ) {
+        e.preventDefault()
+        const nextId = siblingIds[currentSiblingIndex + 1]
+        const qs = searchParams?.toString() ?? ""
+        router.replace(`/ho/reports/${nextId}${qs ? `?${qs}` : ""}`)
+        return
+      }
+
       if (key === "a" && report.status === "awaiting_ho") {
         e.preventDefault()
         void submitAction("approve")
@@ -170,9 +219,18 @@ export function HoReportDetail({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
     // submitAction depends on this closure but is stable enough; we only need
-    // to re-bind when status/modal flags change.
+    // to re-bind when status/modal flags / siblings change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [report.status, returnOpen, voidOpen, photoOpen, back.href])
+  }, [
+    report.status,
+    returnOpen,
+    voidOpen,
+    photoOpen,
+    back.href,
+    siblingIds,
+    currentSiblingIndex,
+    searchParams,
+  ])
 
   async function submitAction(
     action: "approve" | "return" | "void",
