@@ -1684,17 +1684,27 @@ function StatCard({
   sub: React.ReactNode
   infoTitle?: string
 }) {
-  const tone = {
-    indigo: "bg-indigo-50 text-indigo-700",
-    teal: "bg-teal-50 text-teal-700",
-    slate: "bg-slate-100 text-slate-600",
-    sky: "bg-sky-50 text-sky-700",
-    orange: "bg-orange-50 text-orange-700",
+  // Per-accent card gradient + icon-circle gradient + border tint.
+  // Mirrors the Velocity-tile pattern on /ho — each stat now reads as
+  // a coloured metric tile rather than another white square.
+  const cardTone = {
+    indigo: "bg-gradient-to-br from-white via-indigo-50 to-indigo-100/80 border-indigo-100",
+    teal: "bg-gradient-to-br from-white via-teal-50 to-teal-100/80 border-teal-100",
+    slate: "bg-gradient-to-br from-white via-slate-50 to-slate-100 border-slate-200",
+    sky: "bg-gradient-to-br from-white via-sky-50 to-sky-100/80 border-sky-100",
+    orange: "bg-gradient-to-br from-white via-orange-50 to-orange-100/80 border-orange-100",
+  }[accent]
+  const iconTone = {
+    indigo: "bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 ring-indigo-200",
+    teal: "bg-gradient-to-br from-teal-100 to-teal-200 text-teal-700 ring-teal-200",
+    slate: "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700 ring-slate-200",
+    sky: "bg-gradient-to-br from-sky-100 to-sky-200 text-sky-700 ring-sky-200",
+    orange: "bg-gradient-to-br from-orange-100 to-orange-200 text-orange-700 ring-orange-200",
   }[accent]
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+    <div className={`border rounded-xl px-4 py-3.5 flex items-start gap-3 shadow-sm ${cardTone}`}>
       <span
-        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${tone}`}
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1 shadow-sm ${iconTone}`}
         aria-hidden
       >
         {icon}

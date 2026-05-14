@@ -1,7 +1,7 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Suspense } from "react"
 import { unstable_cache } from "next/cache"
-import { Shield } from "lucide-react"
 import { getHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { HoSignOutButton } from "./sign-out-button"
@@ -33,35 +33,46 @@ export default async function HoLayout({
   }
 
   return (
-    // Two-tone diagonal wash. The previous version used 50-scale tones
-    // at low opacity and the result looked uniformly white — fixed by
-    // using 100-scale stops at full opacity so the corners actually
-    // carry visible colour. The diagonal direction means the indigo
-    // tint pools in the bottom-right and the slate sits top-left, giving
-    // long pages a sense of depth as you scroll.
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-indigo-100 flex">
+    // Page background — two-stop diagonal from slate-50 to indigo-100. The
+    // previous version had a `via-white` middle stop that put pure white
+    // through the entire viewport centre, making the gradient effectively
+    // invisible. Dropping it lets the colour carry edge-to-edge so the
+    // GAPS between white cards finally show indigo/slate instead of more
+    // white. Cards stay white on top — the gradient is the *table cloth*,
+    // the cards are the *plates*.
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-100 flex">
       {/* ----------------------------- Sidebar -----------------------------
-        * Indigo wash on the sidebar plus a 2px indigo accent strip on the
-        * right edge. The strip gives the sidebar a clear visual identity
-        * against the main pane without bumping the layout width. */}
-      <aside className="w-[240px] shrink-0 bg-gradient-to-b from-indigo-50 via-white to-slate-100 border-r-2 border-indigo-200/70 flex flex-col sticky top-0 h-screen">
-        {/* Brand band — full indigo→sky→teal gradient so the top of the
-          * sidebar carries clear, branded colour instead of reading as
-          * "another white surface". Pilot is ABFRL so the gradient walks
-          * from corporate indigo through to operational teal, both
-          * palette-compliant. */}
+        * Dark navy rail. Matches the SafeReport app icon palette
+        * (#0A1F46 with orange alert mark) and gives maximum differentiation
+        * from the light page area — the standard pattern Linear / Notion /
+        * Vercel use for dashboard chrome. Light page + dark rail removes
+        * any ambiguity about where the app frame ends and content begins,
+        * which is the exact thing the user kept calling out as "still all
+        * white". */}
+      <aside className="w-[240px] shrink-0 bg-gradient-to-b from-slate-900 via-[#0A1F46] to-slate-900 text-slate-200 border-r border-slate-950/40 shadow-2xl flex flex-col sticky top-0 h-screen">
+        {/* Brand band — uses the custom SafeReport icon SVG we built
+          * (navy shield + orange alert mark). Drops the indigo-on-indigo
+          * Lucide Shield placeholder. The icon is decorative so it gets
+          * aria-hidden; the brand text below already carries the meaning. */}
         <Link
           href="/ho"
-          className="flex items-center gap-2.5 px-5 pt-5 pb-4 text-white bg-gradient-to-br from-indigo-700 via-indigo-600 to-teal-700 hover:opacity-95 transition-opacity"
+          className="flex items-center gap-2.5 px-5 pt-5 pb-4 text-white hover:bg-white/5 transition-colors"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/15 ring-1 ring-white/30 text-white backdrop-blur-sm">
-            <Shield className="h-4 w-4" strokeWidth={2} />
+          <span className="inline-flex h-9 w-9 items-center justify-center shrink-0">
+            <Image
+              src="/icons/safereport-icon.svg"
+              alt=""
+              width={36}
+              height={36}
+              priority
+              aria-hidden
+            />
           </span>
-          <span className="flex flex-col leading-tight">
+          <span className="flex flex-col leading-tight min-w-0">
             <span className="font-display text-[15px] font-semibold tracking-tight text-white">
               SafeReport
             </span>
-            <span className="text-[10.5px] text-indigo-100/90">
+            <span className="text-[10.5px] text-slate-400">
               Head Office Console
             </span>
           </span>
@@ -76,18 +87,19 @@ export default async function HoLayout({
         {/* Spacer pushes the user block to the bottom */}
         <div className="flex-1" />
 
-        {/* User block — teal-tinted bottom band so the sidebar's colour
-          * vocabulary closes out warmly instead of fading to slate-100. */}
-        <div className="border-t border-teal-200/70 bg-gradient-to-r from-teal-50/80 to-transparent px-3 py-3">
+        {/* User block — dark-rail compatible. Teal-300 avatar gradient
+          * pops against the navy bg, top border in white/10 for the
+          * subtlest possible separator. */}
+        <div className="border-t border-white/10 bg-white/5 px-3 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-200 to-teal-300 text-[12px] font-semibold text-teal-900 ring-2 ring-white">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-300 to-teal-500 text-[12px] font-semibold text-teal-950 ring-2 ring-white/30 shadow-md">
               {initials(session.display_name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-slate-900 truncate">
+              <p className="text-[13px] font-medium text-white truncate">
                 {session.display_name}
               </p>
-              <p className="text-[11px] text-slate-500 truncate">
+              <p className="text-[11px] text-slate-400 truncate">
                 {session.email ?? formatRole(session.role)}
               </p>
             </div>
@@ -111,17 +123,19 @@ async function SidebarCountsBlock() {
   const counts = await fetchSidebarCounts()
   return (
     <>
-      {/* Pilot info card — sky→indigo wash with a thin sky accent stripe.
-        * Was a near-white slate-50 card; now carries actual brand colour
-        * so the sidebar reads as colourful rather than a wall of white. */}
-      <div className="mx-3 mt-3 mb-2 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-100 via-white to-indigo-100 px-3 py-2.5 shadow-sm">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-700">
+      {/* Pilot info card — dark-rail compatible. Translucent white panel
+        * over the navy bg, sky-300 eyebrow for the brand accent. The
+        * left orange accent line nods to the SafeReport icon's alert
+        * mark colour, tying the rail back to the brand. */}
+      <div className="mx-3 mt-3 mb-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 relative overflow-hidden">
+        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-orange-500" />
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-300 ml-1.5">
           Pilot · ABFRL
         </p>
-        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-900">
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-white ml-1.5">
           {counts.stores ?? 0} retail stores
         </p>
-        <p className="text-[10.5px] text-slate-500">In production</p>
+        <p className="text-[10.5px] text-slate-400 ml-1.5">In production</p>
       </div>
       <SidebarNav counts={counts} />
     </>
@@ -133,14 +147,15 @@ async function SidebarCountsBlock() {
 function SidebarCountsFallback() {
   return (
     <>
-      <div className="mx-3 mt-3 mb-2 rounded-lg border border-sky-200 bg-gradient-to-br from-sky-100 via-white to-indigo-100 px-3 py-2.5 animate-pulse shadow-sm">
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-700">
+      <div className="mx-3 mt-3 mb-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 animate-pulse relative overflow-hidden">
+        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-orange-500" />
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-300 ml-1.5">
           Pilot · ABFRL
         </p>
-        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-300">
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-300 ml-1.5">
           ─ retail stores
         </p>
-        <p className="text-[10.5px] text-slate-400">Loading…</p>
+        <p className="text-[10.5px] text-slate-400 ml-1.5">Loading…</p>
       </div>
       <SidebarNav counts={{}} />
     </>
