@@ -17,6 +17,7 @@ import { requireHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { CATEGORIES } from "@/lib/categories"
 import type { ReportCategory } from "@/lib/reporter-state"
+import { MetricInfo } from "@/components/metric-info"
 import { QueueList, type QueueRow, type QueueStatus } from "./queue-list"
 
 export const dynamic = "force-dynamic"
@@ -439,7 +440,12 @@ export default async function HoLandingPage() {
           metric={data.velocity.median_ack_hours}
           format="hours"
           lowerIsBetter
-          tooltip="Median time from a reporter filing to the store manager acknowledging. Lower is better."
+          info={{
+            title: "Median time to acknowledge",
+            body: "Time from a reporter filing to the store manager opening the report (Acknowledged status). Median = the middle report; outliers don't drag it. Window is the last 7 days; delta compares to the prior 7 days.",
+            formula:
+              "median( acknowledged_at − reported_at )  over reports filed in last 7d",
+          }}
         />
         <VelocityTile
           icon={Gauge}
@@ -447,7 +453,12 @@ export default async function HoLandingPage() {
           metric={data.velocity.median_close_hours}
           format="hours"
           lowerIsBetter
-          tooltip="Median time from filing to HO approval of the manager's resolution. Lower is better."
+          info={{
+            title: "Median time to close",
+            body: "Time from a reporter filing to HO approving the manager's resolution (Closed status). Median = the middle report. Window is the last 7 days; delta compares to the prior 7 days.",
+            formula:
+              "median( closed_at − reported_at )  over reports closed in last 7d",
+          }}
         />
         <VelocityTile
           icon={Target}
@@ -455,7 +466,14 @@ export default async function HoLandingPage() {
           metric={data.velocity.pct_within_48h}
           format="percent"
           lowerIsBetter={false}
-          tooltip="Of reports closed in the last 7 days, fraction that closed inside the 48-hour SLA. Higher is better."
+          info={{
+            title: "Closed within 48h",
+            body: "Of the reports closed in the last 7 days, the share that closed inside the 48-hour SLA from the moment they were filed. Higher is better.",
+            formula:
+              "closed_within_48h  ÷  closed_reports  (last 7 days)",
+            example:
+              "Delta is in percentage points (pp). A move from 86% to 76% is 10.0 pp down, independent of the underlying counts.",
+          }}
         />
         <VelocityTile
           icon={Repeat}
@@ -463,7 +481,14 @@ export default async function HoLandingPage() {
           metric={data.velocity.first_attempt_rate}
           format="percent"
           lowerIsBetter={false}
-          tooltip="Of reports closed in the last 7 days, fraction where the manager's first resolution was approved without a return. Higher is better."
+          info={{
+            title: "First-attempt fix rate",
+            body: "Of the reports closed in the last 7 days, the share where the manager's very first resolution was approved by HO — no return, no rework. Higher is better.",
+            formula:
+              "closed_with_attempt = 1  ÷  closed_reports  (last 7 days)",
+            example:
+              "Delta is in percentage points (pp). 86% → 76% = 10.0 pp down.",
+          }}
         />
       </div>
 
@@ -509,14 +534,19 @@ function VelocityTile({
   metric,
   format,
   lowerIsBetter,
-  tooltip,
+  info,
 }: {
   icon: LucideIcon
   label: string
   metric: Metric
   format: "hours" | "percent"
   lowerIsBetter: boolean
-  tooltip: string
+  info: {
+    title: string
+    body: string
+    formula?: string
+    example?: string
+  }
 }) {
   const { value, prev } = metric
   const hasValue = value !== null
@@ -536,12 +566,12 @@ function VelocityTile({
         : `${(Math.abs(delta) * 100).toFixed(1)} pp ${better ? "up" : "down"} vs last week`
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
+    <div className="bg-gradient-to-br from-white via-white to-teal-50/40 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-teal-50 text-teal-700 shrink-0"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-50 to-teal-100/70 text-teal-700 shrink-0 ring-1 ring-teal-100"
           >
             <Icon className="h-4 w-4" />
           </span>
@@ -549,13 +579,12 @@ function VelocityTile({
             {label}
           </span>
         </div>
-        <span
-          title={tooltip}
-          aria-label={tooltip}
-          className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5 cursor-help"
-        >
-          <Info className="h-3.5 w-3.5" />
-        </span>
+        <MetricInfo
+          title={info.title}
+          body={info.body}
+          formula={info.formula}
+          example={info.example}
+        />
       </div>
 
       <div
@@ -867,25 +896,46 @@ function TrendPanel({ dailyMedians }: { dailyMedians: DailyMedian[] }) {
     padLeft + (i / Math.max(1, dailyMedians.length - 1)) * innerW
   const y = (hours: number) => padTop + innerH - (hours / yMax) * innerH
 
-  // Build a polyline string skipping null buckets — we split into multiple
-  // <polyline> segments so a gap doesn't draw a misleading slope through it.
-  function segments(getter: (d: DailyMedian) => number | null): string[] {
-    const out: string[] = []
-    let current: string[] = []
+  // Build polyline segments AND the bridges between adjacent segments.
+  //
+  // Each segment is a contiguous run of measured days; we draw it solid.
+  // Each bridge connects the last point of segment N to the first point
+  // of segment N+1 across a stretch of null buckets — drawn as a dotted,
+  // low-opacity line. Previously gaps just left the line blank, which
+  // made it impossible to see at a glance whether the trend was rising
+  // or falling across a missing day. The dotted bridge preserves the
+  // overall trajectory without claiming there's measured data in the gap.
+  function buildLine(getter: (d: DailyMedian) => number | null): {
+    polylines: string[]
+    bridges: Array<{ x1: number; y1: number; x2: number; y2: number }>
+  } {
+    const segments: Array<Array<{ x: number; y: number }>> = []
+    let current: Array<{ x: number; y: number }> = []
     dailyMedians.forEach((d, i) => {
       const v = getter(d)
       if (v === null) {
-        if (current.length > 1) out.push(current.join(" "))
+        if (current.length > 0) segments.push(current)
         current = []
       } else {
-        current.push(`${x(i)},${y(v)}`)
+        current.push({ x: x(i), y: y(v) })
       }
     })
-    if (current.length > 1) out.push(current.join(" "))
-    return out
+    if (current.length > 0) segments.push(current)
+    const polylines = segments
+      .filter((s) => s.length > 1)
+      .map((s) => s.map((p) => `${p.x},${p.y}`).join(" "))
+    const bridges: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
+    for (let i = 0; i < segments.length - 1; i++) {
+      const a = segments[i][segments[i].length - 1]
+      const b = segments[i + 1][0]
+      bridges.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y })
+    }
+    return { polylines, bridges }
   }
-  const ackSegments = segments((d) => d.median_ack)
-  const resSegments = segments((d) => d.median_resolution)
+  const ackLine = buildLine((d) => d.median_ack)
+  const resLine = buildLine((d) => d.median_resolution)
+  const ackSegments = ackLine.polylines
+  const resSegments = resLine.polylines
 
   // X-axis label every other day, plus first + last always.
   function labelForIdx(i: number): string {
@@ -999,6 +1049,21 @@ function TrendPanel({ dailyMedians }: { dailyMedians: DailyMedian[] }) {
             48h SLA
           </text>
 
+          {/* Acknowledge bridges (dotted across gap days) */}
+          {ackLine.bridges.map((b, i) => (
+            <line
+              key={`ackb-${i}`}
+              x1={b.x1}
+              y1={b.y1}
+              x2={b.x2}
+              y2={b.y2}
+              stroke="#475569"
+              strokeWidth={1.25}
+              strokeDasharray="2 3"
+              strokeLinecap="round"
+              opacity={0.35}
+            />
+          ))}
           {/* Acknowledge polyline(s) */}
           {ackSegments.map((s, i) => (
             <polyline
@@ -1024,6 +1089,21 @@ function TrendPanel({ dailyMedians }: { dailyMedians: DailyMedian[] }) {
             ),
           )}
 
+          {/* Resolution bridges (dotted across gap days) */}
+          {resLine.bridges.map((b, i) => (
+            <line
+              key={`resb-${i}`}
+              x1={b.x1}
+              y1={b.y1}
+              x2={b.x2}
+              y2={b.y2}
+              stroke="#0F766E"
+              strokeWidth={1.25}
+              strokeDasharray="2 3"
+              strokeLinecap="round"
+              opacity={0.35}
+            />
+          ))}
           {/* Resolution polyline(s) */}
           {resSegments.map((s, i) => (
             <polyline

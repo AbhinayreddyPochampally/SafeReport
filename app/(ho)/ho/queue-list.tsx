@@ -70,6 +70,7 @@ export function QueueList({
           ctaLabel: "View all",
           emptyTitle: "All caught up.",
           emptyBody: "Nothing is waiting on Head Office right now.",
+          headerGradient: "bg-gradient-to-r from-sky-50/70 via-white to-white",
         }
       : {
           eyebrow: "In the pipeline",
@@ -81,15 +82,19 @@ export function QueueList({
           ctaLabel: "All reports",
           emptyTitle: "Pipeline is empty.",
           emptyBody: "No new reports flowing through right now.",
+          headerGradient:
+            "bg-gradient-to-r from-slate-100/70 via-white to-white",
         }
 
   return (
     <section
       aria-label={config.title}
-      className="bg-white rounded-xl border border-slate-200 overflow-hidden h-full flex flex-col"
+      className="bg-white rounded-xl border border-slate-200 overflow-hidden h-full flex flex-col shadow-sm"
     >
       {/* Header */}
-      <header className="px-6 pt-5 pb-4 border-b border-slate-100">
+      <header
+        className={`px-6 pt-5 pb-4 border-b border-slate-100 ${config.headerGradient}`}
+      >
         <div className="flex items-end justify-between gap-3">
           <div className={`pl-3 border-l-2 ${config.accent}`}>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-500">

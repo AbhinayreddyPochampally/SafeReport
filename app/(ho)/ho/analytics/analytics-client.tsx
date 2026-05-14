@@ -25,8 +25,9 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 import { CATEGORIES } from "@/lib/categories"
+import { MetricInfo } from "@/components/metric-info"
 
 /**
  * HO analytics client (v2).
@@ -189,6 +190,12 @@ export function AnalyticsClient() {
   }
 
   useEffect(() => {
+    // Cancel any in-flight request when the filter/date inputs change. Two
+    // benefits: (1) saves bandwidth when the HO clicks several chips in a
+    // row, (2) prevents an older request's body from clobbering newer state
+    // if it happens to come back last. The AbortError is silenced so it
+    // doesn't surface as a user-visible error message.
+    const ctrl = new AbortController()
     let cancelled = false
     async function run() {
       setBusy(true)
@@ -201,14 +208,15 @@ export function AnalyticsClient() {
         for (const k of categories) qs.append("category", k)
         const res = await fetch(`/api/ho-analytics?${qs.toString()}`, {
           cache: "no-store",
+          signal: ctrl.signal,
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const body = (await res.json()) as Payload
         if (!cancelled) setData(body)
       } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Couldn't load analytics.")
-        }
+        if (cancelled) return
+        if (e instanceof DOMException && e.name === "AbortError") return
+        setError(e instanceof Error ? e.message : "Couldn't load analytics.")
       } finally {
         if (!cancelled) setBusy(false)
       }
@@ -216,12 +224,37 @@ export function AnalyticsClient() {
     run()
     return () => {
       cancelled = true
+      ctrl.abort()
     }
   }, [from, to, brands, categories])
 
   function toggle(key: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(key) ? list.filter((x) => x !== key) : [...list, key])
   }
+
+  // Memoize the four sparkline arrays so each <TimeCard> gets a stable
+  // reference between renders. Without this, `data?.time_series_medians.map(...)`
+  // produced a brand-new array on every render, defeating the React.memo
+  // around <Sparkline> and forcing the SVG path to recompute every time a
+  // user hovered an info popover or clicked a filter chip. Sparklines are
+  // the biggest source of avoidable re-render work on this page because
+  // each one rebuilds a per-point SVG path in `Sparkline()`.
+  const sparkAck = useMemo(
+    () => data?.time_series_medians.map((b) => b.median_ack_hours) ?? [],
+    [data?.time_series_medians],
+  )
+  const sparkRes = useMemo(
+    () => data?.time_series_medians.map((b) => b.median_resolution_hours) ?? [],
+    [data?.time_series_medians],
+  )
+  const sparkFirst = useMemo(
+    () => data?.time_series_medians.map((b) => b.first_attempt_rate) ?? [],
+    [data?.time_series_medians],
+  )
+  const sparkSla = useMemo(
+    () => data?.time_series_medians.map((b) => b.pct_within_48h) ?? [],
+    [data?.time_series_medians],
+  )
 
   async function downloadXlsx() {
     if (downloading) return
@@ -429,7 +462,7 @@ export function AnalyticsClient() {
       <header className="flex items-start gap-3 mb-4">
         <span
           aria-hidden
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700 shrink-0"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-50 to-teal-100/80 text-teal-700 shrink-0 ring-1 ring-teal-100/80"
         >
           <Clock className="h-5 w-5" />
         </span>
@@ -448,13 +481,19 @@ export function AnalyticsClient() {
           <TimeCard
             icon={MessageCircle}
             label="Median time to acknowledge"
-            tooltip="Median time between a report being filed and the store manager acknowledging it."
+            info={{
+              title: "Median time to acknowledge",
+              body:
+                "Time between a reporter filing a report and the store manager opening it (Acknowledged status). Median = the middle value, so half of reports were acknowledged faster than this number and half slower. Outliers don't skew it.",
+              formula:
+                "median( acknowledged_at − reported_at )  over reports filed in range",
+              example:
+                "Delta is the change in median vs. the previous equal-length window (a 30-day view compares to the 30 days before it).",
+            }}
             value={data?.time_analytics.median_ack_hours ?? null}
             prev={data?.time_analytics_prev.median_ack_hours ?? null}
             format="hours"
-            sparkline={
-              data?.time_series_medians.map((b) => b.median_ack_hours) ?? []
-            }
+            sparkline={sparkAck}
             sparklineColor="#0F766E"
             lowerIsBetter
             supportPrimary={
@@ -469,15 +508,19 @@ export function AnalyticsClient() {
           <TimeCard
             icon={Timer}
             label="Median resolution time"
-            tooltip="Median time from a report being filed to it being closed (resolved end-to-end)."
+            info={{
+              title: "Median resolution time",
+              body:
+                "Time from a report being filed to it being closed end-to-end (manager submits a resolution, HO approves it). Median = the middle report — outliers like a single 5-day case can't drag the number around.",
+              formula:
+                "median( closed_at − reported_at )  over reports closed in range",
+              example:
+                "Delta compares to the previous equal-length window.",
+            }}
             value={data?.time_analytics.median_resolution_hours ?? null}
             prev={data?.time_analytics_prev.median_resolution_hours ?? null}
             format="hours"
-            sparkline={
-              data?.time_series_medians.map(
-                (b) => b.median_resolution_hours,
-              ) ?? []
-            }
+            sparkline={sparkRes}
             sparklineColor="#4338CA"
             lowerIsBetter
             supportPrimary={
@@ -490,13 +533,19 @@ export function AnalyticsClient() {
           <TimeCard
             icon={Target}
             label="First-attempt resolution"
-            tooltip="Share of closed reports that were resolved without being returned for rework."
+            info={{
+              title: "First-attempt resolution",
+              body:
+                "Of the reports closed in this range, the share where the store manager's very first resolution was approved by HO — no return, no rework. Higher is better; it signals the manager is fixing the right thing the first time.",
+              formula:
+                "closed_reports_with_attempt = 1  ÷  closed_reports",
+              example:
+                "Delta is in percentage points (pts). A change from 86% to 76% is a 10.0 pts drop, regardless of how big the underlying counts are.",
+            }}
             value={data?.time_analytics.first_attempt_rate ?? null}
             prev={data?.time_analytics_prev.first_attempt_rate ?? null}
             format="percent"
-            sparkline={
-              data?.time_series_medians.map((b) => b.first_attempt_rate) ?? []
-            }
+            sparkline={sparkFirst}
             sparklineColor="#0F766E"
             supportProgress={
               data && data.time_analytics.closed_count > 0
@@ -514,13 +563,17 @@ export function AnalyticsClient() {
           <TimeCard
             icon={Gauge}
             label={`Resolved within ${data?.sla_hours ?? 48}h`}
-            tooltip={`Share of closed reports resolved within the ${data?.sla_hours ?? 48}-hour SLA.`}
+            info={{
+              title: `Resolved within ${data?.sla_hours ?? 48}h`,
+              body: `Of the reports closed in this range, the share that were closed within the ${data?.sla_hours ?? 48}-hour Service-Level Agreement window from the moment they were filed. Higher is better.`,
+              formula: `closed_within_${data?.sla_hours ?? 48}h  ÷  closed_reports`,
+              example:
+                "Delta is in percentage points (pts) — a drop from 95% to 57% is 38.0 pts. Use the value (57%) for the level, the pts delta for the change.",
+            }}
             value={data?.time_analytics.pct_within_48h ?? null}
             prev={data?.time_analytics_prev.pct_within_48h ?? null}
             format="percent"
-            sparkline={
-              data?.time_series_medians.map((b) => b.pct_within_48h) ?? []
-            }
+            sparkline={sparkSla}
             sparklineColor="#0F766E"
             supportProgress={
               data && data.time_analytics.closed_count > 0
@@ -652,7 +705,7 @@ function FilterChip({
 function TimeCard({
   icon: Icon,
   label,
-  tooltip,
+  info,
   value,
   prev,
   format,
@@ -665,7 +718,12 @@ function TimeCard({
 }: {
   icon: LucideIcon
   label: string
-  tooltip: string
+  info: {
+    title: string
+    body: string
+    formula?: string
+    example?: string
+  }
   value: number | null
   prev: number | null
   format: "hours" | "percent"
@@ -697,13 +755,13 @@ function TimeCard({
           ? `Down ${deltaMagnitude} vs previous period`
           : `${deltaMagnitude} vs previous period`
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
+    <div className="bg-gradient-to-br from-white via-white to-teal-50/40 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-teal-50 text-teal-700 shrink-0"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-50 to-teal-100/70 text-teal-700 shrink-0 ring-1 ring-teal-100"
           >
             <Icon className="h-4 w-4" />
           </span>
@@ -711,13 +769,12 @@ function TimeCard({
             {label}
           </span>
         </div>
-        <span
-          title={tooltip}
-          aria-label={tooltip}
-          className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5 cursor-help"
-        >
-          <Info className="h-3.5 w-3.5" />
-        </span>
+        <MetricInfo
+          title={info.title}
+          body={info.body}
+          formula={info.formula}
+          example={info.example}
+        />
       </div>
 
       {/* Big value */}
@@ -829,9 +886,22 @@ function SupportProgress({
 /**
  * Tiny inline trend chart for a metric card. Auto-scales to the data range
  * so even a metric that hovers in a narrow band reads as a visible curve.
- * Nulls (no data on that day) are gaps — no fake line drawn through them.
+ *
+ * Gap handling (v2): days with no data still produce a "gap" in the solid
+ * line — but we now bridge the endpoints of each gap with a thin dotted
+ * line in the same colour at 35% opacity. Previously the line just stopped
+ * and a viewer's eye couldn't tell whether (a) the series ended or (b) we
+ * had a missing day. The dotted bridge keeps the overall trajectory
+ * legible without lying about where real measurements exist.
+ *
+ * Visual hierarchy of the rendered marks:
+ *   - solid 1.4px stroke for measured runs
+ *   - dotted 1px stroke at 0.35 opacity for "no data here, but the trend
+ *     continues" bridges
+ *   - 1.2r filled dot for an isolated single-day measurement
  */
-function Sparkline({
+const Sparkline = memo(SparklineImpl)
+function SparklineImpl({
   data,
   color,
   height = 32,
@@ -879,6 +949,21 @@ function Sparkline({
   }
   if (cur.length > 0) segments.push(cur)
 
+  // Bridges — one per adjacent pair of segments. Each bridge connects the
+  // last point of segment N to the first point of segment N+1, drawn as a
+  // dotted, low-opacity line so the eye reads it as "interpolated".
+  const bridges: Array<{ x1: number; y1: number; x2: number; y2: number }> = []
+  for (let i = 0; i < segments.length - 1; i++) {
+    const a = segments[i][segments[i].length - 1]
+    const b = segments[i + 1][0]
+    bridges.push({
+      x1: a.i * xStep,
+      y1: drawY(a.v),
+      x2: b.i * xStep,
+      y2: drawY(b.v),
+    })
+  }
+
   return (
     <svg
       viewBox={`0 0 100 ${height}`}
@@ -888,6 +973,22 @@ function Sparkline({
       role="img"
       aria-label="Trend"
     >
+      {/* Bridges painted first so the solid runs sit on top. */}
+      {bridges.map((b, idx) => (
+        <line
+          key={`b-${idx}`}
+          x1={b.x1}
+          y1={b.y1}
+          x2={b.x2}
+          y2={b.y2}
+          stroke={color}
+          strokeWidth={1}
+          strokeDasharray="1.5 2"
+          strokeLinecap="round"
+          opacity={0.35}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
       {segments.map((seg, idx) => {
         if (seg.length === 1) {
           // Lone point — render as a small dot.
@@ -980,7 +1081,8 @@ function ChartCard({
   )
 }
 
-function StatusBars({ rows }: { rows: BucketedStatus[] }) {
+const StatusBars = memo(StatusBarsImpl)
+function StatusBarsImpl({ rows }: { rows: BucketedStatus[] }) {
   if (rows.length === 0) {
     return <EmptyState label="No reports in range." />
   }
@@ -1027,7 +1129,8 @@ function StatusBars({ rows }: { rows: BucketedStatus[] }) {
   )
 }
 
-function CategoryBars({ rows }: { rows: BucketedCategory[] }) {
+const CategoryBars = memo(CategoryBarsImpl)
+function CategoryBarsImpl({ rows }: { rows: BucketedCategory[] }) {
   if (rows.length === 0) {
     return <EmptyState label="No reports in range." />
   }
@@ -1085,7 +1188,8 @@ function CategoryBars({ rows }: { rows: BucketedCategory[] }) {
   )
 }
 
-function StoreLeaderboard({ rows }: { rows: LeaderboardRow[] }) {
+const StoreLeaderboard = memo(StoreLeaderboardImpl)
+function StoreLeaderboardImpl({ rows }: { rows: LeaderboardRow[] }) {
   if (rows.length === 0) {
     return <EmptyState label="No stores in range." />
   }

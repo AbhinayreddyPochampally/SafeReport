@@ -345,6 +345,68 @@ export function ManagerInbox({ store }: { store: Store }) {
     if (!stillThere) setSelectedId(null)
   }, [selectedId, allReports])
 
+  // Keyboard navigation — only active in the desktop two-pane view.
+  // Mirrors the HO Reports table conventions so a manager who's used both
+  // surfaces doesn't need to relearn the keys:
+  //   J / ArrowUp   → previous row
+  //   K / ArrowDown → next row
+  //   F            → open the standalone detail page in a new tab
+  //   Esc          → clear selection (close the right pane)
+  // Inputs / textareas / contenteditable are ignored so typing in the
+  // (future) resolution form never hijacks the keys.
+  useEffect(() => {
+    if (!isDesktop) return
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (!reports || reports.length === 0) return
+
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      const currentIndex = selectedId
+        ? reports.findIndex((r) => r.id === selectedId)
+        : -1
+
+      if (key === "k" || key === "ArrowDown") {
+        e.preventDefault()
+        if (currentIndex < 0) {
+          setSelectedId(reports[0].id)
+        } else {
+          const next = reports[Math.min(reports.length - 1, currentIndex + 1)]
+          if (next) setSelectedId(next.id)
+        }
+      } else if (key === "j" || key === "ArrowUp") {
+        e.preventDefault()
+        if (currentIndex < 0) {
+          setSelectedId(reports[0].id)
+        } else {
+          const prev = reports[Math.max(0, currentIndex - 1)]
+          if (prev) setSelectedId(prev.id)
+        }
+      } else if (key === "f") {
+        if (!selectedId) return
+        e.preventDefault()
+        window.open(
+          `/m/${store.sap_code}/r/${selectedId}`,
+          "_blank",
+          "noopener",
+        )
+      } else if (key === "Escape") {
+        if (!selectedId) return
+        e.preventDefault()
+        setSelectedId(null)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [isDesktop, reports, selectedId, store.sap_code])
+
   function handleRowClick(reportId: string, ev: React.MouseEvent) {
     // Honour middle-click, modifier-click, etc. — the anchor's default
     // navigation handles those cases naturally.
@@ -518,6 +580,23 @@ export function ManagerInbox({ store }: { store: Store }) {
               Refresh
             </button>
           </footer>
+
+          {/* Keyboard-shortcut hint — desktop only, so it never shows up on
+            * the phone-shaped manager surface where the keys don't apply.
+            * Discoverability nudge for the J/K/F/Esc handlers above. */}
+          {isDesktop && (
+            <p className="mt-3 hidden lg:flex items-center justify-end gap-2 text-[10.5px] text-slate-400">
+              <KeyHint>J</KeyHint>
+              <KeyHint>K</KeyHint>
+              <span>navigate</span>
+              <span className="text-slate-300">·</span>
+              <KeyHint>F</KeyHint>
+              <span>open</span>
+              <span className="text-slate-300">·</span>
+              <KeyHint>Esc</KeyHint>
+              <span>close</span>
+            </p>
+          )}
         </aside>
 
         {/* ---------------- DETAIL PANE (desktop only) ---------------- */}
@@ -713,6 +792,14 @@ function EmptyState({ filterLabel }: { filterLabel: string }) {
         When reporters file a new report, it lands here within 30 seconds.
       </p>
     </div>
+  )
+}
+
+function KeyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-slate-200 bg-white px-1 font-mono text-[9px] font-semibold text-slate-500">
+      {children}
+    </kbd>
   )
 }
 

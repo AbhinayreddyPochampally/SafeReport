@@ -32,9 +32,9 @@ export default async function HoLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 flex">
       {/* ----------------------------- Sidebar ----------------------------- */}
-      <aside className="w-[240px] shrink-0 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+      <aside className="w-[240px] shrink-0 bg-gradient-to-b from-white to-slate-50/80 border-r border-slate-200 flex flex-col sticky top-0 h-screen">
         {/* Brand */}
         <Link
           href="/ho"
