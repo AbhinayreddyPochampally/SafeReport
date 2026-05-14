@@ -14,7 +14,7 @@ import {
   type ReportDraft,
 } from "@/lib/reporter-state"
 import { submitReport } from "@/lib/report-submit"
-import { t, useReporterLocale, type Locale } from "@/lib/reporter-i18n"
+import { bcp47, t, useReporterLocale, type Locale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 6 — Review + submit.
@@ -29,8 +29,7 @@ function humanTime(iso: string | undefined, locale: Locale): string {
   if (!iso) return ""
   try {
     const d = new Date(iso)
-    const bcp = locale === "kn" ? "kn-IN" : "en-IN"
-    return d.toLocaleString(bcp, {
+    return d.toLocaleString(bcp47(locale), {
       weekday: "short",
       day: "numeric",
       month: "short",

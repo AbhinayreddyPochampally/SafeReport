@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Reporter-flow localisation (English + Kannada).
+ * Reporter-flow localisation (English + Kannada + Hindi + Telugu).
  *
  * Originally landing-only — the rest of the reporter flow rode on the icon
  * grammar plus Whisper-translated voice notes. Pilot stakeholders pushed back
@@ -10,19 +10,48 @@
  * reporter. This file is now the source of every reporter-facing string,
  * landing through confirm + the shared evidence components.
  *
+ * Hindi + Telugu were added in May 2026 to cover the four-language footprint
+ * the pilot manager wanted (English, Kannada, Hindi, Telugu). The footprint
+ * intentionally stops at four — adding Marathi/Tamil etc. is straightforward
+ * (drop entries into LOCALES + STRINGS) but each additional locale crowds the
+ * landing-screen picker and the strings need a careful native-speaker review.
+ *
  * To add another locale later: drop another entry into LOCALES + STRINGS,
- * and the toggle in reporter-form.tsx will pick it up automatically. Order
- * in LOCALES = display order in the toggle.
+ * and the LocalePicker will pick it up automatically. Order in LOCALES =
+ * display order in the picker.
  */
 
 import { useEffect, useState } from "react"
 
-export const LOCALES = ["en", "kn"] as const
+export const LOCALES = ["en", "hi", "kn", "te"] as const
 export type Locale = (typeof LOCALES)[number]
 
+/** Short label for the LocalePicker — native script when available so the
+ * reporter recognises their own language without reading English first. */
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
+  hi: "हिन्दी",
   kn: "ಕನ್ನಡ",
+  te: "తెలుగు",
+}
+
+/** English-script name used as a secondary label inside the picker (so a
+ * reporter who can't read their native script still finds their language). */
+export const LOCALE_ENGLISH_NAMES: Record<Locale, string> = {
+  en: "English",
+  hi: "Hindi",
+  kn: "Kannada",
+  te: "Telugu",
+}
+
+/** BCP-47 tag for Date.toLocaleString — used by the wheel picker preview
+ * and the review-screen timestamp so weekday/month render in native script
+ * where the browser ships the locale data. */
+export const LOCALE_BCP47: Record<Locale, string> = {
+  en: "en-IN",
+  hi: "hi-IN",
+  kn: "kn-IN",
+  te: "te-IN",
 }
 
 /** Every reporter-facing copy key. Grouped by screen / component. */
@@ -517,20 +546,379 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "category.fatality.label": "ಮರಣ",
     "category.fatality.blurb": "ಮರಣಕ್ಕೆ ಕಾರಣವಾಗುತ್ತದೆ.",
   },
+  hi: {
+    "page.title": "सुरक्षा समस्या की रिपोर्ट करें",
+    "page.lede":
+      "कुछ असुरक्षित देखा या कोई करीबी हादसा हुआ? अपनी आवाज़ में, अपनी भाषा में बताइए। एक मिनट से भी कम समय लगेगा।",
+    "page.privacy_note":
+      "आपका नाम केवल हेड ऑफिस को दिखेगा, स्टोर मैनेजर को कभी नहीं।",
+    "form.name_label": "आपका नाम",
+    "form.name_placeholder": "पूरा नाम",
+    "form.phone_label": "फ़ोन नंबर",
+    "form.phone_placeholder": "+91 98xxx xxxxx",
+    "form.continue": "आगे बढ़ें",
+    "form.anonymous_note": "स्टोर मैनेजर के लिए गुमनाम",
+    "form.reporting_as": "रिपोर्ट इस रूप में",
+    "form.switch": "आप नहीं? बदलें",
+    "validate.name_required": "कृपया अपना पूरा नाम दर्ज करें।",
+    "validate.phone_invalid": "कृपया एक मान्य फ़ोन नंबर दर्ज करें।",
+    "header.brand_tagline": "कार्यस्थल सुरक्षा रिपोर्टिंग",
+    "landing.language": "भाषा",
+
+    "unavailable.eyebrow": "स्टोर नहीं मिला",
+    "unavailable.title": "हमें वह स्टोर नहीं मिला।",
+    "unavailable.body":
+      "यह कोड SafeReport रजिस्ट्री में नहीं है, या स्टोर इस समय निष्क्रिय है। अगर आपको लगता है कि यह ग़लत है, तो कृपया यह स्क्रीन अपने मैनेजर को दिखाएँ।",
+    "unavailable.tip":
+      "सुझाव: आपके बैक-ऑफ़ हाउस नोटिस बोर्ड पर लगे QR पोस्टर में आपके स्टोर का सही लिंक है।",
+
+    "common.back": "वापस",
+    "common.continue": "आगे बढ़ें",
+    "common.optional": "वैकल्पिक",
+    "common.edit": "बदलें",
+    "common.anonymous_footer": "स्टोर मैनेजर के लिए गुमनाम",
+    "common.step.1of4": "4 में से 1",
+    "common.step.2of4": "4 में से 2",
+    "common.step.3of4": "4 में से 3",
+    "common.step.4of4": "4 में से 4",
+    "common.step.review": "समीक्षा",
+
+    "triage.title": "क्या हुआ?",
+    "triage.lede": "इसे सबसे अच्छे तरीके से बताने वाला विकल्प चुनें।",
+    "triage.observation.title": "अवलोकन",
+    "triage.observation.subtitle":
+      "मैंने कुछ असुरक्षित देखा — किसी को चोट नहीं लगी।",
+    "triage.incident.title": "घटना",
+    "triage.incident.subtitle":
+      "किसी को चोट लगी, या कोई गंभीर घटना हुई।",
+
+    "subcat.observation.kind": "अवलोकन",
+    "subcat.incident.kind": "घटना",
+    "subcat.observation.heading": "आपने क्या देखा?",
+    "subcat.incident.heading": "किस तरह की घटना?",
+    "subcat.lede": "सबसे उपयुक्त विकल्प पर टैप करें।",
+
+    "when.title": "यह कब हुआ?",
+    "when.lede": "हर कॉलम को स्क्रॉल करके समय चुनें।",
+    "when.selected": "चयनित",
+
+    "evidence.title": "हमें दिखाइए कि क्या हुआ।",
+    "evidence.lede":
+      "एक फ़ोटो के साथ या तो वॉइस नोट या छोटा विवरण जोड़ें।",
+    "evidence.photo_label": "फ़ोटो",
+    "evidence.voice_label": "वॉइस नोट",
+    "evidence.text_label": "या छोटा विवरण लिखें",
+    "evidence.text_placeholder": "आपने क्या देखा या क्या हुआ?",
+    "evidence.text_min": "कम से कम 20 अक्षर",
+    "evidence.text_helper":
+      "अगर ऑडियो रिकॉर्ड नहीं कर सकते तो इसका इस्तेमाल करें",
+    "evidence.missing.both":
+      "एक फ़ोटो लीजिए और वॉइस नोट या छोटा विवरण जोड़िए।",
+    "evidence.missing.photo": "फ़ोटो ज़रूरी है।",
+    "evidence.missing.voicetext":
+      "वॉइस नोट जोड़ें या कम से कम 20 अक्षर लिखें।",
+
+    "review.title": "एक आख़िरी जाँच।",
+    "review.lede": "अगर कुछ ग़लत है, उसके बगल में दिए बदलें लिंक पर टैप करें।",
+    "review.row.category": "श्रेणी",
+    "review.row.when": "कब",
+    "review.row.added": "आपने जोड़ा",
+    "review.row.you": "आप",
+    "review.row.voicenote": "वॉइस नोट",
+    "review.privacy":
+      "आपका नाम और नंबर केवल हेड ऑफिस तक जाते हैं",
+    "review.submit": "रिपोर्ट जमा करें",
+    "review.submitting": "जमा हो रही है…",
+
+    "confirm.eyebrow": "रिपोर्ट मिल गई",
+    "confirm.title.noid": "धन्यवाद — आपकी रिपोर्ट जमा हो गई है।",
+    "confirm.body":
+      "स्टोर मैनेजर को सूचना दे दी गई है, वे जल्द ही जवाब देंगे।",
+    "confirm.body.withid":
+      "धन्यवाद। स्टोर मैनेजर को सूचना दे दी गई है, वे जल्द ही जवाब देंगे।",
+    "confirm.privacy":
+      "आपका नाम और फ़ोन नंबर केवल हेड ऑफिस को दिखेगा, स्टोर मैनेजर को कभी नहीं।",
+    "confirm.close": "बंद करें",
+    "confirm.again": "कुछ और रिपोर्ट करें",
+
+    "photo.take": "फ़ोटो लें",
+    "photo.from_gallery": "गैलरी से",
+    "photo.use_camera": "कैमरा इस्तेमाल करें",
+    "photo.pick_existing": "मौजूदा फ़ोटो चुनें",
+    "photo.gallery_btn": "गैलरी",
+    "photo.retake": "फिर से लें",
+    "photo.processing": "प्रोसेस हो रहा है…",
+    "photo.required_hint": "फ़ोटो ज़रूरी · JPEG या PNG · 10 MB तक",
+    "photo.error_compress":
+      "वह फ़ोटो प्रोसेस नहीं हो सकी — कृपया दोबारा कोशिश करें।",
+
+    "voice.tap_record": "रिकॉर्डिंग शुरू करने के लिए टैप करें",
+    "voice.requesting": "माइक्रोफ़ोन माँगा जा रहा है…",
+    "voice.optional_hint":
+      "वैकल्पिक · 120 सेकंड तक · रिकॉर्डिंग शुरू होने से पहले 1 सेकंड का विराम",
+    "voice.get_ready": "तैयार हो जाइए…",
+    "voice.starts_soon": "रिकॉर्डिंग पल भर में शुरू होगी।",
+    "voice.error_mic":
+      "माइक्रोफ़ोन इस्तेमाल नहीं हो सका। अपनी ब्राउज़र अनुमतियाँ जाँचें और दोबारा कोशिश करें।",
+    "voice.stop_aria": "रिकॉर्डिंग रोकें",
+    "voice.keep_recording": "रिकॉर्डिंग जारी रखें (कम से कम 3 सेकंड)",
+    "voice.play": "चलाएँ",
+    "voice.pause": "रोकें",
+    "voice.discard": "हटाएँ और दोबारा रिकॉर्ड करें",
+    "voice.min_label": "कम से कम 3 सेकंड",
+
+    "pwa.eyebrow": "SafeReport सेट करें",
+    "pwa.title": "अगली बार जल्दी रिपोर्ट करने के लिए दो छोटे क़दम",
+    "pwa.dismiss_aria": "इस सेशन के लिए छुपाएँ",
+    "pwa.notif.allowed": "सूचनाएँ चालू हैं",
+    "pwa.notif.blocked": "सूचनाएँ ब्लॉक हैं",
+    "pwa.notif.blocked_sub":
+      "एड्रेस बार में ताले के आइकन पर टैप करें और सूचनाओं की अनुमति दें।",
+    "pwa.notif.blocked_ios_sub":
+      "अपने iPhone में Settings → Notifications → SafeReport खोलें और Allow Notifications चालू करें।",
+    "pwa.notif.blocked_android_sub":
+      "अपने फ़ोन में Settings → Apps → SafeReport → Notifications खोलें और उन्हें चालू करें।",
+    "pwa.notif.allow": "सूचनाओं की अनुमति दें",
+    "pwa.notif.allowed_sub":
+      "जब हेड ऑफिस आपकी रिपोर्ट का जवाब देगा, हम आपको सूचित करेंगे।",
+    "pwa.notif.allow_sub":
+      "हेड ऑफिस के जवाब की सूचना तुरंत पाइए।",
+    "pwa.notif.pending_install": "सूचनाओं की अनुमति दें",
+    "pwa.notif.pending_install_sub":
+      "इंस्टॉल होने के बाद उपलब्ध — पहले स्टेप 1 पूरा करें।",
+    "pwa.cta.allow": "अनुमति दें",
+    "pwa.install.installed": "होम स्क्रीन पर इंस्टॉल है",
+    "pwa.install.installable": "SafeReport इंस्टॉल करें",
+    "pwa.install.installed_sub":
+      "अगली बार SafeReport आइकन पर टैप करें — QR दोबारा स्कैन करने की ज़रूरत नहीं।",
+    "pwa.install.installable_sub":
+      "होम-स्क्रीन शॉर्टकट जुड़ जाएगा — अगली बार एक टैप, स्कैन नहीं।",
+    "pwa.install.followup":
+      "अब अपने होम स्क्रीन के SafeReport आइकन से खोलें — सूचनाएँ वहीं से चालू होती हैं।",
+    "pwa.cta.install": "इंस्टॉल",
+
+    "category.near_miss.label": "करीबी बचाव",
+    "category.near_miss.blurb":
+      "नुकसान की संभावना थी, पर कोई चोट नहीं लगी।",
+    "category.unsafe_act.label": "असुरक्षित कार्य",
+    "category.unsafe_act.blurb":
+      "किसी व्यक्ति द्वारा सुरक्षा नियमों का उल्लंघन।",
+    "category.unsafe_condition.label": "असुरक्षित स्थिति",
+    "category.unsafe_condition.blurb":
+      "ऐसी स्थिति जिससे चोट लग सकती है।",
+    "category.first_aid_case.label": "प्राथमिक चिकित्सा",
+    "category.first_aid_case.blurb": "छोटी चोट, मौके पर इलाज किया गया।",
+    "category.medical_treatment_case.label": "चिकित्सकीय इलाज",
+    "category.medical_treatment_case.blurb":
+      "पेशेवर चिकित्सकीय देखभाल चाहिए।",
+    "category.restricted_work_case.label": "सीमित काम",
+    "category.restricted_work_case.blurb": "चोट के कारण काम सीमित है।",
+    "category.lost_time_injury.label": "काम-गँवाने वाली चोट",
+    "category.lost_time_injury.blurb":
+      "काम से कई दिनों की छुट्टी हुई।",
+    "category.fatality.label": "मृत्यु",
+    "category.fatality.blurb": "मृत्यु होने का मामला।",
+  },
+  te: {
+    "page.title": "భద్రతా సమస్యను నివేదించండి",
+    "page.lede":
+      "ఏదైనా అసురక్షితంగా చూశారా లేక దగ్గర నుండి తప్పించుకున్నారా? మీ సొంత గొంతుతో, మీ సొంత భాషలో చెప్పండి. ఒక నిమిషం కంటే తక్కువ సమయం పడుతుంది.",
+    "page.privacy_note":
+      "మీ పేరు హెడ్ ఆఫీసుకు మాత్రమే కనిపిస్తుంది, స్టోర్ మేనేజర్‌కు ఎప్పటికీ కాదు.",
+    "form.name_label": "మీ పేరు",
+    "form.name_placeholder": "పూర్తి పేరు",
+    "form.phone_label": "ఫోన్ నంబర్",
+    "form.phone_placeholder": "+91 98xxx xxxxx",
+    "form.continue": "కొనసాగించండి",
+    "form.anonymous_note": "స్టోర్ మేనేజర్‌కు అజ్ఞాతం",
+    "form.reporting_as": "ఇలా నివేదిస్తున్నారు",
+    "form.switch": "మీరు కాదా? మార్చండి",
+    "validate.name_required": "దయచేసి మీ పూర్తి పేరును ఇవ్వండి.",
+    "validate.phone_invalid": "దయచేసి సరైన ఫోన్ నంబర్‌ను ఇవ్వండి.",
+    "header.brand_tagline": "కార్యస్థల భద్రతా నివేదిక",
+    "landing.language": "భాష",
+
+    "unavailable.eyebrow": "స్టోర్ దొరకలేదు",
+    "unavailable.title": "ఆ స్టోర్‌ను మేము కనుగొనలేకపోయాము.",
+    "unavailable.body":
+      "ఈ కోడ్ SafeReport రిజిస్ట్రీలో లేదు, లేదా స్టోర్ ప్రస్తుతం పనిచేయడం లేదు. ఇది తప్పు అనుకుంటే, దయచేసి ఈ స్క్రీన్‌ను మీ మేనేజర్‌కు చూపించండి.",
+    "unavailable.tip":
+      "సూచన: మీ స్టోర్ నోటీసు బోర్డుపై ఉన్న QR పోస్టర్‌లో సరైన లింక్ ఉంది.",
+
+    "common.back": "వెనుకకు",
+    "common.continue": "కొనసాగించండి",
+    "common.optional": "ఐచ్ఛికం",
+    "common.edit": "మార్చండి",
+    "common.anonymous_footer": "స్టోర్ మేనేజర్‌కు అజ్ఞాతం",
+    "common.step.1of4": "4లో 1వ దశ",
+    "common.step.2of4": "4లో 2వ దశ",
+    "common.step.3of4": "4లో 3వ దశ",
+    "common.step.4of4": "4లో 4వ దశ",
+    "common.step.review": "సమీక్ష",
+
+    "triage.title": "ఏం జరిగింది?",
+    "triage.lede": "ఏది బాగా వివరిస్తుందో దానిని ఎంచుకోండి.",
+    "triage.observation.title": "గమనింపు",
+    "triage.observation.subtitle":
+      "నేను అసురక్షితంగా ఏదో చూశాను — ఎవరికీ గాయం కాలేదు.",
+    "triage.incident.title": "ఘటన",
+    "triage.incident.subtitle":
+      "ఎవరికైనా గాయమైంది, లేదా తీవ్రమైన సంఘటన జరిగింది.",
+
+    "subcat.observation.kind": "గమనింపు",
+    "subcat.incident.kind": "ఘటన",
+    "subcat.observation.heading": "మీరు ఏం గమనించారు?",
+    "subcat.incident.heading": "ఏ రకమైన ఘటన?",
+    "subcat.lede": "బాగా సరిపోయే దానిపై ట్యాప్ చేయండి.",
+
+    "when.title": "ఇది ఎప్పుడు జరిగింది?",
+    "when.lede": "ప్రతి కాలమ్‌ను స్క్రోల్ చేసి సర్దుబాటు చేయండి.",
+    "when.selected": "ఎంచుకున్నది",
+
+    "evidence.title": "ఏం జరిగిందో మాకు చూపించండి.",
+    "evidence.lede":
+      "ఒక ఫోటో మరియు వాయిస్ నోట్ లేదా చిన్న వివరణ జోడించండి.",
+    "evidence.photo_label": "ఫోటో",
+    "evidence.voice_label": "వాయిస్ నోట్",
+    "evidence.text_label": "లేదా చిన్న వివరణ టైప్ చేయండి",
+    "evidence.text_placeholder": "మీరు ఏం చూశారు లేదా ఏం జరిగింది?",
+    "evidence.text_min": "కనీసం 20 అక్షరాలు",
+    "evidence.text_helper":
+      "ఆడియో రికార్డ్ చేయలేకపోతే దీన్ని ఉపయోగించండి",
+    "evidence.missing.both":
+      "ఒక ఫోటో తీయండి మరియు వాయిస్ నోట్ లేదా చిన్న వివరణ జోడించండి.",
+    "evidence.missing.photo": "ఫోటో అవసరం.",
+    "evidence.missing.voicetext":
+      "వాయిస్ నోట్ జోడించండి లేదా కనీసం 20 అక్షరాలు టైప్ చేయండి.",
+
+    "review.title": "ఆఖరి తనిఖీ.",
+    "review.lede": "ఏదైనా తప్పు ఉంటే, దాని పక్కన ఉన్న మార్చండి లింక్‌పై ట్యాప్ చేయండి.",
+    "review.row.category": "వర్గం",
+    "review.row.when": "ఎప్పుడు",
+    "review.row.added": "మీరు జోడించినవి",
+    "review.row.you": "మీరు",
+    "review.row.voicenote": "వాయిస్ నోట్",
+    "review.privacy":
+      "మీ పేరు మరియు నంబర్ హెడ్ ఆఫీసుకు మాత్రమే వెళతాయి",
+    "review.submit": "నివేదిక సమర్పించండి",
+    "review.submitting": "సమర్పిస్తున్నాం…",
+
+    "confirm.eyebrow": "నివేదిక అందింది",
+    "confirm.title.noid": "ధన్యవాదాలు — మీ నివేదిక సమర్పించబడింది.",
+    "confirm.body":
+      "స్టోర్ మేనేజర్‌కు తెలియజేయబడింది, వారు త్వరలో స్పందిస్తారు.",
+    "confirm.body.withid":
+      "ధన్యవాదాలు. స్టోర్ మేనేజర్‌కు తెలియజేయబడింది, వారు త్వరలో స్పందిస్తారు.",
+    "confirm.privacy":
+      "మీ పేరు మరియు ఫోన్ నంబర్ హెడ్ ఆఫీసుకు మాత్రమే కనిపిస్తాయి, స్టోర్ మేనేజర్‌కు ఎప్పటికీ కాదు.",
+    "confirm.close": "మూసివేయండి",
+    "confirm.again": "మరొకటి నివేదించండి",
+
+    "photo.take": "ఫోటో తీయండి",
+    "photo.from_gallery": "గ్యాలరీ నుండి",
+    "photo.use_camera": "కెమెరా ఉపయోగించండి",
+    "photo.pick_existing": "ఉన్న ఫోటోను ఎంచుకోండి",
+    "photo.gallery_btn": "గ్యాలరీ",
+    "photo.retake": "మళ్ళీ తీయండి",
+    "photo.processing": "ప్రాసెస్ చేస్తున్నాం…",
+    "photo.required_hint": "ఫోటో అవసరం · JPEG లేదా PNG · 10 MB వరకు",
+    "photo.error_compress":
+      "ఆ ఫోటో ప్రాసెస్ చేయలేకపోయాం — దయచేసి మళ్ళీ ప్రయత్నించండి.",
+
+    "voice.tap_record": "రికార్డింగ్ ప్రారంభించడానికి ట్యాప్ చేయండి",
+    "voice.requesting": "మైక్రోఫోన్‌ను అడుగుతున్నాం…",
+    "voice.optional_hint":
+      "ఐచ్ఛికం · 120 సెకన్ల వరకు · రికార్డింగ్ ప్రారంభమయ్యే ముందు 1 సెకన్ విరామం",
+    "voice.get_ready": "సిద్ధంగా ఉండండి…",
+    "voice.starts_soon": "రికార్డింగ్ క్షణంలోనే ప్రారంభమవుతుంది.",
+    "voice.error_mic":
+      "మైక్రోఫోన్ ఉపయోగించలేకపోయాం. మీ బ్రౌజర్ అనుమతులను తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
+    "voice.stop_aria": "రికార్డింగ్ ఆపండి",
+    "voice.keep_recording": "రికార్డింగ్ కొనసాగించండి (కనీసం 3 సె.)",
+    "voice.play": "ప్లే చేయండి",
+    "voice.pause": "విరామం",
+    "voice.discard": "తీసేసి మళ్ళీ రికార్డ్ చేయండి",
+    "voice.min_label": "కనీసం 3 సె.",
+
+    "pwa.eyebrow": "SafeReport సెటప్ చేయండి",
+    "pwa.title": "తదుపరిసారి వేగంగా నివేదించడానికి రెండు చిన్న దశలు",
+    "pwa.dismiss_aria": "ఈ సెషన్‌కు దాచండి",
+    "pwa.notif.allowed": "నోటిఫికేషన్‌లు ఆన్‌లో ఉన్నాయి",
+    "pwa.notif.blocked": "నోటిఫికేషన్‌లు బ్లాక్ చేయబడ్డాయి",
+    "pwa.notif.blocked_sub":
+      "అడ్రెస్ బార్‌లో లాక్ ఐకాన్‌పై ట్యాప్ చేసి నోటిఫికేషన్‌లకు అనుమతి ఇవ్వండి.",
+    "pwa.notif.blocked_ios_sub":
+      "మీ iPhoneలో Settings → Notifications → SafeReport తెరిచి Allow Notifications ఆన్ చేయండి.",
+    "pwa.notif.blocked_android_sub":
+      "మీ ఫోన్‌లో Settings → Apps → SafeReport → Notifications తెరిచి వాటిని ఆన్ చేయండి.",
+    "pwa.notif.allow": "నోటిఫికేషన్‌లకు అనుమతి ఇవ్వండి",
+    "pwa.notif.allowed_sub":
+      "హెడ్ ఆఫీస్ మీ నివేదికకు స్పందించినప్పుడు మేము మీకు తెలియజేస్తాం.",
+    "pwa.notif.allow_sub":
+      "హెడ్ ఆఫీస్ స్పందనను వెంటనే తెలుసుకోండి.",
+    "pwa.notif.pending_install": "నోటిఫికేషన్‌లకు అనుమతి ఇవ్వండి",
+    "pwa.notif.pending_install_sub":
+      "ఇన్‌స్టాల్ చేసిన తర్వాత అందుబాటులో ఉంటుంది — ముందు దశ 1 పూర్తి చేయండి.",
+    "pwa.cta.allow": "అనుమతించండి",
+    "pwa.install.installed": "హోమ్ స్క్రీన్‌లో ఇన్‌స్టాల్ చేయబడింది",
+    "pwa.install.installable": "SafeReport ఇన్‌స్టాల్ చేయండి",
+    "pwa.install.installed_sub":
+      "తదుపరిసారి SafeReport ఐకాన్‌పై ట్యాప్ చేయండి — QRను మళ్ళీ స్కాన్ చేయాల్సిన అవసరం లేదు.",
+    "pwa.install.installable_sub":
+      "హోమ్-స్క్రీన్ షార్ట్‌కట్ జోడిస్తుంది — తదుపరిసారి ఒక్క ట్యాప్, స్కాన్ అక్కర్లేదు.",
+    "pwa.install.followup":
+      "ఇప్పుడు మీ హోమ్ స్క్రీన్ SafeReport ఐకాన్ నుండి తెరవండి — నోటిఫికేషన్‌లు అక్కడే ఆన్ చేయబడతాయి.",
+    "pwa.cta.install": "ఇన్‌స్టాల్",
+
+    "category.near_miss.label": "దగ్గరి తప్పించుకోత",
+    "category.near_miss.blurb":
+      "హాని జరిగే అవకాశం ఉండింది, కానీ ఎవరికీ గాయం కాలేదు.",
+    "category.unsafe_act.label": "అసురక్షిత చర్య",
+    "category.unsafe_act.blurb":
+      "ఒక వ్యక్తి భద్రతా నియమాలను ఉల్లంఘించడం.",
+    "category.unsafe_condition.label": "అసురక్షిత పరిస్థితి",
+    "category.unsafe_condition.blurb":
+      "హాని కలిగించగల పర్యావరణ ప్రమాదం.",
+    "category.first_aid_case.label": "ప్రథమ చికిత్స కేసు",
+    "category.first_aid_case.blurb":
+      "చిన్న గాయం, స్థలంలోనే చికిత్స చేశారు.",
+    "category.medical_treatment_case.label": "వైద్య చికిత్స",
+    "category.medical_treatment_case.blurb":
+      "వృత్తిపరమైన వైద్య సంరక్షణ అవసరం.",
+    "category.restricted_work_case.label": "పరిమిత పని",
+    "category.restricted_work_case.blurb":
+      "గాయం వల్ల పని కర్తవ్యాలు పరిమితం.",
+    "category.lost_time_injury.label": "పని-రోజులు పోగొట్టే గాయం",
+    "category.lost_time_injury.blurb":
+      "పనికి దూరం ఉండే రోజులకు దారితీస్తుంది.",
+    "category.fatality.label": "మరణం",
+    "category.fatality.blurb": "మరణానికి దారితీస్తుంది.",
+  },
 }
 
 const LOCALE_STORAGE_KEY = "sr_locale"
+
+// Compiled membership check — kept in sync with LOCALES automatically.
+// Saves us from listing valid codes by hand inside readLocale.
+const LOCALE_SET: ReadonlySet<string> = new Set(LOCALES)
 
 /** Read the chosen locale from localStorage, falling back to "en". */
 export function readLocale(): Locale {
   if (typeof window === "undefined") return "en"
   try {
     const v = window.localStorage.getItem(LOCALE_STORAGE_KEY)
-    if (v === "en" || v === "kn") return v
+    if (v && LOCALE_SET.has(v)) return v as Locale
   } catch {
     /* localStorage unavailable — fall back to default */
   }
   return "en"
+}
+
+/** BCP-47 tag for the given locale (used by Intl APIs / toLocaleString).
+ * Centralised so the wheel-picker, review timestamp, and anywhere else
+ * formats dates consistently per locale. */
+export function bcp47(loc: Locale): string {
+  return LOCALE_BCP47[loc] ?? "en-IN"
 }
 
 /** Persist the chosen locale and dispatch a window event so other mounts

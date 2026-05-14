@@ -12,7 +12,7 @@ import {
   type DateTimeValue,
 } from "@/components/wheel-picker"
 import { readDraft, readProfile, writeDraft } from "@/lib/reporter-state"
-import { t, useReporterLocale } from "@/lib/reporter-i18n"
+import { bcp47, t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 4 — when did it happen?
@@ -60,10 +60,11 @@ export default function WhenPage({
   const previewHuman = useMemo(() => {
     try {
       const d = new Date(previewISO)
-      // BCP 47 tag — kn-IN renders weekday/month in Kannada script when
-      // the browser ships that locale data (modern Chrome / iOS Safari do).
-      const bcp = locale === "kn" ? "kn-IN" : "en-IN"
-      return d.toLocaleString(bcp, {
+      // BCP 47 tag — hi-IN / kn-IN / te-IN render weekday/month in the
+      // user's script when the browser ships that locale data (modern
+      // Chrome / iOS Safari do; older Android WebView falls back to
+      // English numerals).
+      return d.toLocaleString(bcp47(locale), {
         weekday: "short",
         day: "numeric",
         month: "short",

@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, Languages } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
@@ -10,13 +10,11 @@ import {
   type ReporterProfile,
 } from "@/lib/reporter-state"
 import {
-  LOCALES,
-  LOCALE_LABELS,
   readLocale,
   t,
-  writeLocale,
   type Locale,
 } from "@/lib/reporter-i18n"
+import { LocalePicker } from "@/components/locale-picker"
 
 type Props = { sap_code: string }
 
@@ -43,10 +41,12 @@ export function ReporterForm({ sap_code }: Props) {
     return () => window.removeEventListener("sr:locale", onLocale)
   }, [])
 
-  function changeLocale(loc: Locale) {
-    setLocale(loc)
-    writeLocale(loc)
-    setErr(null) // re-render error in new language on next attempt
+  // The LocalePicker writes to localStorage + dispatches sr:locale itself,
+  // so the `setLocale` happens via the `sr:locale` listener above. This
+  // callback only clears the validation error so the next attempt renders
+  // in the newly-chosen language.
+  function onLocalePicked() {
+    setErr(null)
   }
 
   function validate(): ReporterProfile | null {
@@ -118,36 +118,10 @@ export function ReporterForm({ sap_code }: Props) {
             </button>
           </div>
           <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
               {t(locale, "landing.language")}
             </span>
-            <div
-              role="radiogroup"
-              aria-label="Choose interface language"
-              className="inline-flex items-center gap-1"
-            >
-              {LOCALES.map((loc) => {
-                const active = loc === locale
-                return (
-                  <button
-                    key={loc}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => changeLocale(loc)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
-                      active
-                        ? "bg-indigo-700 text-white"
-                        : "bg-white text-slate-700 border border-slate-200 hover:border-indigo-300"
-                    }`}
-                    lang={loc}
-                  >
-                    {LOCALE_LABELS[loc]}
-                  </button>
-                )
-              })}
-            </div>
+            <LocalePicker variant="compact" onChange={onLocalePicked} />
           </div>
         </div>
         <button
@@ -164,39 +138,12 @@ export function ReporterForm({ sap_code }: Props) {
 
   return (
     <div className="mt-6" lang={locale}>
-      {/* Language toggle — visible right above the intro + form so the
-          reporter sees it before they decide what language to use. */}
-      <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-        <div className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-          {t(locale, "landing.language")}
-        </div>
-        <div
-          role="radiogroup"
-          aria-label="Choose interface language"
-          className="inline-flex items-center gap-1"
-        >
-          {LOCALES.map((loc) => {
-            const active = loc === locale
-            return (
-              <button
-                key={loc}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => changeLocale(loc)}
-                className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
-                  active
-                    ? "bg-indigo-700 text-white"
-                    : "bg-white text-slate-700 border border-slate-200 hover:border-indigo-300"
-                }`}
-                lang={loc}
-              >
-                {LOCALE_LABELS[loc]}
-              </button>
-            )
-          })}
-        </div>
+      {/* Language picker — visible right above the intro + form so the
+        * reporter sees it before they decide what language to use.
+        * Right-aligned trigger so the chip sits in the corner the eye
+        * already tracks (where the toggle used to be). */}
+      <div className="mb-4 flex items-end justify-end">
+        <LocalePicker variant="default" onChange={onLocalePicked} />
       </div>
 
       {/* Localised intro */}
