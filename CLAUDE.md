@@ -74,7 +74,7 @@ app/
 
   (ho)/ho/
     layout.tsx            # 240px left sidebar shell
-    page.tsx              # Overview — summary cards + 2 queues + heatmap
+    page.tsx              # Overview — velocity tiles + pulse row + 14d trend + 2 queues
     all-reports/page.tsx  # Reports tab — filter card + dense table
     reports/[report_id]/page.tsx  # HO report detail (approve/return/void)
     analytics/page.tsx
@@ -184,18 +184,50 @@ Notifications, no Settings, no Help — those would be empty surfaces in the pil
 
 ### Overview (`/ho`)
 
-Four summary cards (Reports this month / Awaiting my approval / Closed this month
-/ Returned this month) sitting above two distinct queues:
+Reworked in May 2026 — the previous version led with four passive summary
+cards (Reports this month / Awaiting / Closed / Returned) that restated state
+already visible in the queues. The new layout, top → bottom:
 
-- **Approval Queue** — sky-accented (`border-l-sky-600`). Status =
-  `awaiting_ho`, oldest-first. This is the action queue; HO is the one who has to
-  do something. Rows that have been waiting > 48h surface an SLA-breach indicator
-  (orange-700 left bar, "SLA breach > 48h · N" header pill).
-- **Reported Queue** — slate-accented (`border-l-slate-400`). Statuses =
-  `new` | `in_progress` | `returned`, newest-first. Read-only awareness; the store
-  manager owns these. Each row carries a status pill so HO can scan what's flowing.
+1. **Velocity strip — four ops tiles with WoW deltas.** Median time to
+   acknowledge, median time to close, % closed within 48h, first-attempt fix
+   rate. Big teal value, polarity-aware delta line below (teal-700 improving,
+   orange-700 worsening, slate-500 unchanged). Mirrors the visual convention
+   of the matching tile on the Analytics page so the two surfaces feel like
+   the same family. The `lowerIsBetter` flag flips polarity for time metrics.
+2. **Pulse row — three panels.**
+   - *Today · last 24h* — the 5 most recent reports with category, SAP code,
+     store name + brand, and a relative timestamp. Incident dot is amber-700;
+     observation dot is slate-400. Click opens the report.
+   - *Coverage · this week* — donut showing distinct stores with ≥ 1 report
+     in the last 7 days, over total active stores. Indigo-700 fill, slate-200
+     track. Click-through opens `/ho/stores`.
+   - *This week by category* — top 5 categories by count (this week) with a
+     WoW arrow (▲ orange-700 if up, ▼ teal-700 if down). Incident bars are
+     amber-700, observation bars are slate-500.
+3. **Trend chart — past 14 days · daily median response time.** Server-rendered
+   inline SVG (no Recharts on Overview — paints in the first byte). Two lines:
+   acknowledge (slate-600) and close (teal-700), with a dashed orange-300 line
+   at the 48h SLA. Null buckets break the line — gap segments aren't drawn so
+   the slope through an empty day doesn't lie. Click-through to
+   `/ho/analytics` for the interactive equivalent.
+4. **Approval + Pipeline queues.**
+   - **Approval Queue** — sky-accented (`border-l-sky-600`). Status =
+     `awaiting_ho`, oldest-first. Rows past 48h surface an SLA-breach indicator
+     (orange-700 left bar, "SLA breach > 48h · N" header pill).
+   - **Reported Queue** — slate-accented (`border-l-slate-400`). Statuses =
+     `new` | `in_progress` | `returned`, newest-first. Read-only awareness;
+     the store manager owns these. Each row carries a status pill.
 
-Below the queues sits the 12-month × 8-category heatmap.
+The "Stores needing attention" panel that lived above the queues was dropped
+in the same rev — the past-48h-waiting subsection duplicated the Approval
+queue's SLA-breach pill, and the quiet-stores subsection didn't drive any
+action HO was actually taking. The 12-month heatmap was already gone before
+this rev.
+
+Window definitions on the Overview are intentionally rolling (last 7 days,
+last 14 days, last 24h) rather than calendar-aligned — calendar boundaries
+make Monday-morning numbers look meaningless. The Analytics page is where
+date pickers live.
 
 ### Reports (`/ho/all-reports`)
 
