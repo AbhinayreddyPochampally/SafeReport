@@ -2,6 +2,7 @@ import { requireHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
   StoresClient,
+  type AttentionItem,
   type StoreRow,
   type StoresSummary,
 } from "./stores-client"
@@ -47,6 +48,12 @@ type StoresRow = {
   opening_date: string | null
   qr_downloaded_at: string | null
   created_at: string | null
+  // mig 005 — null when the store hasn't been marked resolved on the
+  // attention panel; set when HO has phoned the manager and dismissed
+  // the row. May not exist on a DB that hasn't run the migration yet,
+  // which is why the column is read with a nullable assumption and the
+  // attention panel gracefully degrades if it's missing.
+  attention_handled_at: string | null
 }
 
 type ReportRow = {
@@ -98,7 +105,7 @@ export default async function HoStoresPage() {
     admin
       .from("stores")
       .select(
-        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_email, status, opening_date, qr_downloaded_at, created_at",
+        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_email, status, opening_date, qr_downloaded_at, created_at, attention_handled_at",
       )
       .order("brand", { ascending: true })
       .order("city", { ascending: true })
@@ -210,6 +217,7 @@ export default async function HoStoresPage() {
       report_count: a.total,
       qr_downloaded_at: s.qr_downloaded_at,
       created_at: s.created_at,
+      attention_handled_at: s.attention_handled_at ?? null,
       last_report_at: a.last_report_at,
       reports_this_month: a.this_month,
       reports_last_month: a.last_month,
@@ -218,6 +226,73 @@ export default async function HoStoresPage() {
       median_ack_hours: medAck,
       pct_acked_within_24h: pct24,
     }
+  })
+
+  // Stores-needing-attention derivation. Three triggers, in priority order:
+  //   1. never_reported  — store has never had a report submitted
+  //   2. dormant         — last report > 30 days ago (Stage 3 of the
+  //                        activity tier model, but flagged here as
+  //                        actionable because it usually means the manager
+  //                        has stopped using the QR poster)
+  //   3. low_traffic     — last 30 days has 0 OR 1 report AND the QR is
+  //                        distributed AND there has ever been a report
+  //                        (so we don't double-flag with `never_reported`)
+  //
+  // Suppressed when:
+  //   - store is permanently_closed (no longer expected to report)
+  //   - attention_handled_at is non-null (HO has already actioned this row)
+  //   - store is `active` (has a report in the last 7 days) — recently active
+  //     stores aren't an attention case even if traffic is otherwise low
+  //
+  // Surfaced ones get sorted oldest-last-report-first so the most-stale
+  // store is at the top of the panel.
+  type AttentionReason = "never_reported" | "dormant" | "low_traffic"
+  const attention: AttentionItem[] = []
+  for (const r of rows) {
+    if (r.status === "permanently_closed") continue
+    if (r.attention_handled_at) continue
+    const daysSinceLast =
+      r.last_report_at == null
+        ? Infinity
+        : (Date.now() - Date.parse(r.last_report_at)) / 86_400_000
+    let reason: AttentionReason | null = null
+    let detail = ""
+    if (r.last_report_at == null) {
+      reason = "never_reported"
+      detail = r.qr_downloaded_at
+        ? "Never reported · QR distributed"
+        : "Never reported · QR not yet sent"
+    } else if (daysSinceLast > 30) {
+      reason = "dormant"
+      detail = `Last report ${Math.round(daysSinceLast)} days ago`
+    } else if (daysSinceLast > 7 && r.reports_last_30d <= 1 && r.qr_downloaded_at) {
+      // Quiet stores with 0-or-1 report in the last 30 days are flagged
+      // for outreach. Excludes "active" stores (≤7 day) because they're
+      // ramping fine — a low monthly count doesn't matter if the trickle
+      // is recent.
+      reason = "low_traffic"
+      detail = `Only ${r.reports_last_30d} report${r.reports_last_30d === 1 ? "" : "s"} in last 30 days`
+    }
+    if (!reason) continue
+    attention.push({
+      sap_code: r.sap_code,
+      name: r.name,
+      brand: r.brand,
+      city: r.city,
+      manager_name: r.manager_name,
+      manager_phone: r.manager_phone,
+      manager_email: r.manager_email,
+      reason,
+      detail,
+      last_report_at: r.last_report_at,
+    })
+  }
+  // Most-stale first — never_reported (Infinity) ranks above any
+  // last_report timestamp, so brand-new stores show at the top.
+  attention.sort((a, b) => {
+    const aMs = a.last_report_at ? Date.parse(a.last_report_at) : 0
+    const bMs = b.last_report_at ? Date.parse(b.last_report_at) : 0
+    return aMs - bMs
   })
 
   // Stats-card aggregates. MoM growth is computed against the prior calendar
@@ -245,5 +320,5 @@ export default async function HoStoresPage() {
     pct_acked_within_2h: pctAckUnder2h,
   }
 
-  return <StoresClient rows={rows} summary={summary} />
+  return <StoresClient rows={rows} summary={summary} attention={attention} />
 }

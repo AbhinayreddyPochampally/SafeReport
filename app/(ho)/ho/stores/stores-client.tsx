@@ -14,6 +14,7 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  Phone,
   Plus,
   QrCode,
   RotateCcw,
@@ -65,6 +66,9 @@ export type StoreRow = {
   report_count: number
   qr_downloaded_at: string | null
   created_at: string | null
+  /** mig 005 — non-null means HO has phoned the manager and dismissed
+   * the attention panel for this store. */
+  attention_handled_at: string | null
   // Adoption aggregates — see app/(ho)/ho/stores/page.tsx for derivation.
   last_report_at: string | null
   reports_this_month: number
@@ -73,6 +77,25 @@ export type StoreRow = {
   distinct_reporters: number
   median_ack_hours: number | null
   pct_acked_within_24h: number | null
+}
+
+/**
+ * One row in the "Stores needing attention" panel at the top of the page.
+ * Server-computed (see app/(ho)/ho/stores/page.tsx) so the client only
+ * decides how to render and dismiss.
+ */
+export type AttentionItem = {
+  sap_code: string
+  name: string
+  brand: string
+  city: string
+  manager_name: string | null
+  manager_phone: string | null
+  manager_email: string | null
+  reason: "never_reported" | "dormant" | "low_traffic"
+  /** Short human-readable reason line, e.g. "Last report 47 days ago". */
+  detail: string
+  last_report_at: string | null
 }
 
 /**
@@ -107,29 +130,6 @@ function tierOf(lastReportAt: string | null): ActivityTier {
   return "dormant"
 }
 
-/** Human-readable relative time ("2d ago" / "6h ago" / "just now"). */
-function formatRelative(iso: string | null): string {
-  if (!iso) return "—"
-  const ms = Date.now() - Date.parse(iso)
-  if (Number.isNaN(ms)) return "—"
-  const mins = Math.max(0, Math.floor(ms / 60_000))
-  if (mins < 1) return "just now"
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 48) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 60) return `${days}d ago`
-  const months = Math.floor(days / 30)
-  return `${months}mo ago`
-}
-
-function formatHours(h: number | null): string {
-  if (h == null) return "—"
-  if (h < 1) return `${Math.round(h * 60)}m`
-  if (h < 48) return `${Math.round(h)}h`
-  return `${Math.round(h / 24)}d`
-}
-
 const STATUS_OPTIONS: ReadonlyArray<"all" | StoreStatus> = [
   "all",
   "active",
@@ -148,10 +148,21 @@ const ACTIVITY_OPTIONS: ReadonlyArray<"all" | ActivityTier> = [
 export function StoresClient({
   rows,
   summary,
+  attention,
 }: {
   rows: StoreRow[]
   summary: StoresSummary
+  attention: AttentionItem[]
 }) {
+  // Local optimistic-dismiss state — when HO clicks Mark resolved, drop
+  // the row immediately and POST in the background. If the network call
+  // fails, fall back to re-adding the row via router.refresh() so the
+  // server-derived list is authoritative again.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const visibleAttention = useMemo(
+    () => attention.filter((a) => !dismissed.has(a.sap_code)),
+    [attention, dismissed],
+  )
   const router = useRouter()
   const searchParams = useSearchParams()
   // Allow deep-linking via ?q=... (e.g. from the Overview quiet-stores card).
@@ -205,6 +216,44 @@ export function StoresClient({
     setActivityFilter("all")
     setShowNewOnly(false)
     setPage(1)
+  }
+
+  // Optimistic-dismiss handler for the AttentionPanel. Drops the row
+  // locally on click, fires POST /api/ho-store-attention. On failure we
+  // restore the row and surface a toast so the user knows the click
+  // didn't stick.
+  async function resolveAttention(sap_code: string) {
+    setDismissed((prev) => {
+      const next = new Set(prev)
+      next.add(sap_code)
+      return next
+    })
+    try {
+      const res = await fetch("/api/ho-store-attention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sap_code }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string
+        } | null
+        throw new Error(body?.error || `HTTP ${res.status}`)
+      }
+      // Server is authoritative — refresh so a later page load shows the
+      // dismiss state coming from the DB, not just local memory.
+      router.refresh()
+      setToast({ kind: "ok", msg: `Marked ${sap_code} as resolved.` })
+    } catch (e) {
+      // Restore the row so the user sees their click didn't take.
+      setDismissed((prev) => {
+        const next = new Set(prev)
+        next.delete(sap_code)
+        return next
+      })
+      const msg = e instanceof Error ? e.message : "Couldn't mark resolved."
+      setToast({ kind: "err", msg })
+    }
   }
 
   const brands = useMemo(
@@ -462,6 +511,17 @@ export function StoresClient({
         </div>
       </header>
 
+      {/* Attention panel — only renders when there's at least one store
+        * surfacing as never-reported / dormant / low-traffic AND HO hasn't
+        * already dismissed it. Sits above the stats cards so it's the
+        * first thing HO sees on the page when there's work to do. */}
+      {visibleAttention.length > 0 && (
+        <AttentionPanel
+          items={visibleAttention}
+          onResolve={resolveAttention}
+        />
+      )}
+
       {/* Stats cards --------------------------------------------------- */}
       <StatsCards
         summary={summary}
@@ -599,8 +659,11 @@ export function StoresClient({
         </div>
       </div>
 
-      {/* Table ------------------------------------------------------- */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {/* Table — Activity and Engagement columns moved to /ho/analytics;
+        * the Stores tab is now purely the roster + admin actions. QR and
+        * Edit are each in their own column with breathing room so the
+        * Actions area no longer reads as a single cramped button group. */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <table className="w-full text-[13px]">
           <thead className="bg-slate-50 text-slate-500 text-[10.5px] uppercase tracking-wide font-bold">
             <tr>
@@ -608,18 +671,17 @@ export function StoresClient({
               <th className="text-left px-4 py-2.5">Store</th>
               <th className="text-left px-4 py-2.5 w-[110px]">Brand</th>
               <th className="text-left px-4 py-2.5 w-[140px]">City · State</th>
-              <th className="text-left px-4 py-2.5 w-[220px]">Manager</th>
-              <th className="text-left px-4 py-2.5 w-[100px]">Status</th>
-              <th className="text-left px-4 py-2.5 w-[200px]">Activity</th>
-              <th className="text-left px-4 py-2.5 w-[150px]">Engagement</th>
-              <th className="text-right px-4 py-2.5 w-[140px]">Actions</th>
+              <th className="text-left px-4 py-2.5 w-[240px]">Manager</th>
+              <th className="text-left px-4 py-2.5 w-[140px]">Status</th>
+              <th className="text-center px-3 py-2.5 w-[88px]">QR</th>
+              <th className="text-center px-3 py-2.5 w-[72px]">Edit</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={8}
                   className="px-4 py-12 text-center text-[13px] text-slate-500"
                 >
                   No stores match the current filters.
@@ -711,33 +773,28 @@ export function StoresClient({
                       storeStatus={r.status}
                     />
                   </td>
-                  <ActivityCell
-                    row={r}
-                    tier={tiersByCode.get(r.sap_code) ?? "never"}
-                  />
-                  <EngagementCell row={r} />
-                  <td className="px-4 py-3 align-top text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => downloadQr(r.sap_code)}
-                        title="Download QR poster"
-                        aria-label={`Download QR poster for ${r.sap_code}`}
-                        className="inline-flex items-center gap-1 px-2 h-8 text-[11.5px] text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50"
-                      >
-                        <QrCode className="h-3.5 w-3.5" />
-                        QR
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(r)}
-                        title="Edit store"
-                        aria-label={`Edit ${r.sap_code}`}
-                        className="inline-flex items-center justify-center w-8 h-8 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                  <td className="px-3 py-3 align-top text-center">
+                    <button
+                      type="button"
+                      onClick={() => downloadQr(r.sap_code)}
+                      title="Download QR poster"
+                      aria-label={`Download QR poster for ${r.sap_code}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 h-8 text-[11.5px] font-medium text-slate-700 border border-slate-300 rounded-md hover:border-indigo-400 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      <QrCode className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      QR
+                    </button>
+                  </td>
+                  <td className="px-3 py-3 align-top text-center">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(r)}
+                      title="Edit store"
+                      aria-label={`Edit ${r.sap_code}`}
+                      className="inline-flex items-center justify-center w-8 h-8 text-slate-700 border border-slate-300 rounded-md hover:border-indigo-400 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -1337,109 +1394,6 @@ function FilterChip({
  * Tier colours follow the project palette (no green / no red):
  *   Active → teal-700, Quiet → sky-700, Dormant → slate-600, Never → slate-400.
  */
-function ActivityCell({
-  row,
-  tier,
-}: {
-  row: StoreRow
-  tier: ActivityTier
-}) {
-  const cfg = ACTIVITY_PILL[tier]
-  const delta = row.reports_this_month - row.reports_last_month
-  return (
-    <td className={`px-4 py-3 align-top border-l-[3px] ${cfg.bar}`}>
-      {tier === "never" ? (
-        <div className="space-y-1">
-          <div className="text-[11px] text-slate-500">
-            {row.qr_downloaded_at
-              ? `Last reported never · QR sent ${formatRelative(row.qr_downloaded_at)}`
-              : "No reports yet · QR not distributed"}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-0.5">
-          <div className="flex items-baseline gap-1.5 flex-wrap">
-            <span className={`text-[15px] font-semibold tabular-nums ${cfg.num}`}>
-              {row.reports_this_month}
-            </span>
-            <span className="text-[10.5px] text-slate-500">this month</span>
-            {delta !== 0 && (
-              <span
-                className={`inline-flex items-center gap-0.5 text-[10.5px] font-medium ${
-                  delta > 0 ? "text-teal-700" : "text-orange-700"
-                }`}
-                title={`vs ${row.reports_last_month} last month`}
-              >
-                {delta > 0 ? (
-                  <TrendingUp className="h-3 w-3" />
-                ) : (
-                  <TrendingDown className="h-3 w-3" />
-                )}
-                {delta > 0 ? `+${delta}` : delta}
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-slate-500">
-            <span className="tabular-nums font-medium text-slate-700">
-              {row.reports_last_30d}
-            </span>{" "}
-            last 30d
-            {row.report_count !== row.reports_last_30d && (
-              <>
-                {" · "}
-                <span className="tabular-nums">{row.report_count}</span> total
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </td>
-  )
-}
-
-/**
- * Engagement cell — unique reporters (lifetime) + manager response signal
- * (median acknowledgement time + % acked under 24h). Renders "—" when
- * the store has no reports yet.
- */
-function EngagementCell({ row }: { row: StoreRow }) {
-  if (row.report_count === 0) {
-    return (
-      <td className="px-4 py-3 align-top">
-        <span className="text-[11.5px] text-slate-400">—</span>
-      </td>
-    )
-  }
-  const ackHealthy =
-    row.median_ack_hours != null && row.median_ack_hours < 24
-  const ackTone = ackHealthy ? "text-teal-700" : "text-orange-700"
-  return (
-    <td className="px-4 py-3 align-top">
-      <div className="text-[13px]">
-        <span className="font-medium tabular-nums">
-          {row.distinct_reporters}
-        </span>{" "}
-        <span className="text-[11px] text-slate-500">
-          {row.distinct_reporters === 1 ? "reporter" : "reporters"}
-        </span>
-      </div>
-      <div className="text-[11px] text-slate-500 mt-1">
-        Mgr ack{" "}
-        <span className={`font-medium ${ackTone}`}>
-          {formatHours(row.median_ack_hours)}
-        </span>
-        {row.pct_acked_within_24h != null && (
-          <>
-            {" · "}
-            <span className="tabular-nums">{row.pct_acked_within_24h}%</span>
-            <span className="text-slate-400">{"<"}24h</span>
-          </>
-        )}
-      </div>
-    </td>
-  )
-}
-
 /** Tailwind class config for each activity tier. */
 const ACTIVITY_PILL: Record<
   ActivityTier,
@@ -1572,6 +1526,159 @@ type ActivityCounts = {
  * fixed reference frame at the top of the page while they slice the table
  * below.
  */
+
+/**
+ * Stores-needing-attention panel.
+ *
+ * Sits above the stats cards when there's at least one un-resolved row.
+ * Each card is one store: brand + name, the reason it's flagged (with a
+ * tone-appropriate accent), the manager's phone for HO to call, and a
+ * Mark-resolved button that POSTs to /api/ho-store-attention.
+ *
+ * Design choices:
+ *  - Orange-700 accent header so the panel reads as "this needs your
+ *    attention" without using red (palette rule). Soft orange tinted
+ *    bg matches the queue-card pattern from Overview.
+ *  - Manager phone is a tel: link — one tap on mobile, click to dial on
+ *    desktops with a default handler. The HO actually calls offline;
+ *    this is just an affordance.
+ *  - Cards collapse to 1 column on phones, 2 on md+ — fits 4-6 items
+ *    above the fold without taking over the page.
+ */
+function AttentionPanel({
+  items,
+  onResolve,
+}: {
+  items: AttentionItem[]
+  onResolve: (sap_code: string) => void | Promise<void>
+}) {
+  return (
+    <section
+      aria-label="Stores needing attention"
+      className="mb-5 overflow-hidden rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm"
+    >
+      <header className="flex items-center justify-between gap-3 border-b border-orange-100 bg-gradient-to-r from-orange-100 via-orange-50 to-transparent px-5 py-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span
+            aria-hidden
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-200 to-orange-300 text-orange-800 ring-1 ring-orange-200 shadow-sm"
+          >
+            <AlertTriangle className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-orange-700">
+              Stores needing attention
+            </p>
+            <p className="text-[12.5px] text-slate-700">
+              Call the store manager · mark resolved when handled · row drops out
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex h-6 min-w-[28px] shrink-0 items-center justify-center rounded-full bg-orange-600 px-2 text-[11px] font-bold text-white tabular-nums shadow-sm">
+          {items.length}
+        </span>
+      </header>
+      <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
+        {items.map((it) => (
+          <AttentionCard key={it.sap_code} item={it} onResolve={onResolve} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/**
+ * Single attention card. State is owned by the parent — we just render
+ * the props and call onResolve when the button is tapped. The local
+ * `busy` state hides duplicate clicks during the in-flight POST.
+ */
+function AttentionCard({
+  item,
+  onResolve,
+}: {
+  item: AttentionItem
+  onResolve: (sap_code: string) => void | Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const reasonLabel: Record<AttentionItem["reason"], string> = {
+    never_reported: "Never reported",
+    dormant: "Dormant",
+    low_traffic: "Low traffic",
+  }
+  // Tone differentiates between "this is a brand-new store" vs. "this
+  // store stopped reporting" — different conversations with the manager.
+  const reasonTone: Record<AttentionItem["reason"], string> = {
+    never_reported: "bg-amber-100 text-amber-800 border-amber-200",
+    dormant: "bg-orange-100 text-orange-800 border-orange-200",
+    low_traffic: "bg-sky-100 text-sky-800 border-sky-200",
+  }
+  async function onClick() {
+    if (busy) return
+    setBusy(true)
+    try {
+      await onResolve(item.sap_code)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <li className="rounded-lg border border-orange-200 bg-white px-3 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-mono text-slate-500">
+            {item.sap_code}
+          </p>
+          <p className="text-[13.5px] font-semibold text-slate-900 truncate">
+            {item.name}
+          </p>
+          <p className="text-[11.5px] text-slate-500 truncate">
+            {item.brand} · {item.city}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${reasonTone[item.reason]}`}
+        >
+          {reasonLabel[item.reason]}
+        </span>
+      </div>
+      <p className="mt-2 text-[12px] text-slate-700">{item.detail}</p>
+      <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap">
+        {item.manager_phone ? (
+          // tel: link so HO can tap to dial from a phone or click to
+          // invoke their default phone handler on a desktop (Teams/
+          // FaceTime/etc). The offline call is the actual workflow;
+          // this is just an affordance to make it one fewer step.
+          <a
+            href={`tel:${item.manager_phone.replace(/\s+/g, "")}`}
+            className="inline-flex items-center gap-1.5 text-[12px] text-indigo-700 hover:text-indigo-900 font-medium"
+          >
+            <Phone className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+            {item.manager_name ?? "Manager"} · {item.manager_phone}
+          </a>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11.5px] text-orange-700">
+            <AlertTriangle className="h-3 w-3" />
+            No manager phone on file
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-md border border-orange-300 bg-white px-2.5 h-7 text-[11.5px] font-medium text-orange-800 hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+          )}
+          Mark resolved
+        </button>
+      </div>
+    </li>
+  )
+}
+
 function StatsCards({
   summary,
   activityCounts,
