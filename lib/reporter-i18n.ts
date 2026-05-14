@@ -136,15 +136,20 @@ export type StringKey =
   | "pwa.dismiss_aria"
   | "pwa.notif.allowed"
   | "pwa.notif.blocked"
+  | "pwa.notif.blocked_ios_sub"
+  | "pwa.notif.blocked_android_sub"
   | "pwa.notif.allow"
   | "pwa.notif.allowed_sub"
   | "pwa.notif.blocked_sub"
   | "pwa.notif.allow_sub"
+  | "pwa.notif.pending_install"
+  | "pwa.notif.pending_install_sub"
   | "pwa.cta.allow"
   | "pwa.install.installed"
   | "pwa.install.installable"
   | "pwa.install.installed_sub"
   | "pwa.install.installable_sub"
+  | "pwa.install.followup"
   | "pwa.cta.install"
   // Category labels + blurbs
   | "category.near_miss.label"
@@ -287,22 +292,32 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "pwa.eyebrow": "Set up SafeReport",
     "pwa.title": "Two quick steps so you can report faster next time",
     "pwa.dismiss_aria": "Hide for this session",
-    "pwa.notif.allowed": "Notifications allowed",
-    "pwa.notif.blocked":
-      "Notifications blocked — enable from your browser settings",
-    "pwa.notif.allow": "Allow notifications",
-    "pwa.notif.allowed_sub": "We'll ping you when Head Office responds.",
+    "pwa.notif.allowed": "Notifications on",
+    "pwa.notif.blocked": "Notifications blocked",
     "pwa.notif.blocked_sub":
-      "Tap the lock icon in the address bar to re-enable.",
-    "pwa.notif.allow_sub": "Hear back when Head Office responds.",
+      "Tap the lock icon in the address bar and allow notifications.",
+    "pwa.notif.blocked_ios_sub":
+      "Open Settings on your iPhone → Notifications → SafeReport, and turn on Allow Notifications.",
+    "pwa.notif.blocked_android_sub":
+      "Open Settings on your phone → Apps → SafeReport → Notifications, and turn them on.",
+    "pwa.notif.allow": "Allow notifications",
+    "pwa.notif.allowed_sub":
+      "We'll alert you when Head Office responds to your report.",
+    "pwa.notif.allow_sub":
+      "Hear back when Head Office responds to your report.",
+    "pwa.notif.pending_install": "Allow notifications",
+    "pwa.notif.pending_install_sub":
+      "Available after installing — finish step 1 first.",
     "pwa.cta.allow": "Allow",
-    "pwa.install.installed": "Added to home screen",
-    "pwa.install.installable": "Add to home screen",
+    "pwa.install.installed": "Installed on home screen",
+    "pwa.install.installable": "Install SafeReport",
     "pwa.install.installed_sub":
       "Tap the SafeReport icon next time — no need to scan the QR again.",
     "pwa.install.installable_sub":
-      "One tap next time, instead of scanning the QR every time.",
-    "pwa.cta.install": "Add",
+      "Adds a home-screen shortcut — one tap next time, no scanning.",
+    "pwa.install.followup":
+      "Now open SafeReport from your home screen icon to finish — that's where notifications get switched on.",
+    "pwa.cta.install": "Install",
 
     "category.near_miss.label": "Near Miss",
     "category.near_miss.blurb":
@@ -451,24 +466,32 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "pwa.title":
       "ಮುಂದಿನ ಬಾರಿ ವೇಗವಾಗಿ ವರದಿ ಮಾಡಲು ಎರಡು ಚಿಕ್ಕ ಹಂತಗಳು",
     "pwa.dismiss_aria": "ಈ ಬಾರಿಗೆ ಮರೆಮಾಡಿ",
-    "pwa.notif.allowed": "ಸೂಚನೆಗಳಿಗೆ ಅನುಮತಿ ನೀಡಲಾಗಿದೆ",
-    "pwa.notif.blocked":
-      "ಸೂಚನೆಗಳನ್ನು ತಡೆಯಲಾಗಿದೆ – ನಿಮ್ಮ ಬ್ರೌಸರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಂದ ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "pwa.notif.allowed": "ಸೂಚನೆಗಳು ಸಕ್ರಿಯ",
+    "pwa.notif.blocked": "ಸೂಚನೆಗಳನ್ನು ತಡೆಯಲಾಗಿದೆ",
+    "pwa.notif.blocked_sub":
+      "ಮತ್ತೆ ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಳಾಸ ಪಟ್ಟಿಯಲ್ಲಿರುವ ಬೀಗದ ಚಿಹ್ನೆಯನ್ನು ಒತ್ತಿ ಮತ್ತು ಅನುಮತಿಸಿ.",
+    "pwa.notif.blocked_ios_sub":
+      "ನಿಮ್ಮ iPhone-ನ Settings → Notifications → SafeReport ತೆರೆದು Allow Notifications ಆನ್ ಮಾಡಿ.",
+    "pwa.notif.blocked_android_sub":
+      "ನಿಮ್ಮ ಫೋನ್‌ನ Settings → Apps → SafeReport → Notifications ತೆರೆದು ಅವುಗಳನ್ನು ಆನ್ ಮಾಡಿ.",
     "pwa.notif.allow": "ಸೂಚನೆಗಳಿಗೆ ಅನುಮತಿ ನೀಡಿ",
     "pwa.notif.allowed_sub":
-      "ಮುಖ್ಯ ಕಚೇರಿ ಪ್ರತಿಕ್ರಿಯಿಸಿದಾಗ ನಿಮಗೆ ತಿಳಿಸುತ್ತೇವೆ.",
-    "pwa.notif.blocked_sub":
-      "ಮತ್ತೆ ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಳಾಸ ಪಟ್ಟಿಯಲ್ಲಿರುವ ಬೀಗದ ಚಿಹ್ನೆಯನ್ನು ಒತ್ತಿ.",
+      "ಮುಖ್ಯ ಕಚೇರಿ ನಿಮ್ಮ ವರದಿಗೆ ಪ್ರತಿಕ್ರಿಯಿಸಿದಾಗ ನಿಮಗೆ ತಿಳಿಸುತ್ತೇವೆ.",
     "pwa.notif.allow_sub":
-      "ಮುಖ್ಯ ಕಚೇರಿ ಪ್ರತಿಕ್ರಿಯಿಸಿದಾಗ ಮಾಹಿತಿ ಪಡೆಯಿರಿ.",
-    "pwa.cta.allow": "ಅನುಮತಿ ನೀಡಿ",
-    "pwa.install.installed": "ಮುಖಪುಟಕ್ಕೆ ಸೇರಿಸಲಾಗಿದೆ",
-    "pwa.install.installable": "ಮುಖಪುಟಕ್ಕೆ ಸೇರಿಸಿ",
+      "ಮುಖ್ಯ ಕಚೇರಿ ನಿಮ್ಮ ವರದಿಗೆ ಪ್ರತಿಕ್ರಿಯಿಸಿದಾಗ ಮಾಹಿತಿ ಪಡೆಯಿರಿ.",
+    "pwa.notif.pending_install": "ಸೂಚನೆಗಳಿಗೆ ಅನುಮತಿ ನೀಡಿ",
+    "pwa.notif.pending_install_sub":
+      "ಅಪ್ಲಿಕೇಶನ್ ಇನ್‌ಸ್ಟಾಲ್ ಆದ ಬಳಿಕ ಲಭ್ಯ – ಮೊದಲು ಹಂತ 1 ಮುಗಿಸಿ.",
+    "pwa.cta.allow": "ಅನುಮತಿಸಿ",
+    "pwa.install.installed": "ಮುಖಪುಟದಲ್ಲಿ ಇನ್‌ಸ್ಟಾಲ್ ಆಗಿದೆ",
+    "pwa.install.installable": "SafeReport ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ",
     "pwa.install.installed_sub":
       "ಮುಂದಿನ ಬಾರಿ SafeReport ಚಿಹ್ನೆಯನ್ನು ಒತ್ತಿ – QR ಮತ್ತೊಮ್ಮೆ ಸ್ಕ್ಯಾನ್ ಮಾಡುವ ಅಗತ್ಯವಿಲ್ಲ.",
     "pwa.install.installable_sub":
-      "ಪ್ರತಿ ಬಾರಿ QR ಸ್ಕ್ಯಾನ್ ಮಾಡುವ ಬದಲು, ಮುಂದಿನ ಬಾರಿ ಒಂದೇ ಒತ್ತುಗೆ.",
-    "pwa.cta.install": "ಸೇರಿಸಿ",
+      "ಮುಖಪುಟ ಶಾರ್ಟ್‌ಕಟ್ ಸೇರಿಸುತ್ತದೆ – ಮುಂದಿನ ಬಾರಿ ಸ್ಕ್ಯಾನ್ ಬೇಡ, ಒಂದೇ ಒತ್ತುಗೆ.",
+    "pwa.install.followup":
+      "ಮುಗಿಸಲು ಈಗ ನಿಮ್ಮ ಮುಖಪುಟದ SafeReport ಚಿಹ್ನೆಯಿಂದ ತೆರೆಯಿರಿ – ಸೂಚನೆಗಳನ್ನು ಅಲ್ಲಿಂದಲೇ ಆನ್ ಮಾಡಬಹುದು.",
+    "pwa.cta.install": "ಇನ್‌ಸ್ಟಾಲ್",
 
     "category.near_miss.label": "ಸಮೀಪದ ತಪ್ಪಿಸಿಕೊಳ್ಳುವಿಕೆ",
     "category.near_miss.blurb":
@@ -503,9 +526,9 @@ export function readLocale(): Locale {
   if (typeof window === "undefined") return "en"
   try {
     const v = window.localStorage.getItem(LOCALE_STORAGE_KEY)
-    if (v && (LOCALES as readonly string[]).includes(v)) return v as Locale
+    if (v === "en" || v === "kn") return v
   } catch {
-    /* localStorage unavailable */
+    /* localStorage unavailable — fall back to default */
   }
   return "en"
 }

@@ -1,0 +1,80 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>SafeReport App Icon</title>
+  <defs>
+    <linearGradient id="bg" x1="160" y1="80" x2="880" y2="940" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1F46"/>
+      <stop offset="1" stop-color="#03142F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(520 410) rotate(90) scale(520)">
+      <stop offset="0" stop-color="#12366D" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#0A1F46" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000000" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <!-- App icon background -->
+  <rect width="1024" height="1024" rx="210" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="210" fill="url(#glow)"/>
+  <!-- Shield -->
+  <path
+    d="M512 113
+       C430 203 318 247 209 257
+       V512
+       C209 681 333 796 512 880
+       C691 796 815 681 815 512
+       V257
+       C706 247 594 203 512 113Z"
+    fill="#FFFFFF"
+    filter="url(#softShadow)"
+  />
+  <!-- Inner shield cutout -->
+  <path
+    d="M512 176
+       C438 239 347 274 271 282
+       V511
+       C271 640 361 734 512 808
+       C663 734 753 640 753 511
+       V282
+       C677 274 586 239 512 176Z"
+    fill="#0A1F46"
+  />
+  <!-- Report / speech card -->
+  <path
+    d="M333 333
+       H692
+       C711 333 726 348 726 367
+       V593
+       C726 625 700 651 668 651
+       H515
+       C504 651 493 655 485 663
+       L402 736
+       C390 746 371 738 371 722
+       V674
+       C371 661 361 651 348 651
+       H333
+       C314 651 299 636 299 617
+       V367
+       C299 348 314 333 333 333Z"
+    fill="#FFFFFF"
+    filter="url(#softShadow)"
+  />
+  <!-- Text lines -->
+  <rect x="374" y="419" width="164" height="26" rx="13" fill="#0A1F46"/>
+  <rect x="374" y="489" width="164" height="26" rx="13" fill="#0A1F46"/>
+  <rect x="374" y="559" width="164" height="26" rx="13" fill="#0A1F46"/>
+  <!-- Alert mark -->
+  <path
+    d="M594 389
+       C594 376 605 365 618 365
+       H642
+       C655 365 666 376 665 389
+       L653 526
+       C652 541 640 553 625 553
+       C610 553 598 541 597 526
+       L594 389Z"
+    fill="#EA580C"
+  />
+  <circle cx="625" cy="611" r="32" fill="#EA580C"/>
+</svg>

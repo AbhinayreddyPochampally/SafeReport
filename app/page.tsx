@@ -1,44 +1,18 @@
-import Link from "next/link"
+import { redirect } from "next/navigation"
 
-/**
- * Root page — not a real entry point for users.
- *
- * Reporters arrive via the QR poster at /r/[sap_code].
- * Managers at /m/[sap_code]. HO at /ho.
- * This page exists so the root URL doesn't 404 during internal testing.
- */
+// Bare URL is not a real entry point for any user.
+//
+// Reporters arrive via QR posters at /r/[sap_code]. Managers go to
+// /m/[sap_code] from their training link. HO goes to /ho.
+//
+// Anyone who lands on / either typed the domain by hand (very rare in
+// the pilot) or is hitting an installed PWA that was set up before the
+// per-store manifest landed (in which case start_url is still "/").
+//
+// In both cases, the right behavior is the same as the per-store install
+// icon: drop them on the demo store's reporter landing. From there a
+// reporter can either submit a report against the demo store (fine for
+// internal testing) or scan their real QR to land on their actual store.
 export default function RootPage() {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 px-6 py-16">
-      <h1 className="font-display text-[28px] font-bold leading-9 text-slate-900">
-        SafeReport
-      </h1>
-      <p className="text-[15px] leading-6 text-slate-600">
-        Workplace safety incident reporting for Aditya Birla Fashion &amp; Retail.
-      </p>
-      <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-[13px] leading-5 text-slate-700">
-        <p className="font-medium text-slate-900">Where to go</p>
-        <ul className="space-y-2">
-          <li>
-            Reporter:{" "}
-            <Link
-              href="/r/PNT-MUM-047"
-              className="font-medium text-indigo-700 underline"
-            >
-              /r/PNT-MUM-047
-            </Link>{" "}
-            <span className="text-slate-400">(demo store)</span>
-          </li>
-          <li>
-            Manager: <span className="text-slate-900">/m/[sap_code]</span>
-            <span className="text-slate-400"> — Phase C</span>
-          </li>
-          <li>
-            Head Office: <span className="text-slate-900">/ho</span>
-            <span className="text-slate-400"> — Phase D</span>
-          </li>
-        </ul>
-      </div>
-    </main>
-  )
+  redirect("/r/PNT-MUM-047")
 }

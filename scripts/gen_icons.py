@@ -1,104 +1,105 @@
-"""Generate SafeReport PWA icons — 'SR' monogram on indigo-700.
+"""Generate SafeReport PWA icons from the master SVG.
 
-Produces four PNGs:
-  public/icons/icon-192.png         (standard, 192x192)
-  public/icons/icon-512.png         (standard, 512x512)
+Master art: public/icons/safereport-icon.svg (shield + speech bubble + alert
+mark on navy gradient). Produces four PNGs:
+
+  public/icons/icon-192.png          (standard, 192x192)
+  public/icons/icon-512.png          (standard, 512x512)
   public/icons/icon-maskable-512.png (Android adaptive, 512x512 with safe zone)
-  public/apple-touch-icon.png       (iOS home-screen, 180x180)
+  public/apple-touch-icon.png        (iOS home-screen, 180x180)
 
-Palette per CLAUDE.md: indigo-700 background (#4338CA), white glyph.
-Font: DejaVu Sans Bold (system) — IBM Plex is the design system display
-face, but Plex isn't available in the build env, and the launcher icon
-isn't rendered with the app's runtime fonts anyway. DejaVu Sans Bold
-reads cleanly at 48dp on Android.
+Maskable variant: Android adaptive icons crop up to ~20% off each edge for
+shape masking (circle, squircle, teardrop, etc.). We wrap the master art in
+a scale-0.78 transform centered on the canvas, with the navy gradient filling
+the whole tile, so the shield sits well inside the safe zone regardless of
+how aggressively the launcher's mask crops.
+
+Standard variant: SVG rendered as-is (the rx=210 rounded corners are kept;
+iOS uses them for its home-screen tile, modern Chromium ignores them).
+
+Run from the project root: `python3 scripts/gen_icons.py`. Needs cairosvg.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+import cairosvg
 
-# Resolve relative to the script location so this works regardless of CWD.
-# Layout: <repo>/scripts/gen_icons.py → <repo>/public/icons/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-OUT_DIR = PROJECT_ROOT / "public"
-ICONS_DIR = OUT_DIR / "icons"
-
-INDIGO_700 = (67, 56, 202, 255)  # #4338CA
-WHITE = (255, 255, 255, 255)
-
-FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
-TEXT = "SR"
+ICONS_DIR = PROJECT_ROOT / "public" / "icons"
+PUBLIC_DIR = PROJECT_ROOT / "public"
+SOURCE_SVG = ICONS_DIR / "safereport-icon.svg"
 
 
-def fit_text_size(draw: ImageDraw.ImageDraw, target_px: int) -> int:
-    """Binary-search the largest font size whose 'SR' bounding box fits target_px wide."""
-    lo, hi, best = 10, 2000, 10
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        font = ImageFont.truetype(FONT_PATH, mid)
-        bbox = draw.textbbox((0, 0), TEXT, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-        # Constrain by width AND height so the glyph stays vertically centered.
-        if w <= target_px and h <= target_px:
-            best = mid
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    return best
-
-
-def render_monogram(size: int, glyph_pct: float, out_path: Path) -> None:
-    """Render a size×size indigo tile with 'SR' centered.
-
-    glyph_pct: fraction of the canvas the text bounding box should span.
-      - 0.58 for standard icons (uses most of the tile, looks confident)
-      - 0.40 for maskable (inside the inner 62% Android safe zone)
-    """
-    img = Image.new("RGBA", (size, size), INDIGO_700)
-    draw = ImageDraw.Draw(img)
-
-    target_px = int(size * glyph_pct)
-    font_size = fit_text_size(draw, target_px)
-    font = ImageFont.truetype(FONT_PATH, font_size)
-
-    bbox = draw.textbbox((0, 0), TEXT, font=font)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-
-    # PIL's textbbox top is the visual top of the glyph (which can be > 0
-    # because of internal padding) — subtract bbox[0]/bbox[1] when placing
-    # so the glyph is true-centered on the canvas, not centered with its
-    # padding included.
-    x = (size - w) // 2 - bbox[0]
-    y = (size - h) // 2 - bbox[1]
-
-    draw.text((x, y), TEXT, font=font, fill=WHITE)
-
+def render(svg_text: str, size: int, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out_path, format="PNG", optimize=True)
-    print(f"wrote {out_path} ({size}x{size}, font_size={font_size})")
+    cairosvg.svg2png(
+        bytestring=svg_text.encode("utf-8"),
+        output_width=size,
+        output_height=size,
+        write_to=str(out_path),
+    )
+    print(f"wrote {out_path} ({size}x{size})")
+
+
+def maskable_variant(svg_text: str) -> str:
+    """Return a copy of the master SVG with the inner art scaled to 78% of
+    the canvas, centred. Android adaptive icons crop up to 20% off each edge,
+    so this gives the shield plenty of breathing room within the safe zone.
+    The navy gradient background fills the full tile.
+
+    Implementation: find every `<rect ... rx="210" ...>` (the background
+    tiles) and remove the rounded corners — the OS mask handles the shape.
+    Then wrap the rest of the body in a centred scale transform.
+    """
+    # Strip the rounded corners on background rects (mask will handle shape).
+    svg_text = re.sub(r'(<rect[^/>]*?)\srx="210"', r"\1", svg_text)
+
+    # Wrap the painted content (everything after the closing </defs>) in a
+    # scale-0.78 group centred on (512, 512). The background rects stay
+    # unscaled so the gradient fills the whole maskable canvas.
+    defs_close = "</defs>"
+    bg_rects_end = svg_text.find('fill="url(#glow)"/>')
+    if bg_rects_end == -1:
+        raise RuntimeError("Could not locate background rect marker")
+    bg_rects_end = svg_text.find(">", bg_rects_end) + 1  # past the '/>'
+
+    head = svg_text[:bg_rects_end]
+    tail = svg_text[bg_rects_end:]
+    # tail still has the </svg> closing tag at the end — split it off.
+    svg_close = tail.rfind("</svg>")
+    body = tail[:svg_close]
+    closing = tail[svg_close:]
+
+    wrapped = (
+        head
+        + '\n  <g transform="translate(512 512) scale(0.78) translate(-512 -512)">\n'
+        + body
+        + "\n  </g>\n"
+        + closing
+    )
+    return wrapped
 
 
 def main() -> None:
-    # Standard PWA icons — glyph fills ~58% of canvas
-    render_monogram(192, 0.58, ICONS_DIR / "icon-192.png")
-    render_monogram(512, 0.58, ICONS_DIR / "icon-512.png")
+    if not SOURCE_SVG.exists():
+        raise SystemExit(f"missing {SOURCE_SVG}")
 
-    # Maskable variant — Android adaptive icons crop up to ~20% off each
-    # edge for shape masking. The "safe zone" is the inner 80% circle, but
-    # to allow some breathing room around the glyph after the mask we keep
-    # the SR inside the inner 60% — i.e. glyph_pct ~= 0.40 of the full
-    # 512×512 canvas.
-    render_monogram(512, 0.40, ICONS_DIR / "icon-maskable-512.png")
+    svg = SOURCE_SVG.read_text(encoding="utf-8")
 
-    # iOS home-screen — 180×180 is the modern Apple touch icon size.
-    # iOS doesn't apply a mask, so we use the same fill ratio as the
-    # standard icons.
-    render_monogram(180, 0.58, OUT_DIR / "apple-touch-icon.png")
+    # Standard icons — render the master SVG as-is.
+    render(svg, 192, ICONS_DIR / "icon-192.png")
+    render(svg, 512, ICONS_DIR / "icon-512.png")
+
+    # iOS home-screen — 180x180.
+    render(svg, 180, PUBLIC_DIR / "apple-touch-icon.png")
+
+    # Maskable — scaled-down variant so adaptive icon masks don't clip the
+    # shield silhouette.
+    maskable_svg = maskable_variant(svg)
+    render(maskable_svg, 512, ICONS_DIR / "icon-maskable-512.png")
 
 
 if __name__ == "__main__":
