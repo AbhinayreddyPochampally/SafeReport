@@ -257,6 +257,18 @@ export function PwaInstallPrompt() {
 
 /* --------------------------------- Step --------------------------------- */
 
+/**
+ * One row inside the install/notifications card.
+ *
+ * Two visual modes:
+ *  - pending (default): full bordered row with icon, title, subtitle and
+ *    the action CTA. Calls the user's attention to what still needs doing.
+ *  - done: a compact single-line pill — small teal check + title only,
+ *    no subtitle, no border, no CTA. The completed step recedes so the
+ *    pending one is the visual focus. The card itself still disappears
+ *    entirely when both steps are done — this is just for the in-between
+ *    half-done state.
+ */
 function Step({
   done,
   icon,
@@ -272,17 +284,29 @@ function Step({
   ctaLabel: string | null
   onCta: () => void
 }) {
+  if (done) {
+    return (
+      <li className="flex items-center gap-2 px-1 py-1">
+        <span
+          className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-50 text-teal-700 ring-1 ring-teal-200"
+          aria-hidden
+        >
+          <Check className="h-3 w-3" strokeWidth={2.5} />
+        </span>
+        <span className="text-[12.5px] font-medium text-slate-700 leading-none">
+          {title}
+        </span>
+      </li>
+    )
+  }
+
   return (
     <li className="flex items-start gap-3 rounded-lg bg-white border border-indigo-100 px-3 py-2.5">
       <span
-        className={`shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full ${
-          done
-            ? "bg-teal-50 text-teal-700 ring-1 ring-teal-200"
-            : "bg-indigo-100 text-indigo-700"
-        }`}
+        className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700"
         aria-hidden
       >
-        {done ? <Check className="h-4 w-4" strokeWidth={2} /> : icon}
+        {icon}
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[13.5px] font-medium text-slate-900 leading-tight">
