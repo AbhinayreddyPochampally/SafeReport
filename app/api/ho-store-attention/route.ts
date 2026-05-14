@@ -1,5 +1,6 @@
 import "server-only"
 import { NextRequest, NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
 
@@ -69,6 +70,9 @@ export async function POST(req: NextRequest) {
   if (!data) {
     return NextResponse.json({ error: "Store not found." }, { status: 404 })
   }
+  // Bust the cached /ho/stores aggregate so the row drops out on the
+  // next page load instead of waiting for the 30-second TTL.
+  revalidateTag("ho-stores-data")
   console.info("[ho-store-attention] resolved", {
     sap,
     by: session.email ?? session.user_id,
@@ -110,6 +114,7 @@ export async function DELETE(req: NextRequest) {
   if (!data) {
     return NextResponse.json({ error: "Store not found." }, { status: 404 })
   }
+  revalidateTag("ho-stores-data")
   console.info("[ho-store-attention] re-flagged", {
     sap,
     by: session.email ?? session.user_id,

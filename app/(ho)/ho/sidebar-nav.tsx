@@ -45,12 +45,17 @@ type Item = {
 }
 
 const ITEMS: Item[] = [
+  // No count on Overview — it's a dashboard, not an inbox. Earlier rev
+  // surfaced the awaiting_ho count here which conflated "things to act
+  // on" with "snapshot of the program" and the user reported the
+  // number as meaningless ("what is the 10th number on the sidebar tab
+  // for overview?").
   {
     href: "/ho",
     label: "Overview",
     icon: LayoutDashboard,
-    countKey: "overview",
   },
+  // Action IS an inbox — keep the count + the breach-flag tint.
   {
     href: "/ho/action",
     label: "Action",
@@ -59,14 +64,20 @@ const ITEMS: Item[] = [
     urgentKey: "action_breached",
     matchPrefix: "/ho/action",
   },
+  // No count on Reports either — the page renders the full roster under
+  // filters; a single number next to the label would either disagree with
+  // the visible row count (when filters are on) or duplicate it (when
+  // they're off). Both options were wrong.
   {
     href: "/ho/all-reports",
     label: "Reports",
     icon: FileText,
-    countKey: "reports",
     matchPrefix: "/ho/all-reports",
   },
   { href: "/ho/analytics", label: "Analytics", icon: BarChart3 },
+  // Stores keeps its count — it's an authoritative "how many active
+  // stores in the pilot" number and matches what HO would re-derive
+  // from the table below.
   {
     href: "/ho/stores",
     label: "Stores",
@@ -103,6 +114,12 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
             <li key={item.href}>
               <Link
                 href={item.href}
+                // Eager prefetch the four primary HO tabs. Each one is a
+                // dynamic server-rendered page and the cold-fetch round
+                // trip is the dominant slowness the user feels on tab
+                // switch. Prefetching on mount + hover lets the RSC
+                // payload be ready in cache by the time the user clicks.
+                prefetch
                 className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors relative ${
                   active
                     ? "bg-gradient-to-r from-indigo-500/30 to-indigo-500/10 text-white font-semibold ring-1 ring-indigo-400/30"

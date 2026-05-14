@@ -288,26 +288,20 @@ export function AnalyticsClient() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
-      {/* Header — branded gradient band (matches the Overview hero strip)
-        * so Analytics doesn't open as a slab of white. */}
-      <header className="mb-5 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
+      {/* Header — same slate band the other HO pages use. The date-range
+        * + totals line stays here because it's load-bearing context for
+        * what the page is showing (this page IS the report on a window). */}
+      <header className="mb-5 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700">
-            Pilot · ABFRL
-          </p>
-          <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900 mt-0.5">
+          <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
             Analytics
           </h1>
-          <p className="text-[12.5px] text-slate-700 mt-1">
-            {data ? (
-              <>
-                {prettyDate(data.range.from)} → {prettyDate(data.range.to)} ·{" "}
-                {data.totals.reports} reports · {data.granularity} bars
-              </>
-            ) : (
-              "Pilot-wide trends. Adjust the range below."
-            )}
-          </p>
+          {data && (
+            <p className="text-[12px] text-slate-600 mt-0.5 tabular-nums">
+              {prettyDate(data.range.from)} → {prettyDate(data.range.to)} ·{" "}
+              {data.totals.reports} reports · {data.granularity} bars
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {busy && (
@@ -452,7 +446,7 @@ export function AnalyticsClient() {
       <header className="flex items-start gap-3 mb-4">
         <span
           aria-hidden
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-teal-300 text-teal-800 shrink-0 ring-2 ring-teal-100 shadow-sm"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800 shrink-0 ring-2 ring-slate-100 shadow-sm"
         >
           <Clock className="h-5 w-5" />
         </span>
@@ -745,13 +739,13 @@ function TimeCard({
           ? `Down ${deltaMagnitude} vs previous period`
           : `${deltaMagnitude} vs previous period`
   return (
-    <div className="bg-gradient-to-br from-white via-teal-50 to-teal-100/80 border border-teal-100 rounded-xl p-4 flex flex-col shadow-sm">
+    <div className="bg-gradient-to-br from-white via-slate-50 to-slate-200 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-teal-200 text-teal-700 shrink-0 ring-1 ring-teal-200 shadow-sm"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-slate-700 shrink-0 ring-1 ring-slate-200 shadow-sm"
           >
             <Icon className="h-4 w-4" />
           </span>

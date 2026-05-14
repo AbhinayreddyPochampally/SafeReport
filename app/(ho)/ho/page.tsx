@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { unstable_cache } from "next/cache"
 import {
   Activity,
   ArrowRight,
@@ -143,7 +144,20 @@ function isoDate(d: Date): string {
  * cheap. The open-queue query is separate because open reports can predate
  * the 14-day window.
  */
-async function fetchLandingData() {
+/**
+ * 30 s cache around the Overview data fetch. Five parallel Supabase queries
+ * + an O(N) aggregate pass; running on every navigation was the visible
+ * cause of "tab switch takes a second". Mutating endpoints (POST /api/reports,
+ * /api/ho-actions, /api/resolutions) revalidate the tag to keep the page
+ * honest within a tab-switch round trip.
+ */
+const fetchLandingData = unstable_cache(
+  fetchLandingDataImpl,
+  ["ho-overview-data"],
+  { revalidate: 30, tags: ["ho-overview-data"] },
+)
+
+async function fetchLandingDataImpl() {
   const admin = createSupabaseAdminClient()
   const now = new Date()
   const weekStartMs = now.getTime() - WEEK_MS
@@ -403,35 +417,29 @@ export default async function HoLandingPage() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Page header — branded gradient band so the top of the page carries
-        * visible colour the moment it loads. Was previously plain text on
-        * the page background and read as a wall of white. */}
-      <header className="mb-6 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm">
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700">
-          Pilot · ABFRL · 20 stores
+      {/* Page header — single clean slate-to-white band. Earlier rev had
+        * an indigo→sky→teal three-stop gradient with an eyebrow + subtitle;
+        * the colours didn't blend, the eyebrow duplicated info that's
+        * already in the sidebar (pilot · 20 stores), and the subtitle
+        * varied per page. Now: heading only, consistent band across all
+        * four HO pages. The "Updated …" timestamp lives on Overview only
+        * because it's the only page that's a snapshot of "now". */}
+      <header className="mb-6 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
+        <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
+          Overview
+        </h1>
+        <p className="text-[11.5px] text-slate-500 tabular-nums shrink-0">
+          Updated{" "}
+          {new Date().toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          })}{" "}
+          IST
         </p>
-        <div className="mt-1 flex items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
-              Overview
-            </h1>
-            <p className="mt-1 text-[13px] text-slate-700">
-              A pulse on the safety program — and where to act this morning.
-            </p>
-          </div>
-          <p className="text-[11.5px] text-slate-600 tabular-nums shrink-0">
-            Updated{" "}
-            {new Date().toLocaleString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            })}{" "}
-            IST
-          </p>
-        </div>
       </header>
 
       {/* Velocity strip — four ops metrics, WoW deltas */}
@@ -568,12 +576,12 @@ function VelocityTile({
         : `${(Math.abs(delta) * 100).toFixed(1)} pp ${better ? "up" : "down"} vs last week`
 
   return (
-    <div className="bg-gradient-to-br from-white via-teal-50 to-teal-100/80 border border-teal-100 rounded-xl p-4 flex flex-col shadow-sm">
+    <div className="bg-gradient-to-br from-white via-slate-50 to-slate-200 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-teal-200 text-teal-700 shrink-0 ring-1 ring-teal-200 shadow-sm"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-slate-700 shrink-0 ring-1 ring-slate-200 shadow-sm"
           >
             <Icon className="h-4 w-4" />
           </span>

@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache"
 import { requireHoSession } from "@/lib/ho-auth"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
@@ -96,9 +97,35 @@ function median(xs: number[]): number | null {
     : sorted[mid]
 }
 
-export default async function HoStoresPage() {
-  await requireHoSession("/ho/stores")
+/**
+ * Compute the entire page data — stores roster + per-store aggregates +
+ * attention candidates + summary stats — wrapped in unstable_cache with
+ * a 30-second TTL.
+ *
+ * Why: this fetch was the dominant cost of a Stores-tab page load. Two
+ * Supabase queries, one of them a full reports-table scan, plus an O(N)
+ * pass to build per-store aggregates. With force-dynamic the whole thing
+ * ran on every navigation, and tab switches felt a beat slow because of
+ * it.
+ *
+ * 30 s is short enough that newly-added stores / freshly-resolved
+ * attention rows appear within a refresh, and long enough that walking
+ * between HO tabs in the same minute is instant. The mutation endpoints
+ * (ho-stores POST/PATCH, ho-store-attention POST/DELETE) call
+ * revalidateTag("ho-stores-data") to bust the cache immediately on
+ * write, so the user never sees stale state on their own action.
+ */
+const getStoresPageData = unstable_cache(
+  fetchStoresPageData,
+  ["ho-stores-data"],
+  { revalidate: 30, tags: ["ho-stores-data"] },
+)
 
+async function fetchStoresPageData(): Promise<{
+  rows: StoreRow[]
+  summary: StoresSummary
+  attention: AttentionItem[]
+}> {
   const admin = createSupabaseAdminClient()
 
   const [storesResp, reportsResp] = await Promise.all([
@@ -117,17 +144,9 @@ export default async function HoStoresPage() {
 
   if (storesResp.error) {
     console.error("[ho/stores] stores query failed", storesResp.error)
-    return (
-      <div className="max-w-3xl mx-auto p-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Store registry unavailable
-        </h1>
-        <p className="text-slate-600 mt-2 text-sm">
-          Could not load the store list. Try refreshing. If this persists, the
-          Supabase service role key may be out of date.
-        </p>
-      </div>
-    )
+    // Throw so the page-level catch renders the error UI and the cache
+    // doesn't store a broken response. Subsequent loads will retry.
+    throw new Error("ho-stores-load-failed")
   }
 
   // Month boundaries computed once. Server timezone matches the Railway box
@@ -320,5 +339,26 @@ export default async function HoStoresPage() {
     pct_acked_within_2h: pctAckUnder2h,
   }
 
-  return <StoresClient rows={rows} summary={summary} attention={attention} />
+  return { rows, summary, attention }
+}
+
+export default async function HoStoresPage() {
+  await requireHoSession("/ho/stores")
+  try {
+    const { rows, summary, attention } = await getStoresPageData()
+    return <StoresClient rows={rows} summary={summary} attention={attention} />
+  } catch (err) {
+    console.error("[ho/stores] page load failed", err)
+    return (
+      <div className="max-w-3xl mx-auto p-10">
+        <h1 className="text-xl font-semibold text-slate-900">
+          Store registry unavailable
+        </h1>
+        <p className="text-slate-600 mt-2 text-sm">
+          Could not load the store list. Try refreshing. If this persists, the
+          Supabase service role key may be out of date.
+        </p>
+      </div>
+    )
+  }
 }

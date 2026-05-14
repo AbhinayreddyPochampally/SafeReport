@@ -1,5 +1,6 @@
 import "server-only"
 import { NextRequest, NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
 
@@ -221,6 +222,11 @@ export async function POST(req: NextRequest) {
     })
   })
 
+  // Bust the cached Overview + sidebar counts so the action lands on
+  // the next page render. Without this, the queue counts and the
+  // velocity tiles would stay stale for up to 30s after an HO approval.
+  revalidateTag("ho-overview-data")
+  revalidateTag("ho-sidebar-counts")
   return NextResponse.json({
     ok: true,
     report_id,

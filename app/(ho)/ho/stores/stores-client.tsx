@@ -183,19 +183,13 @@ export function StoresClient({
   // controls activate once HO grows the roster past the page size.
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<10 | 20 | 50 | 100>(20)
-  /**
-   * SAP codes the HO has already seen as NEW on a previous visit.
-   *
-   * The NEW badge is meant as a "since you last looked" indicator, not a
-   * permanent "QR not distributed yet" flag (that one's surfaced by the
-   * "New only" filter and the count badge in the action button). So we
-   * persist the codes the user has been shown into localStorage, and any
-   * future render hides their NEW badge — they'll only see it the first
-   * time. The CSV-import / Add-store flows will add new SAP codes that
-   * aren't in this set yet, so the badge reappears for genuinely new rows.
-   */
-  const [seenNewCodes, setSeenNewCodes] = useState<Set<string>>(new Set())
-  const [hydratedSeen, setHydratedSeen] = useState(false)
+  // Prior version of this page kept a localStorage `sr_stores_new_seen`
+  // set so a NEW badge would disappear after the first view. The user
+  // explicitly didn't want that — the badge should track "QR not yet
+  // distributed", not "HO hasn't looked at this row". So now the badge
+  // is purely a function of qr_downloaded_at: null = new, non-null =
+  // distributed. No client-side seen-tracking; the server's
+  // qr_downloaded_at column is the only source of truth.
 
   /**
    * True iff any filter / search is non-default. Drives whether the Reset
@@ -318,44 +312,11 @@ export function StoresClient({
     setPage(1)
   }, [query, brandFilter, statusFilter, activityFilter, showNewOnly, pageSize])
 
-  // Hydrate seen-NEW set from localStorage on mount. SSR returns an empty
-  // set so the markup matches; the client effect then loads stored codes.
-  // This causes a one-frame flash where every NEW badge shows before the
-  // already-seen ones hide — acceptable for a once-per-session render.
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("sr_stores_new_seen")
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          setSeenNewCodes(new Set(parsed as string[]))
-        }
-      }
-    } catch {
-      // localStorage may be disabled; the badge will then just behave as
-      // "always-on while QR is undistributed", which is the old behaviour.
-    }
-    setHydratedSeen(true)
-  }, [])
-
-  // After rows render, persist the set of currently-undistributed SAP codes
-  // so the badge auto-clears on the next visit. We wait for the hydration
-  // pass to finish to avoid clobbering localStorage with an empty set
-  // before the read effect has run.
-  useEffect(() => {
-    if (!hydratedSeen) return
-    try {
-      const undistributed = rows
-        .filter((r) => !r.qr_downloaded_at)
-        .map((r) => r.sap_code)
-      window.localStorage.setItem(
-        "sr_stores_new_seen",
-        JSON.stringify(undistributed),
-      )
-    } catch {
-      // Ignore — see above.
-    }
-  }, [rows, hydratedSeen])
+  // No localStorage seen-tracking — the NEW badge is a pure function of
+  // qr_downloaded_at. Once a store's QR is downloaded the server updates
+  // that column, the page revalidates, and the badge disappears for the
+  // right reason. The earlier "first-visit-only" behaviour was removed
+  // because it could hide a still-undistributed store after one glance.
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const clampedPage = Math.min(page, totalPages)
@@ -440,19 +401,11 @@ export function StoresClient({
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Page header — shared HO hero band. */}
-      <header className="mb-5 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700 mb-1">
-            Pilot · ABFRL
-          </p>
-          <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
-            Stores
-          </h1>
-          <p className="mt-1 text-[13px] text-slate-700">
-            Manage all retail locations and monitor engagement
-          </p>
-        </div>
+      {/* Page header — same slate band as the other HO pages. */}
+      <header className="mb-5 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
+        <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
+          Stores
+        </h1>
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
@@ -702,10 +655,10 @@ export function StoresClient({
                         <div className="text-slate-900 font-medium truncate">
                           {r.name}
                         </div>
-                        {!r.qr_downloaded_at && !seenNewCodes.has(r.sap_code) && (
+                        {!r.qr_downloaded_at && (
                           <div className="mt-0.5">
                             <span
-                              title="QR not yet distributed — visible until your next visit"
+                              title="QR not yet downloaded for this store — badge disappears the moment you download the QR"
                               className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-indigo-700 border border-indigo-200"
                             >
                               <Sparkles className="h-2.5 w-2.5" />

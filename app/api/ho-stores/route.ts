@@ -1,5 +1,6 @@
 import "server-only"
 import { NextRequest, NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
 
@@ -185,6 +186,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Store not found." }, { status: 404 })
   }
 
+  // Bust the cached /ho/stores aggregate so the edit is visible on the
+  // next page load. Also covers the QR-download case — the New badge
+  // depends on qr_downloaded_at and the user expects it to clear the
+  // moment they click Download, not after the 30 s TTL expires.
+  revalidateTag("ho-stores-data")
   console.info("[ho-stores] updated", {
     sap,
     by: session.email ?? session.user_id,
@@ -306,6 +312,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Create failed." }, { status: 500 })
   }
 
+  revalidateTag("ho-stores-data")
   console.info("[ho-stores] created", {
     sap,
     by: session.email ?? session.user_id,
