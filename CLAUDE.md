@@ -348,6 +348,27 @@ moment — anywhere later and the SW isn't ready when push subscriptions
 get issued. The registration is wrapped in a try/catch so a SW failure
 doesn't break the prompt's own state machine.
 
+**SW shape — fetch handler is load-bearing.** `public/sw.js` is the
+push-only SW (no caching, no offline) but it MUST keep a `fetch` event
+listener registered, even a no-op one. Chromium's PWA installability
+criteria require a fetch listener for `beforeinstallprompt` to fire —
+without it the browser silently treats the site as non-installable, the
+"Install app" entry disappears from the menu, and our prompt's CTA
+falls through to the manual hint even on Chrome/Edge where it should
+have offered a one-tap install. The handler does not call
+`respondWith()`, so requests pass through to the network as if no SW
+were involved. Don't remove it.
+
+**iOS standalone meta tags.** `app/layout.tsx` sets `appleWebApp.capable`
+on the root metadata. Without it, an iPhone reporter who runs Share →
+Add to Home Screen still gets an icon, but tapping it opens the page
+inside Safari chrome instead of standalone — AND
+`window.navigator.standalone === true` never resolves, so the install
+prompt's standalone detection treats the install as pending forever.
+Chromium ignores `appleWebApp`; it uses the web manifest. The pair
+together (manifest for Chromium + appleWebApp for iOS) is what makes
+both platforms install correctly.
+
 **Localised.** All copy (eyebrow, title, step titles + subtitles, CTAs,
 dismiss aria-label) comes from `lib/reporter-i18n.ts` via the
 `useReporterLocale()` hook — see §"Reporter localisation".

@@ -5,6 +5,44 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-14 · PWA install actually installs
+
+Pilot smoke surfaced that neither desktop Chrome nor Android Chrome
+nor iOS Safari were offering Add to Home Screen / Install app for the
+reporter landing — the prompt's CTA always fell through to the manual
+hint. Two unrelated gaps:
+
+1. **Service worker had no `fetch` event listener.** Chromium's PWA
+   installability criteria require one even if the SW does no caching
+   — the listener's presence is what tells the browser "this site can
+   handle navigations offline-ish, so it qualifies for install". Without
+   it `beforeinstallprompt` never fires and the Install entry silently
+   disappears from the browser menu. Added a no-op fetch listener to
+   `public/sw.js` (does not call `respondWith`, so requests pass
+   through to the network as before).
+2. **iOS standalone meta tags missing.** No `apple-mobile-web-app-capable`
+   anywhere, so iPhone users who ran Share → Add to Home Screen got an
+   icon that opened inside Safari chrome — and our prompt's standalone
+   detection (`window.navigator.standalone === true`) never resolved,
+   leaving the install gate stuck pending. Added `appleWebApp.capable`
+   in `app/layout.tsx` via Next's Metadata API, which renders the
+   `apple-mobile-web-app-capable: yes` meta tag globally.
+
+Bonus cleanup: the push-notification handler in `public/sw.js`
+referenced `/icon-192.png`, but the icon ships at `/icons/icon-192.png`
+(under the `icons/` subdir the manifest also points at). Fixed.
+
+To pick up the change in a browser that already has the old SW
+registered: open the reporter landing once and reload — the SW byte
+diff triggers an update on the next navigation. DevTools →
+Application → Service Workers → Unregister forces it immediately.
+
+Files: `public/sw.js`, `app/layout.tsx`. CLAUDE.md §PWA section
+gained two paragraphs noting the fetch-listener requirement and the
+iOS meta-tag dependency.
+
+---
+
 ## 2026-05-14 · HO Overview redesigned around velocity + trend
 
 The Overview no longer leads with four passive summary cards. The four

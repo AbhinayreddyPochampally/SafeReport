@@ -7,7 +7,7 @@
 // Keep this file plain JS (not TS) so it can be served directly from
 // /public without a build step.
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   // Activate immediately on first install. No caches to warm up.
   self.skipWaiting()
 })
@@ -16,6 +16,20 @@ self.addEventListener("activate", (event) => {
   // Take control of any already-open tabs so we don't need a page
   // reload before pushes start landing.
   event.waitUntil(self.clients.claim())
+})
+
+// Fetch handler — no-op pass-through.
+//
+// We don't cache anything (managers must always see live server state),
+// but Chromium's PWA installability criteria require a registered SW
+// with a fetch event listener. Without this handler the browser does
+// not consider the site installable and `beforeinstallprompt` never
+// fires, so the home-screen / install option silently disappears from
+// the browser menu. Returning nothing from the listener (not calling
+// event.respondWith) lets the request fall through to the network as
+// if no SW were involved.
+self.addEventListener("fetch", () => {
+  /* intentional no-op — see comment above */
 })
 
 self.addEventListener("push", (event) => {
@@ -40,9 +54,10 @@ self.addEventListener("push", (event) => {
   const options = {
     body: payload.body,
     // An inline SVG-ish icon would be nice; for the pilot any 192px
-    // square works. We ship the favicon as a safe fallback.
-    icon: payload.icon || "/icon-192.png",
-    badge: payload.badge || "/icon-192.png",
+    // square works. Paths match `public/icons/*` — same assets the
+    // PWA manifest advertises.
+    icon: payload.icon || "/icons/icon-192.png",
+    badge: payload.badge || "/icons/icon-192.png",
     // `data.url` is what the `notificationclick` handler uses.
     data: { url: payload.url || "/" },
     // Tag collapses duplicate pushes (e.g. a noisy store getting
