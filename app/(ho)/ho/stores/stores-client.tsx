@@ -1133,7 +1133,7 @@ function CsvImportModal({
           <p className="mt-2">
             <strong>sap_code</strong> is the key — rows upsert by it. For
             new stores, <strong>manager_phone</strong> and{" "}
-            <strong>manager_email</strong> are required — together they're
+            <strong>manager_email</strong> are required — together they&apos;re
             the credential the manager uses to sign in (no password).{" "}
             <strong>status</strong> must be <code>active</code>,{" "}
             <code>temporarily_closed</code>, or <code>permanently_closed</code>.
