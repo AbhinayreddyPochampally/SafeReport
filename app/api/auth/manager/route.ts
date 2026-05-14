@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import bcrypt from "bcryptjs"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
   clearAttempts,
@@ -12,27 +11,36 @@ import {
 } from "@/lib/manager-auth"
 
 /**
- * Manager phone+password auth.
+ * Manager email+phone auth (mig 004).
  *
- *   POST   /api/auth/manager   { sap_code, phone, password }  → set sr_mgr cookie
- *   DELETE /api/auth/manager                                   → clear sr_mgr cookie
- *   GET    /api/auth/manager                                   → check current session
+ *   POST   /api/auth/manager   { sap_code, email, phone }  → set sr_mgr cookie
+ *   DELETE /api/auth/manager                                → clear sr_mgr cookie
+ *   GET    /api/auth/manager                                → check current session
  *
- * Migrated from PIN-only auth (mig 002). Manager identifies themselves with
- * the phone number HO has on file for that store, plus a password set by HO
- * (or self-service via reset flow — out of pilot scope).
+ * Pilot-grade identity check: the manager submits the email and phone HO
+ * has on file for that store. Both must match the stored values exactly
+ * (email case-insensitive, phone on trailing 10 digits). No password.
  *
- * Uses the service-role Supabase client to read `stores.manager_password_hash`
- * because RLS on `stores` blocks anon reads of the hash column. A 3-strike
- * lockout per SAP code (15-minute window) lives in process memory; good
- * enough for a single-instance pilot.
+ * This is not authentication in the cryptographic sense — anyone who knows
+ * a manager's email AND phone can sign in. Trade-off was approved for the
+ * pilot launch: 20 retail stores, low-sensitivity workflow, dramatically
+ * lower friction for non-tech-savvy floor managers.
+ *
+ * Legacy clients still POSTing { phone, password } get a 410 Gone so the
+ * UI surfaces a clear "update the app" message instead of a generic 400.
+ * Same convention as the earlier PIN → password migration.
+ *
+ * Uses the service-role Supabase client to read `stores.manager_email`
+ * (and friends) because RLS on `stores` blocks anon reads. A 3-strike
+ * lockout per SAP code (15-minute window) lives in process memory — good
+ * enough for the single-instance pilot box on Railway.
  */
 
 export const runtime = "nodejs"
 
 const PHONE_RE = /^[+0-9 \-()]{7,20}$/
-const PASSWORD_MIN = 6
-const PASSWORD_MAX = 128
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const EMAIL_MAX = 254
 const MIN_REQUEST_BODY = 2
 const MAX_REQUEST_BODY = 600
 
@@ -47,12 +55,19 @@ function normalizePhone(s: string): string {
   return s.replace(/\D/g, "").slice(-10)
 }
 
+/** Canonicalize email for comparison — trim + lowercase. Both sides are
+ * lowered so case typos on either entry or HO record don't break login. */
+function normalizeEmail(s: string): string {
+  return s.trim().toLowerCase()
+}
+
 type LoginBody = {
   sap_code?: unknown
+  email?: unknown
   phone?: unknown
+  /** Legacy field — old clients POSTing the password-flow body. */
   password?: unknown
-  /** Legacy clients may still POST `pin` — we reject explicitly so the UX
-   * surfaces a "please update the app" message instead of a generic 400. */
+  /** Legacy field — old clients POSTing the PIN-flow body. */
   pin?: unknown
 }
 
@@ -65,29 +80,38 @@ export async function POST(req: Request) {
     }
     body = JSON.parse(text) as LoginBody
   } catch {
-    return fail("Expected JSON body: { sap_code, phone, password }.")
+    return fail("Expected JSON body: { sap_code, email, phone }.")
   }
 
-  if (body.pin !== undefined && body.password === undefined) {
+  // Legacy-client guards — surface the right "you need to refresh" message
+  // depending on which old shape the browser sent.
+  if (body.pin !== undefined && body.email === undefined) {
     return fail(
-      "PIN login is no longer supported. Use phone + password.",
+      "PIN login is no longer supported. Refresh the page and sign in with your email and phone.",
+      410,
+    )
+  }
+  if (body.password !== undefined && body.email === undefined) {
+    return fail(
+      "Password login is no longer supported. Refresh the page and sign in with your email and phone.",
       410,
     )
   }
 
   const sap_code = typeof body.sap_code === "string" ? body.sap_code.trim() : ""
+  const emailInput = typeof body.email === "string" ? body.email.trim() : ""
   const phoneInput = typeof body.phone === "string" ? body.phone.trim() : ""
-  const password = typeof body.password === "string" ? body.password : ""
 
   if (!sap_code) return fail("Missing sap_code.")
-  if (!PHONE_RE.test(phoneInput)) return fail("Enter a valid phone number.")
-  if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
-    return fail(`Password must be ${PASSWORD_MIN}–${PASSWORD_MAX} characters.`)
+  if (!emailInput || emailInput.length > EMAIL_MAX || !EMAIL_RE.test(emailInput)) {
+    return fail("Enter a valid email address.")
   }
+  if (!PHONE_RE.test(phoneInput)) return fail("Enter a valid phone number.")
+  const normEmail = normalizeEmail(emailInput)
   const normPhone = normalizePhone(phoneInput)
   if (normPhone.length < 10) return fail("Enter a valid phone number.")
 
-  // Lockout check before we even query the DB — avoids timing leaks.
+  // Lockout check before we touch the DB — avoids any timing-leak path.
   const lockedFor = msUntilUnlock(sap_code)
   if (lockedFor > 0) {
     return fail(
@@ -100,13 +124,15 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient()
   const { data: store, error } = await admin
     .from("stores")
-    .select("sap_code, status, manager_phone, manager_password_hash, manager_session_epoch")
+    .select(
+      "sap_code, status, manager_email, manager_phone, manager_session_epoch",
+    )
     .eq("sap_code", sap_code)
     .maybeSingle<{
       sap_code: string
       status: string
+      manager_email: string | null
       manager_phone: string | null
-      manager_password_hash: string | null
       manager_session_epoch: number
     }>()
 
@@ -115,21 +141,24 @@ export async function POST(req: Request) {
     return fail("Something went wrong.", 500)
   }
 
-  // Compare phone digits-only so spacing/punctuation differences don't trip
-  // a real manager. We still require an exact match on the trailing 10 digits.
+  // Compare both factors. Email case-insensitive; phone digits-only on
+  // trailing 10 digits. Both must match exactly.
+  const storeEmailNorm = normalizeEmail(store?.manager_email ?? "")
   const storePhoneNorm = normalizePhone(store?.manager_phone ?? "")
+  const emailMatches = storeEmailNorm.length > 0 && storeEmailNorm === normEmail
   const phoneMatches = storePhoneNorm.length >= 10 && storePhoneNorm === normPhone
 
   if (
     !store ||
     store.status !== "active" ||
-    !store.manager_password_hash ||
+    !store.manager_email ||
+    !store.manager_phone ||
+    !emailMatches ||
     !phoneMatches
   ) {
-    // Deliberately generic to avoid confirming which SAP codes / phone
-    // numbers exist on file. Same lockout-aware response shape as the
-    // bcrypt-fail branch below so a brute-forcer hitting unknown SAP
-    // codes also gets a 429 once they trip the threshold.
+    // Deliberately generic to avoid confirming which SAP / email / phone
+    // combinations exist on file. Single error string for both "wrong
+    // email" and "wrong phone" so attackers can't enumerate either field.
     const remaining = recordFailedAttempt(sap_code)
     if (remaining.lockedForMs > 0) {
       return fail(
@@ -138,29 +167,14 @@ export async function POST(req: Request) {
         { locked_for_ms: remaining.lockedForMs },
       )
     }
-    return fail("Invalid phone or password.", 401, {
-      attempts_left: remaining.attemptsLeft,
-    })
-  }
-
-  const ok = await bcrypt.compare(password, store.manager_password_hash)
-  if (!ok) {
-    const remaining = recordFailedAttempt(sap_code)
-    if (remaining.lockedForMs > 0) {
-      return fail(
-        "Too many attempts. Try again later.",
-        429,
-        { locked_for_ms: remaining.lockedForMs },
-      )
-    }
-    return fail("Invalid phone or password.", 401, {
+    return fail("Email and phone don't match what HO has on file.", 401, {
       attempts_left: remaining.attemptsLeft,
     })
   }
 
   // Success — mint JWT, set cookie, clear attempts bucket. Embed the
   // current session epoch so HO can invalidate this cookie later by
-  // bumping it (on password reset or phone-on-file change).
+  // bumping it (e.g. on email or phone change for this store).
   clearAttempts(sap_code)
   const jwt = await signManagerJwt(sap_code, store.manager_session_epoch ?? 0)
   const res = NextResponse.json({ ok: true, sap_code })

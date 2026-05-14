@@ -1,20 +1,22 @@
 "use client"
 
-import { ArrowLeft, Eye, EyeOff, Loader2, LogIn, Phone, Shield } from "lucide-react"
+import { ArrowLeft, Loader2, LogIn, Mail, Phone, Shield } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 /**
- * Phone + password login screen for a specific store.
+ * Email + phone login screen for a specific store.
  *
- * Flow: manager opens /m/[sap_code] → sees this form → enters phone (the
- * number HO has on file) and password (set by HO from the Stores page).
- * On submit we POST /api/auth/manager; success sets the sr_mgr cookie and
- * router.refresh() re-runs the server component, yielding the inbox.
+ * Flow: manager opens /m/[sap_code] → sees this form → enters the email
+ * and phone HO has on file. On submit we POST /api/auth/manager; both
+ * fields must match the stored values exactly (email case-insensitive,
+ * phone digits-only on trailing 10 digits). Success sets the sr_mgr
+ * cookie and router.refresh() re-runs the server component, yielding
+ * the inbox.
  *
- * Migrated from PIN auth in Phase migrate/002. The SAP-coded URL is
- * preserved so existing QR posters keep working — only the input changes.
+ * Migrated from phone+password in mig 004. The SAP-coded URL is preserved
+ * so existing QR posters keep working — only the input changes.
  */
 
 type Store = {
@@ -25,17 +27,21 @@ type Store = {
   state: string
 }
 
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
 export function ManagerLogin({ store }: { store: Store }) {
   const router = useRouter()
+  const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const trimmedEmail = email.trim()
   const trimmedPhone = phone.trim()
   const canSubmit =
-    !busy && trimmedPhone.length >= 7 && password.length >= 6
+    !busy &&
+    EMAIL_RE.test(trimmedEmail) &&
+    trimmedPhone.replace(/\D/g, "").length >= 10
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -48,8 +54,8 @@ export function ManagerLogin({ store }: { store: Store }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sap_code: store.sap_code,
+          email: trimmedEmail,
           phone: trimmedPhone,
-          password,
         }),
       })
       let body: unknown = null
@@ -82,7 +88,7 @@ export function ManagerLogin({ store }: { store: Store }) {
       ) {
         const left = (body as { attempts_left: number }).attempts_left
         setError(
-          `${msg || "Invalid phone or password."} — ${left} attempt${left === 1 ? "" : "s"} left`,
+          `${msg || "Email and phone don't match what HO has on file."} — ${left} attempt${left === 1 ? "" : "s"} left`,
         )
       } else {
         setError(msg || "Something went wrong. Please try again.")
@@ -118,11 +124,43 @@ export function ManagerLogin({ store }: { store: Store }) {
           {store.name}
         </h1>
         <p className="mt-3 text-center text-[13px] leading-5 text-slate-600">
-          Sign in with your phone number and password to open the safety inbox.
+          Sign in with your work email and phone to open the safety inbox.
         </p>
       </div>
 
       <form onSubmit={submit} className="mt-8 flex flex-col gap-4">
+        <div>
+          <label
+            htmlFor="mgr-email"
+            className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600"
+          >
+            Work email
+          </label>
+          <div className="relative">
+            <Mail
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+              strokeWidth={1.8}
+              aria-hidden
+            />
+            <input
+              id="mgr-email"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@abfrl.com"
+              className="block w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-3 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/30"
+              disabled={busy}
+              required
+              maxLength={254}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            The email Head Office has on file for this store.
+          </p>
+        </div>
+
         <div>
           <label
             htmlFor="mgr-phone"
@@ -150,44 +188,9 @@ export function ManagerLogin({ store }: { store: Store }) {
             />
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            The phone number Head Office has on file for this store.
+            The number HO has on file. Spaces, dashes, and country codes
+            are fine — only the last 10 digits matter.
           </p>
-        </div>
-
-        <div>
-          <label
-            htmlFor="mgr-password"
-            className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600"
-          >
-            Password
-          </label>
-          <div className="relative">
-            <input
-              id="mgr-password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Set by Head Office"
-              className="block w-full rounded-xl border border-slate-200 bg-white py-3 px-3 pr-11 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/30"
-              disabled={busy}
-              required
-              minLength={6}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              disabled={busy}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" strokeWidth={1.8} />
-              ) : (
-                <Eye className="h-4 w-4" strokeWidth={1.8} />
-              )}
-            </button>
-          </div>
         </div>
 
         {error && (
@@ -213,8 +216,8 @@ export function ManagerLogin({ store }: { store: Store }) {
         </button>
 
         <p className="mt-1 text-center text-[11px] text-slate-500">
-          Forgot your password? Ask your Head Office contact to reset it from
-          the store registry.
+          Email or phone changed? Ask your Head Office contact to update
+          your record from the store registry.
         </p>
       </form>
 

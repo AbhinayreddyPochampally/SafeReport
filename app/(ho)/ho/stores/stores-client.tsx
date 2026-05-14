@@ -40,7 +40,7 @@ import {
  *   - CSV import (POST multipart /api/excel/stores)
  *
  * Two warning flags surface common pilot footguns:
- *   - `has_password === false` → manager cannot log in
+ *   - `has_credentials === false` → email or phone missing, manager cannot log in
  *   - `status !== 'active'`     → store hidden from most dashboards
  */
 
@@ -55,7 +55,11 @@ export type StoreRow = {
   location: string | null
   manager_name: string | null
   manager_phone: string | null
-  has_password: boolean
+  manager_email: string | null
+  /** True iff BOTH manager_email and manager_phone are on file. Drives
+   * the "No credentials set" warning chip — the manager can't sign in
+   * without both (mig 004 swapped auth from password to email+phone). */
+  has_credentials: boolean
   status: StoreStatus
   opening_date: string | null
   report_count: number
@@ -601,7 +605,7 @@ export function StoresClient({
               <th className="text-left px-4 py-2.5">Store</th>
               <th className="text-left px-4 py-2.5 w-[110px]">Brand</th>
               <th className="text-left px-4 py-2.5 w-[140px]">City · State</th>
-              <th className="text-left px-4 py-2.5 w-[180px]">Manager</th>
+              <th className="text-left px-4 py-2.5 w-[220px]">Manager</th>
               <th className="text-left px-4 py-2.5 w-[100px]">Status</th>
               <th className="text-left px-4 py-2.5 w-[200px]">Activity</th>
               <th className="text-left px-4 py-2.5 w-[150px]">Engagement</th>
@@ -658,24 +662,43 @@ export function StoresClient({
                     <div className="text-slate-500">{r.state}</div>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    {r.manager_name ? (
-                      <div>
-                        <div className="text-slate-800 truncate">
-                          {r.manager_name}
+                    {/* Manager identity card — name (bold), phone, email
+                        stacked vertically (MS-Entra style). Truncates on
+                        each line so long names/emails don't blow the
+                        column out. */}
+                    {r.manager_name || r.manager_phone || r.manager_email ? (
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-medium text-slate-900 truncate">
+                          {r.manager_name ?? "—"}
                         </div>
                         {r.manager_phone && (
-                          <div className="text-[11px] text-slate-500 mt-0.5 truncate font-mono">
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate font-mono leading-tight">
                             {r.manager_phone}
+                          </div>
+                        )}
+                        {r.manager_email && (
+                          <div
+                            className="text-[11px] text-slate-500 mt-0.5 truncate leading-tight"
+                            title={r.manager_email}
+                          >
+                            {r.manager_email}
                           </div>
                         )}
                       </div>
                     ) : (
                       <span className="text-[11.5px] text-slate-400">—</span>
                     )}
-                    {!r.has_password && (
-                      <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-orange-700">
+                    {!r.has_credentials && (
+                      <div
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-orange-700"
+                        title="Email and phone are both required for the manager to sign in."
+                      >
                         <AlertTriangle className="h-3 w-3" />
-                        No password set
+                        {!r.manager_email && !r.manager_phone
+                          ? "No credentials set"
+                          : !r.manager_email
+                            ? "No email set"
+                            : "No phone set"}
                       </div>
                     )}
                   </td>
@@ -809,10 +832,9 @@ function StoreFormModal({
     location: row?.location ?? "",
     manager_name: row?.manager_name ?? "",
     manager_phone: row?.manager_phone ?? "",
+    manager_email: row?.manager_email ?? "",
     status: (row?.status ?? "active") as StoreStatus,
-    new_password: "",
   })
-  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -820,10 +842,6 @@ function StoreFormModal({
     setError(null)
     if (mode === "create" && !/^[A-Z0-9][A-Z0-9-]{1,20}$/.test(form.sap_code.trim().toUpperCase())) {
       setError("SAP code must be uppercase letters/digits/dashes (e.g. PNT-MUM-047).")
-      return
-    }
-    if (form.new_password && (form.new_password.length < 6 || form.new_password.length > 128)) {
-      setError("Password must be 6–128 characters.")
       return
     }
     if (
@@ -835,10 +853,28 @@ function StoreFormModal({
       setError("Name, brand, city, and state are required.")
       return
     }
-    if (mode === "create" && !form.new_password) {
-      setError(
-        "Set a manager password — without one the store can't accept logins.",
-      )
+    // Email + phone are required at create time — they're the two-factor
+    // identity the manager will sign in with (mig 004 swapped password
+    // auth for email+phone). On edit, we only validate format if a value
+    // is provided.
+    const emailTrim = form.manager_email.trim()
+    const phoneTrim = form.manager_phone.trim()
+    if (mode === "create") {
+      if (!phoneTrim) {
+        setError(
+          "Manager phone is required — it's half of the login credential.",
+        )
+        return
+      }
+      if (!emailTrim) {
+        setError(
+          "Manager email is required — it's half of the login credential.",
+        )
+        return
+      }
+    }
+    if (emailTrim && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailTrim)) {
+      setError("Enter a valid manager email (e.g. name@brand.com).")
       return
     }
 
@@ -852,9 +888,9 @@ function StoreFormModal({
         state: form.state.trim(),
         location: form.location.trim() || null,
         manager_name: form.manager_name.trim() || null,
-        manager_phone: form.manager_phone.trim() || null,
+        manager_phone: phoneTrim || null,
+        manager_email: emailTrim || null,
         status: form.status,
-        ...(form.new_password ? { new_password: form.new_password } : {}),
       }
       const resp = await fetch("/api/ho-stores", {
         method: mode === "create" ? "POST" : "PATCH",
@@ -944,24 +980,54 @@ function StoreFormModal({
             className={inputCls}
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Manager name">
-            <input
-              type="text"
-              value={form.manager_name}
-              onChange={(e) => setForm({ ...form, manager_name: e.target.value })}
-              className={inputCls}
-            />
-          </Field>
+        <Field label="Manager name">
+          <input
+            type="text"
+            value={form.manager_name}
+            onChange={(e) => setForm({ ...form, manager_name: e.target.value })}
+            className={inputCls}
+            placeholder="e.g. Rakesh Mehra"
+          />
+        </Field>
+
+        {/* Credentials block — the two-factor identity the manager will
+            sign in with. Stacked vertically + tinted so it reads as a
+            single "this is how they log in" group. */}
+        <div className="bg-indigo-50/40 border border-indigo-100 rounded-md p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-indigo-700" />
+            <span className="text-[13px] font-medium text-slate-800">
+              Login credentials
+            </span>
+          </div>
+          <p className="text-[11.5px] text-slate-600 -mt-1">
+            The manager signs in with these two fields. Both must match what
+            you enter here — no password.
+          </p>
           <Field label="Manager phone">
             <input
               type="tel"
               value={form.manager_phone}
               onChange={(e) => setForm({ ...form, manager_phone: e.target.value })}
               className={inputCls}
+              placeholder="e.g. +91 98200 11234"
+              required={mode === "create"}
+            />
+          </Field>
+          <Field label="Manager email">
+            <input
+              type="email"
+              value={form.manager_email}
+              onChange={(e) => setForm({ ...form, manager_email: e.target.value })}
+              className={inputCls}
+              placeholder="e.g. rakesh.mehra@abfrl.com"
+              maxLength={254}
+              autoComplete="off"
+              required={mode === "create"}
             />
           </Field>
         </div>
+
         <Field label="Status">
           <select
             value={form.status}
@@ -975,45 +1041,6 @@ function StoreFormModal({
             <option value="permanently_closed">Permanently closed</option>
           </select>
         </Field>
-
-        {/* Password reset / set */}
-        <div className="bg-slate-50 border border-slate-200 rounded-md p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <KeyRound className="h-4 w-4 text-slate-500" />
-            <span className="text-[13px] font-medium text-slate-700">
-              {mode === "create"
-                ? "Set manager password"
-                : row?.has_password
-                  ? "Reset manager password"
-                  : "Set manager password"}
-            </span>
-          </div>
-          <p className="text-[11.5px] text-slate-500 mb-2">
-            {mode === "create"
-              ? "Set the password the manager will use to sign in. Share it securely (call them, don't text)."
-              : row?.has_password
-                ? "Leave blank to keep the existing password. Enter a new value to replace it — the old password stops working immediately."
-                : "Set the password so this store can accept manager logins."}
-          </p>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={form.new_password}
-              onChange={(e) => setForm({ ...form, new_password: e.target.value })}
-              placeholder="6–128 characters"
-              className={inputCls + " pr-10"}
-              minLength={6}
-              maxLength={128}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[11.5px] text-slate-500 hover:text-slate-700 px-1"
-            >
-              {showPassword ? "Hide" : "Show"}
-            </button>
-          </div>
-        </div>
 
         {error && (
           <div className="text-[12.5px] text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
@@ -1101,12 +1128,13 @@ function CsvImportModal({
         <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-[12px] text-slate-600 leading-relaxed">
           <div className="font-medium text-slate-800 mb-1">Expected columns</div>
           <code className="block font-mono text-[11px] text-slate-700">
-            sap_code,name,brand,city,state,location,manager_name,manager_phone,password,status
+            sap_code,name,brand,city,state,location,manager_name,manager_phone,manager_email,status
           </code>
           <p className="mt-2">
-            <strong>sap_code</strong> is the key — rows upsert by it.{" "}
-            <strong>password</strong> (6–128 chars, plain) gets hashed
-            server-side before storage.{" "}
+            <strong>sap_code</strong> is the key — rows upsert by it. For
+            new stores, <strong>manager_phone</strong> and{" "}
+            <strong>manager_email</strong> are required — together they're
+            the credential the manager uses to sign in (no password).{" "}
             <strong>status</strong> must be <code>active</code>,{" "}
             <code>temporarily_closed</code>, or <code>permanently_closed</code>.
           </p>

@@ -55,14 +55,13 @@ type PriorResolution = {
 
 async function loadStore(sap_code: string): Promise<StoreHeader | null> {
   const admin = createSupabaseAdminClient()
-  // Note: column is `manager_password_hash` since migration 002 dropped
-  // the legacy `manager_pin_hash` column. Querying the old name made the
-  // Supabase request error and the page silently 404 — see CLAUDE.md
-  // §Manager auth.
+  // Mig 004 swapped manager auth from password to email+phone. Store has
+  // to carry BOTH manager_email and manager_phone for a manager to be
+  // able to sign in — either missing and we treat the URL as 404.
   const { data, error } = await admin
     .from("stores")
     .select(
-      "sap_code, name, brand, city, state, status, manager_password_hash",
+      "sap_code, name, brand, city, state, status, manager_email, manager_phone",
     )
     .eq("sap_code", sap_code)
     .maybeSingle<{
@@ -72,10 +71,17 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
       city: string
       state: string
       status: string
-      manager_password_hash: string | null
+      manager_email: string | null
+      manager_phone: string | null
     }>()
   if (error || !data) return null
-  if (data.status !== "active" || !data.manager_password_hash) return null
+  if (
+    data.status !== "active" ||
+    !data.manager_email ||
+    !data.manager_phone
+  ) {
+    return null
+  }
   return {
     sap_code: data.sap_code,
     name: data.name,

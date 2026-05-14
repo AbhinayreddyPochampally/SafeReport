@@ -24,7 +24,10 @@ type StoreHeader = {
   city: string
   state: string
   status: string
-  has_password: boolean
+  /** True iff the store has both manager_email AND manager_phone set —
+   * the two identifiers required for email+phone auth (mig 004). Either
+   * being null means the manager can't sign in, so we 404 the URL. */
+  has_credentials: boolean
 }
 
 async function loadStore(sap_code: string): Promise<StoreHeader | null> {
@@ -32,7 +35,7 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
   const { data, error } = await admin
     .from("stores")
     .select(
-      "sap_code, name, brand, city, state, status, manager_password_hash",
+      "sap_code, name, brand, city, state, status, manager_email, manager_phone",
     )
     .eq("sap_code", sap_code)
     .maybeSingle<{
@@ -42,7 +45,8 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
       city: string
       state: string
       status: string
-      manager_password_hash: string | null
+      manager_email: string | null
+      manager_phone: string | null
     }>()
   if (error) {
     console.error("[/m/sap_code] store lookup failed", error)
@@ -56,7 +60,7 @@ async function loadStore(sap_code: string): Promise<StoreHeader | null> {
     city: data.city,
     state: data.state,
     status: data.status,
-    has_password: Boolean(data.manager_password_hash),
+    has_credentials: Boolean(data.manager_email) && Boolean(data.manager_phone),
   }
 }
 
@@ -66,7 +70,7 @@ export default async function ManagerLandingPage({
   params: { sap_code: string }
 }) {
   const store = await loadStore(params.sap_code)
-  if (!store || store.status !== "active" || !store.has_password) {
+  if (!store || store.status !== "active" || !store.has_credentials) {
     notFound()
   }
 

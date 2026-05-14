@@ -1,6 +1,5 @@
 import "server-only"
 import { NextRequest, NextResponse } from "next/server"
-import bcrypt from "bcryptjs"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
 
@@ -12,11 +11,15 @@ import { getHoSession } from "@/lib/ho-auth"
  * permutation/subset of:
  *
  *   sap_code, name, brand, city, state, location,
- *   manager_name, manager_phone, password, status
+ *   manager_name, manager_phone, manager_email, status
  *
  * `sap_code` is the primary key and must be present. Rows upsert by it.
- * Plain-text passwords are bcrypted before any DB write. Rows that fail
- * per-row validation are reported back in `errors[]` alongside the counts.
+ * Rows that fail per-row validation are reported back in `errors[]`
+ * alongside the counts.
+ *
+ * Legacy columns (`pin`, `password`) are still recognised so old CSVs
+ * surface a clear error pointing the operator at the new `manager_email`
+ * column rather than a silent skip.
  *
  * Prune mode: when `prune=1`, any active store NOT in the CSV is marked
  * `permanently_closed` (it stays in the DB for audit trail; reports stay
@@ -31,13 +34,12 @@ import { getHoSession } from "@/lib/ho-auth"
 
 const STATUSES = new Set(["active", "temporarily_closed", "permanently_closed"])
 const SAP_CODE = /^[A-Z0-9][A-Z0-9-]{1,20}$/
-const PASSWORD_MIN = 6
-const PASSWORD_MAX = 128
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const EMAIL_MAX = 254
 
 // Canonical column names we accept, including a few common alternates.
-// Both the new `password` column AND the legacy `pin` column are recognised
-// so existing CSVs don't break — pin values get rejected with a helpful
-// error pointing operators at the new column.
+// Legacy auth columns (pin, password) are still recognised so an old CSV
+// surfaces a row-level error instead of a silent skip.
 const HEADER_ALIASES: Record<string, string> = {
   sap: "sap_code",
   sap_code: "sap_code",
@@ -55,8 +57,11 @@ const HEADER_ALIASES: Record<string, string> = {
   phone: "manager_phone",
   manager_phone: "manager_phone",
   "manager phone": "manager_phone",
-  password: "password",
-  manager_password: "password",
+  email: "manager_email",
+  manager_email: "manager_email",
+  "manager email": "manager_email",
+  password: "_legacy_password",
+  manager_password: "_legacy_password",
   pin: "_legacy_pin",
   manager_pin: "_legacy_pin",
   status: "status",
@@ -71,7 +76,7 @@ type ParsedRow = {
   location?: string | null
   manager_name?: string | null
   manager_phone?: string | null
-  password?: string | null
+  manager_email?: string | null
   status?: string
 }
 
@@ -188,10 +193,13 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
   const parsed: ParsedRow[] = []
 
-  let legacyPinSeen = false
+  let legacyAuthSeen = false
   for (let i = 1; i < rows.length; i++) {
     const raw = rows[i]
-    const rec: Partial<ParsedRow> & { _legacy_pin?: string | null } = {}
+    const rec: Partial<ParsedRow> & {
+      _legacy_pin?: string | null
+      _legacy_password?: string | null
+    } = {}
     for (let j = 0; j < raw.length; j++) {
       const key = mapped[j]
       if (!key) continue
@@ -201,7 +209,7 @@ export async function POST(req: NextRequest) {
           key === "location" ||
           key === "manager_name" ||
           key === "manager_phone" ||
-          key === "password"
+          key === "manager_email"
         ) {
           ;(rec as Record<string, unknown>)[key] = null
         }
@@ -224,29 +232,33 @@ export async function POST(req: NextRequest) {
       )
       continue
     }
-    if (rec._legacy_pin) {
-      legacyPinSeen = true
+    if (rec._legacy_pin || rec._legacy_password) {
+      legacyAuthSeen = true
       errors.push(
-        `Row ${i + 1} (${rec.sap_code}): the 'pin' column is no longer supported. Use 'password' instead.`,
+        `Row ${i + 1} (${rec.sap_code}): legacy auth column ignored. Add a 'manager_email' column — email+phone is the new credential pair.`,
       )
-      continue
+      // Don't skip the row outright; if it also has email/phone we still
+      // accept it. Just strip the legacy field so it doesn't reach the DB.
+      delete rec._legacy_pin
+      delete rec._legacy_password
     }
     if (
-      rec.password != null &&
-      rec.password !== "" &&
-      (rec.password.length < PASSWORD_MIN || rec.password.length > PASSWORD_MAX)
+      rec.manager_email != null &&
+      rec.manager_email !== "" &&
+      (rec.manager_email.length > EMAIL_MAX ||
+        !EMAIL_RE.test(rec.manager_email))
     ) {
       errors.push(
-        `Row ${i + 1} (${rec.sap_code}): password must be ${PASSWORD_MIN}-${PASSWORD_MAX} characters`,
+        `Row ${i + 1} (${rec.sap_code}): invalid manager_email "${rec.manager_email}"`,
       )
       continue
     }
     parsed.push(rec as ParsedRow)
   }
 
-  if (legacyPinSeen) {
+  if (legacyAuthSeen) {
     errors.unshift(
-      "Detected legacy 'pin' column. Migration 002 replaced PIN with password — update your CSV to a 'password' column with 6+ char values.",
+      "Detected legacy auth column ('pin' or 'password'). Migration 004 replaced password with email+phone — add a 'manager_email' column instead.",
     )
   }
 
@@ -307,23 +319,6 @@ export async function POST(req: NextRequest) {
 
   const existingSet = new Set((existing ?? []).map((e) => e.sap_code as string))
 
-  // Pre-hash all passwords in parallel (capped at 4 concurrent) before
-  // the per-row loop. bcrypt cost 10 is ~150-200ms per hash; sequentially
-  // that's 3-5s for a 20-row CSV and over 30s for a 200-row import — past
-  // the Vercel/Railway request timeout. Parallelising stays well inside.
-  const passwordHashes = new Map<string, string>()
-  {
-    const toHash = parsed.filter((p) => p.password)
-    const CONCURRENT = 4
-    for (let i = 0; i < toHash.length; i += CONCURRENT) {
-      const chunk = toHash.slice(i, i + CONCURRENT)
-      const hashes = await Promise.all(
-        chunk.map((p) => bcrypt.hash(p.password as string, 10)),
-      )
-      chunk.forEach((p, j) => passwordHashes.set(p.sap_code, hashes[j]))
-    }
-  }
-
   // Build the upsert payload. For NEW rows, fill required columns with
   // sensible defaults if the CSV omits them. For EXISTING rows, only
   // overwrite the columns that were actually present in the CSV.
@@ -334,7 +329,11 @@ export async function POST(req: NextRequest) {
   for (const rec of parsed) {
     const isNew = !existingSet.has(rec.sap_code)
     if (isNew) {
-      // A new store MUST provide the required NOT NULL columns.
+      // A new store MUST provide the required NOT NULL columns AND both
+      // credential factors (email + phone) so it can accept manager
+      // logins. If credentials are partial, we still accept the row but
+      // flag it — the operator can fill the missing factor later via the
+      // Stores UI.
       const missing: string[] = []
       if (!rec.name) missing.push("name")
       if (!rec.brand) missing.push("brand")
@@ -347,6 +346,12 @@ export async function POST(req: NextRequest) {
         skipped += 1
         continue
       }
+      if (!rec.manager_email || !rec.manager_phone) {
+        errors.push(
+          `${rec.sap_code}: imported, but manager can't sign in until both manager_email and manager_phone are set.`,
+        )
+        // Soft warning — we still insert the row so HO can fix it in the UI.
+      }
     }
 
     const row: Record<string, unknown> = { sap_code: rec.sap_code }
@@ -357,10 +362,8 @@ export async function POST(req: NextRequest) {
     if ("location" in rec) row.location = rec.location
     if ("manager_name" in rec) row.manager_name = rec.manager_name
     if ("manager_phone" in rec) row.manager_phone = rec.manager_phone
+    if ("manager_email" in rec) row.manager_email = rec.manager_email
     if (rec.status) row.status = rec.status
-    if (rec.password) {
-      row.manager_password_hash = passwordHashes.get(rec.sap_code)
-    }
     row.updated_at = new Date().toISOString()
 
     if (isNew) {
@@ -387,9 +390,21 @@ export async function POST(req: NextRequest) {
 
   // PostgREST doesn't do multi-row UPDATE in one shot by a non-PK match;
   // per-row is fine at pilot size. If this becomes slow we'll batch with
-  // an RPC.
+  // an RPC. Updates that touch manager_email or manager_phone also bump
+  // the session epoch so any open manager session for that store gets
+  // invalidated.
   for (const row of toUpdate) {
     const { sap_code, ...rest } = row
+    const credChanged =
+      "manager_email" in rest || "manager_phone" in rest
+    if (credChanged) {
+      const { data: cur } = await admin
+        .from("stores")
+        .select("manager_session_epoch")
+        .eq("sap_code", sap_code as string)
+        .maybeSingle<{ manager_session_epoch: number }>()
+      rest.manager_session_epoch = (cur?.manager_session_epoch ?? 0) + 1
+    }
     const { error } = await admin
       .from("stores")
       .update(rest)

@@ -42,7 +42,7 @@ type StoresRow = {
   location: string | null
   manager_name: string | null
   manager_phone: string | null
-  manager_password_hash: string | null
+  manager_email: string | null
   status: "active" | "temporarily_closed" | "permanently_closed"
   opening_date: string | null
   qr_downloaded_at: string | null
@@ -98,7 +98,7 @@ export default async function HoStoresPage() {
     admin
       .from("stores")
       .select(
-        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_password_hash, status, opening_date, qr_downloaded_at, created_at",
+        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_email, status, opening_date, qr_downloaded_at, created_at",
       )
       .order("brand", { ascending: true })
       .order("city", { ascending: true })
@@ -202,7 +202,9 @@ export default async function HoStoresPage() {
       location: s.location,
       manager_name: s.manager_name,
       manager_phone: s.manager_phone,
-      has_password: Boolean(s.manager_password_hash),
+      manager_email: s.manager_email,
+      // Manager can log in iff BOTH email and phone are on file (mig 004).
+      has_credentials: Boolean(s.manager_email) && Boolean(s.manager_phone),
       status: s.status,
       opening_date: s.opening_date,
       report_count: a.total,
