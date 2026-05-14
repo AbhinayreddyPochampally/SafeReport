@@ -1025,13 +1025,10 @@ function ChartCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       {/* Header had two dead-mockup affordances — a bare Info icon that
         * hooked up to nothing and a decorative 3-dot menu placeholder for
-        * an actions menu that was never built. Both removed: the first
-        * conflicts with the actual working MetricInfo popovers elsewhere
-        * on the page (looked like one but did nothing), the second looked
-        * like a menu but did nothing on click. */}
+        * an actions menu that was never built. Both removed. */}
       <header className="px-5 py-4">
         <h3 className="font-display text-[15px] font-semibold text-slate-900">
           {title}

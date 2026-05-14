@@ -472,193 +472,174 @@ export function AllReportsClient({
         </button>
       </header>
 
-      {/* Filter card --------------------------------------------------- */}
-      <section className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
-        {/* Row 1: search + dates */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-          <div className="md:col-span-5">
-            <label className="block text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">
-              Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" aria-hidden />
-              <input
-                type="text"
-                value={searchDraft}
-                onChange={(e) => setSearchDraft(e.target.value)}
-                onBlur={() => {
-                  if (searchDraft !== filters.q) apply({ q: searchDraft })
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    apply({ q: searchDraft })
-                  }
-                }}
-                placeholder="SR-ID, store code, or text in the report"
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-md text-[13.5px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-              />
-            </div>
-          </div>
-          <div className="md:col-span-3">
-            <label className="block text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">
-              From
-            </label>
+      {/* Filter card — compact. Earlier rev gave each filter group its
+        * own labeled row with p-5 padding + 4 separate sections + a
+        * border divider. Total height was ~280px. Now: 3 dense rows,
+        * inline "Brand:" / "Category:" / "Status:" eyebrows acting as
+        * the labels, single p-3 padding, no divider. Roughly half the
+        * vertical space. */}
+      <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-3 space-y-2 shadow-sm">
+        {/* Row 1: search + dates + clear, all inline on md+ */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative min-w-0 flex-1 max-w-md">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" aria-hidden />
             <input
-              type="date"
-              value={filters.from}
-              onChange={(e) => apply({ from: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-            />
-          </div>
-          <div className="md:col-span-3">
-            <label className="block text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">
-              To
-            </label>
-            <input
-              type="date"
-              value={filters.to}
-              onChange={(e) => apply({ to: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-            />
-          </div>
-          <div className="md:col-span-1">
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={() =>
-                  apply({
-                    status: { kind: "preset", value: "all" },
-                    categories: [],
-                    brands: [],
-                    from: "",
-                    to: "",
-                    q: "",
-                  })
+              type="text"
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              onBlur={() => {
+                if (searchDraft !== filters.q) apply({ q: searchDraft })
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  apply({ q: searchDraft })
                 }
-                className="w-full inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 px-2 py-2 text-[12px] text-slate-600 hover:bg-slate-50"
-              >
-                <X className="h-3.5 w-3.5" aria-hidden />
-                Clear
-              </button>
-            )}
+              }}
+              placeholder="SR-ID, store code, or text…"
+              className="w-full pl-8 pr-2.5 h-8 border border-slate-200 rounded-md text-[12.5px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+            />
           </div>
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => apply({ from: e.target.value })}
+            aria-label="From date"
+            className="h-8 px-2.5 border border-slate-200 rounded-md text-[12px] tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+          />
+          <span aria-hidden className="text-slate-400 text-[12px]">→</span>
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => apply({ to: e.target.value })}
+            aria-label="To date"
+            className="h-8 px-2.5 border border-slate-200 rounded-md text-[12px] tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+          />
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() =>
+                apply({
+                  status: { kind: "preset", value: "all" },
+                  categories: [],
+                  brands: [],
+                  from: "",
+                  to: "",
+                  q: "",
+                })
+              }
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 h-8 text-[11.5px] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+            >
+              <X className="h-3 w-3" aria-hidden />
+              Clear
+            </button>
+          )}
         </div>
 
-        {/* Row 2: brand chips */}
+        {/* Row 2: status + category + brand chips, each prefixed with a
+          * tiny eyebrow label inline. Wraps naturally on narrow widths. */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
+            Status
+          </span>
+          <button
+            type="button"
+            onClick={() => apply({ status: { kind: "preset", value: "all" } })}
+            className={`px-2 h-6 rounded-full text-[11px] font-medium border transition-colors ${
+              filters.status.kind === "preset" && filters.status.value === "all"
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+            }`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => apply({ status: { kind: "preset", value: "open" } })}
+            className={`px-2 h-6 rounded-full text-[11px] font-medium border transition-colors ${
+              filters.status.kind === "preset" && filters.status.value === "open"
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+            }`}
+          >
+            Open
+          </button>
+          {STATUS_ORDER.map((s) => {
+            const active = isStatusActive(s)
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleStatus(s)}
+                className={`inline-flex items-center gap-1 px-2 h-6 rounded-full border text-[11px] font-medium transition-colors ${
+                  active
+                    ? STATUS_PILL_CLASSES[s] + " ring-1 ring-offset-1 ring-slate-300"
+                    : STATUS_PILL_CLASSES[s] + " hover:opacity-90"
+                }`}
+                aria-pressed={active}
+              >
+                {STATUS_LABEL[s]}
+                <span className="text-[10px] font-semibold tabular-nums opacity-70">
+                  {statusCounts[s] ?? 0}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
+            Category
+          </span>
+          {CATEGORIES.map((cat) => {
+            const active = filters.categories.includes(cat.key)
+            const isIncident = cat.kind === "incident"
+            const baseTone = isIncident
+              ? "bg-amber-50 text-amber-800 border-amber-200"
+              : "bg-slate-100 text-slate-700 border-slate-200"
+            const activeTone = isIncident
+              ? "bg-amber-700 text-white border-amber-700"
+              : "bg-slate-700 text-white border-slate-700"
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => toggleCategory(cat.key)}
+                title={cat.label}
+                className={`inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-[10.5px] font-bold border transition-colors ${
+                  active ? activeTone : baseTone
+                }`}
+              >
+                {cat.acronym}
+              </button>
+            )
+          })}
+        </div>
+
         {availableBrands.length > 0 && (
-          <div className="mt-4">
-            <p className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
               Brand
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableBrands.map((b) => {
-                const active = filters.brands.includes(b)
-                return (
-                  <button
-                    key={b}
-                    type="button"
-                    onClick={() => toggleBrand(b)}
-                    className={`px-2.5 py-1 rounded-md text-[12px] font-medium border transition-colors ${
-                      active
-                        ? "bg-indigo-700 text-white border-indigo-700"
-                        : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300"
-                    }`}
-                  >
-                    {b}
-                  </button>
-                )
-              })}
-            </div>
+            </span>
+            {availableBrands.map((b) => {
+              const active = filters.brands.includes(b)
+              return (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => toggleBrand(b)}
+                  className={`px-2 h-6 rounded-md text-[11px] font-medium border transition-colors ${
+                    active
+                      ? "bg-indigo-700 text-white border-indigo-700"
+                      : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300"
+                  }`}
+                >
+                  {b}
+                </button>
+              )
+            })}
           </div>
         )}
-
-        {/* Row 3: category chips */}
-        <div className="mt-3">
-          <p className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-2">
-            Category
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((cat) => {
-              const active = filters.categories.includes(cat.key)
-              const isIncident = cat.kind === "incident"
-              const baseTone = isIncident
-                ? "bg-amber-50 text-amber-800 border-amber-200"
-                : "bg-slate-100 text-slate-700 border-slate-200"
-              const activeTone = isIncident
-                ? "bg-amber-700 text-white border-amber-700"
-                : "bg-slate-700 text-white border-slate-700"
-              return (
-                <button
-                  key={cat.key}
-                  type="button"
-                  onClick={() => toggleCategory(cat.key)}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] font-medium border transition-colors ${
-                    active ? activeTone : baseTone
-                  }`}
-                >
-                  <span className="font-bold">{cat.acronym}</span>
-                  <span className="hidden sm:inline">{cat.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Row 4: status pills with counts */}
-        <div className="mt-4 pt-4 border-t border-slate-100">
-          <p className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 mb-2">
-            Status
-          </p>
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <button
-              type="button"
-              onClick={() => apply({ status: { kind: "preset", value: "all" } })}
-              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
-                filters.status.kind === "preset" && filters.status.value === "all"
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => apply({ status: { kind: "preset", value: "open" } })}
-              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium border transition-colors ${
-                filters.status.kind === "preset" && filters.status.value === "open"
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-              }`}
-            >
-              Open
-            </button>
-            <span className="text-slate-200" aria-hidden>
-              |
-            </span>
-            {STATUS_ORDER.map((s) => {
-              const active = isStatusActive(s)
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggleStatus(s)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11.5px] font-medium transition-colors ${
-                    active
-                      ? STATUS_PILL_CLASSES[s].replace("bg-", "bg-").replace("text-", "text-").replace("border-", "border-") + " ring-1 ring-offset-1 ring-slate-300"
-                      : STATUS_PILL_CLASSES[s] + " hover:opacity-90"
-                  }`}
-                  aria-pressed={active}
-                >
-                  {STATUS_LABEL[s]}
-                  <span className="text-[10.5px] font-semibold tabular-nums opacity-70">
-                    {statusCounts[s] ?? 0}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
       </section>
 
       {/* Result meta ---------------------------------------------------- */}
@@ -748,10 +729,10 @@ export function AllReportsClient({
           />
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-auto" style={{ maxHeight: "65vh" }}>
             <table className="w-full text-[12.5px]">
-              <thead className="bg-slate-50 sticky top-0 z-10">
+              <thead className="bg-slate-100/70 backdrop-blur-sm sticky top-0 z-10">
                 <tr className="border-b border-slate-200 text-[10.5px] uppercase font-bold tracking-wide text-slate-500">
                   <th className="text-left py-2.5 pl-5 w-[100px]">SR-ID</th>
                   <th className="text-left py-2.5 w-[60px]">Cat</th>

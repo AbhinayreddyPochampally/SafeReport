@@ -49,12 +49,6 @@ type StoresRow = {
   opening_date: string | null
   qr_downloaded_at: string | null
   created_at: string | null
-  // mig 005 — null when the store hasn't been marked resolved on the
-  // attention panel; set when HO has phoned the manager and dismissed
-  // the row. May not exist on a DB that hasn't run the migration yet,
-  // which is why the column is read with a nullable assumption and the
-  // attention panel gracefully degrades if it's missing.
-  attention_handled_at: string | null
 }
 
 type ReportRow = {
@@ -128,19 +122,55 @@ async function fetchStoresPageData(): Promise<{
 }> {
   const admin = createSupabaseAdminClient()
 
-  const [storesResp, reportsResp] = await Promise.all([
+  // Two-step stores fetch so the page works whether migration 005
+  // (which adds attention_handled_at + attention_handled_by) has been
+  // applied yet or not. The base select only touches columns that have
+  // existed since day 1; the optional select pulls the new column and
+  // silently degrades if it's not there.
+  //
+  // This was load-bearing — the previous code SELECTed the new column
+  // unconditionally and a missing column threw, taking down the whole
+  // Stores tab with a "Store registry unavailable" 500. Now the
+  // attention panel just shows zero rows on a pre-mig deploy.
+  const [storesResp, attentionResp, reportsResp] = await Promise.all([
     admin
       .from("stores")
       .select(
-        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_email, status, opening_date, qr_downloaded_at, created_at, attention_handled_at",
+        "sap_code, name, brand, city, state, location, manager_name, manager_phone, manager_email, status, opening_date, qr_downloaded_at, created_at",
       )
       .order("brand", { ascending: true })
       .order("city", { ascending: true })
       .order("name", { ascending: true }),
     admin
+      .from("stores")
+      .select("sap_code, attention_handled_at"),
+    admin
       .from("reports")
       .select("store_code, reported_at, acknowledged_at, reporter_phone"),
   ])
+
+  // Build a sap_code → handled-at map from the optional fetch. On a DB
+  // without mig 005 applied, attentionResp.error is set (column not found
+  // / table missing) and the map stays empty — the attention panel will
+  // still derive candidates from criteria, it just won't be able to
+  // suppress already-handled rows. Once the migration runs, the map
+  // populates and the suppression starts working without a code change.
+  const handledByCode = new Map<string, string | null>()
+  if (!attentionResp.error && Array.isArray(attentionResp.data)) {
+    for (const row of attentionResp.data as Array<{
+      sap_code: string
+      attention_handled_at: string | null
+    }>) {
+      handledByCode.set(row.sap_code, row.attention_handled_at)
+    }
+  } else if (attentionResp.error) {
+    // Surface the degraded state in logs so the operator notices the
+    // migration is pending; the panel keeps working in best-effort mode.
+    console.warn(
+      "[ho/stores] attention_handled_at unavailable — has migration 005 run?",
+      { code: attentionResp.error.code, msg: attentionResp.error.message },
+    )
+  }
 
   if (storesResp.error) {
     console.error("[ho/stores] stores query failed", storesResp.error)
@@ -236,7 +266,7 @@ async function fetchStoresPageData(): Promise<{
       report_count: a.total,
       qr_downloaded_at: s.qr_downloaded_at,
       created_at: s.created_at,
-      attention_handled_at: s.attention_handled_at ?? null,
+      attention_handled_at: handledByCode.get(s.sap_code) ?? null,
       last_report_at: a.last_report_at,
       reports_this_month: a.this_month,
       reports_last_month: a.last_month,

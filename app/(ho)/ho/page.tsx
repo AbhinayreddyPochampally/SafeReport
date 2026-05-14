@@ -655,7 +655,7 @@ function formatPercentValue(p: number | null): string {
 
 function TodayPanel({ events }: { events: TodayEvent[] }) {
   return (
-    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <header className="flex items-center justify-between px-4 pt-3.5 pb-2">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-indigo-700" aria-hidden />
@@ -736,7 +736,7 @@ function CoveragePanel({ coverage }: { coverage: Coverage }) {
   const filled = pct * C
   const empty = C - filled
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl shadow-sm p-4 flex items-center gap-4">
       <svg
         viewBox="0 0 60 60"
         className="h-[68px] w-[68px] shrink-0"
@@ -800,7 +800,7 @@ function CategoryMixPanel({
 }) {
   const max = rows.reduce((m, r) => Math.max(m, r.count), 0) || 1
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-4">
+    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl shadow-sm p-4">
       <header className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-indigo-700" aria-hidden />
@@ -965,7 +965,7 @@ function TrendPanel({ dailyMedians }: { dailyMedians: DailyMedian[] }) {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl p-5 mb-5">
+    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl shadow-sm p-5 mb-5">
       <header className="flex items-end justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">

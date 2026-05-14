@@ -488,7 +488,7 @@ export function StoresClient({
           tight padding so the full set (Activity + Status + Brand) fits
           well within the 1400px content frame; flex-wrap is on as a
           fallback for unusually narrow viewports. */}
-      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 mb-4">
+      <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 shadow-sm">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -616,7 +616,7 @@ export function StoresClient({
         * the Stores tab is now purely the roster + admin actions. QR and
         * Edit are each in their own column with breathing room so the
         * Actions area no longer reads as a single cramped button group. */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <table className="w-full text-[13px]">
           <thead className="bg-slate-50 text-slate-500 text-[10.5px] uppercase tracking-wide font-bold">
             <tr>
