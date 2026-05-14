@@ -443,9 +443,9 @@ export function AllReportsClient({
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Header --------------------------------------------------------- */}
-      <header className="mb-6">
-        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+      {/* Header — shared HO hero band: indigo→sky→teal gradient. */}
+      <header className="mb-6 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700">
           Pilot · ABFRL
         </p>
         <div className="mt-1 flex items-end justify-between gap-4">
@@ -453,14 +453,14 @@ export function AllReportsClient({
             <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
               Reports
             </h1>
-            <p className="mt-1 text-[13px] text-slate-600">
+            <p className="mt-1 text-[13px] text-slate-700">
               Every report across all 20 pilot stores. Filter, search, drill in.
             </p>
           </div>
           <button
             type="button"
             onClick={downloadXlsx}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 shadow-sm"
           >
             <Download className="h-4 w-4" strokeWidth={1.8} aria-hidden />
             Download .xlsx

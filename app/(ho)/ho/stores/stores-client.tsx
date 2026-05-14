@@ -391,13 +391,16 @@ export function StoresClient({
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Page header --------------------------------------------------- */}
-      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+      {/* Page header — shared HO hero band. */}
+      <header className="mb-5 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
         <div>
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700 mb-1">
+            Pilot · ABFRL
+          </p>
           <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900">
             Stores
           </h1>
-          <p className="mt-1 text-[13px] text-slate-600">
+          <p className="mt-1 text-[13px] text-slate-700">
             Manage all retail locations and monitor engagement
           </p>
         </div>

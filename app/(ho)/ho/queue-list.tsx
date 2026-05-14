@@ -70,7 +70,9 @@ export function QueueList({
           ctaLabel: "View all",
           emptyTitle: "All caught up.",
           emptyBody: "Nothing is waiting on Head Office right now.",
-          headerGradient: "bg-gradient-to-r from-sky-50/70 via-white to-white",
+          // Visible sky wash so the Approval card reads as the
+          // action-required surface at a glance.
+          headerGradient: "bg-gradient-to-r from-sky-100 via-sky-50 to-white",
         }
       : {
           eyebrow: "In the pipeline",
@@ -82,8 +84,10 @@ export function QueueList({
           ctaLabel: "All reports",
           emptyTitle: "Pipeline is empty.",
           emptyBody: "No new reports flowing through right now.",
+          // Slate wash for the awareness-only card — cooler than the
+          // Approval queue, makes the visual hierarchy obvious.
           headerGradient:
-            "bg-gradient-to-r from-slate-100/70 via-white to-white",
+            "bg-gradient-to-r from-slate-200 via-slate-100 to-white",
         }
 
   return (

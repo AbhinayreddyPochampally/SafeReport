@@ -1,6 +1,6 @@
 "use client"
 
-import { Info, X } from "lucide-react"
+import { Info } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 
 /**
@@ -89,22 +89,13 @@ export function MetricInfo({
           aria-label={title}
           className="absolute right-0 top-6 z-50 w-[260px] rounded-lg border border-slate-200 bg-white p-3 text-left shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5"
         >
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[12px] font-semibold text-slate-900 leading-tight">
-              {title}
-            </p>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpen(false)
-              }}
-              className="-mr-1 -mt-1 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <X className="h-3 w-3" aria-hidden />
-            </button>
-          </div>
+          {/* No close button — hover-leave on the wrapper already dismisses,
+            * Escape dismisses, and clicking outside dismisses. The X used to
+            * sit in the corner here was redundant and stole visual weight
+            * from the title. */}
+          <p className="text-[12px] font-semibold text-slate-900 leading-tight">
+            {title}
+          </p>
           <p className="mt-1.5 text-[11.5px] leading-[1.45] text-slate-600">
             {body}
           </p>

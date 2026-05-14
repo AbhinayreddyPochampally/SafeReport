@@ -86,7 +86,7 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
 
   return (
     <nav className="px-3 py-2" aria-label="Primary">
-      <p className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+      <p className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-600/80">
         Pilot
       </p>
       <ul className="space-y-0.5">
@@ -99,19 +99,30 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
             <li key={item.href}>
               <Link
                 href={item.href}
-                className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
+                // Active state: full indigo wash + left accent bar, so the
+                // current tab reads as branded rather than a slate-grey fill.
+                // Hover state on inactive items: soft indigo lift, telling
+                // the eye "this is interactive" with colour rather than
+                // monochrome grey.
+                className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors relative ${
                   active
-                    ? "bg-slate-100 text-slate-900 font-medium"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-gradient-to-r from-indigo-100 to-indigo-50 text-indigo-900 font-semibold ring-1 ring-indigo-200/80 shadow-sm"
+                    : "text-slate-700 hover:bg-indigo-50/60 hover:text-indigo-900"
                 }`}
               >
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-indigo-600"
+                  />
+                )}
                 <item.icon
                   className={`h-4 w-4 shrink-0 ${
                     active
                       ? "text-indigo-700"
                       : urgent
                         ? "text-orange-700"
-                        : "text-slate-500 group-hover:text-slate-700"
+                        : "text-indigo-500/80 group-hover:text-indigo-700"
                   }`}
                   strokeWidth={1.8}
                   aria-hidden
@@ -123,8 +134,8 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
                       urgent
                         ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200"
                         : active
-                          ? "bg-white text-slate-700 ring-1 ring-slate-200"
-                          : "bg-slate-100 text-slate-600"
+                          ? "bg-white text-indigo-700 ring-1 ring-indigo-200"
+                          : "bg-indigo-100/70 text-indigo-700"
                     }`}
                   >
                     {count}

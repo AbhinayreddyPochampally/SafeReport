@@ -288,16 +288,17 @@ export function AnalyticsClient() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
-      {/* Header */}
-      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+      {/* Header — branded gradient band (matches the Overview hero strip)
+        * so Analytics doesn't open as a slab of white. */}
+      <header className="mb-5 rounded-xl bg-gradient-to-r from-indigo-100 via-sky-50 to-teal-50 border border-indigo-100 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-700">
             Pilot · ABFRL
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-tight text-slate-900 mt-0.5">
             Analytics
           </h1>
-          <p className="text-[12.5px] text-slate-600 mt-1">
+          <p className="text-[12.5px] text-slate-700 mt-1">
             {data ? (
               <>
                 {prettyDate(data.range.from)} → {prettyDate(data.range.to)} ·{" "}
@@ -451,7 +452,7 @@ export function AnalyticsClient() {
       <header className="flex items-start gap-3 mb-4">
         <span
           aria-hidden
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-50 to-teal-100/80 text-teal-700 shrink-0 ring-1 ring-teal-100/80"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-teal-300 text-teal-800 shrink-0 ring-2 ring-teal-100 shadow-sm"
         >
           <Clock className="h-5 w-5" />
         </span>
@@ -744,13 +745,13 @@ function TimeCard({
           ? `Down ${deltaMagnitude} vs previous period`
           : `${deltaMagnitude} vs previous period`
   return (
-    <div className="bg-gradient-to-br from-white via-white to-teal-50/40 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
+    <div className="bg-gradient-to-br from-white via-teal-50 to-teal-100/80 border border-teal-100 rounded-xl p-4 flex flex-col shadow-sm">
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-50 to-teal-100/70 text-teal-700 shrink-0 ring-1 ring-teal-100"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-teal-200 text-teal-700 shrink-0 ring-1 ring-teal-200 shadow-sm"
           >
             <Icon className="h-4 w-4" />
           </span>
@@ -1031,34 +1032,19 @@ function ChartCard({
 }) {
   return (
     <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <header className="px-5 py-4 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h3 className="font-display text-[15px] font-semibold text-slate-900">
-              {title}
-            </h3>
-            <Info
-              className="h-3.5 w-3.5 text-slate-400 shrink-0"
-              aria-hidden
-            />
-          </div>
-          {subtitle && (
-            <p className="text-[12px] text-slate-500 mt-0.5">{subtitle}</p>
-          )}
-        </div>
-        {/* Decorative 3-dot menu placeholder. No menu wired yet — the
-            export-to-Excel button at the top of the page already covers
-            the only meaningful action HO would reach for from here. */}
-        <span
-          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 text-slate-500"
-          aria-hidden
-        >
-          <span className="flex flex-col gap-0.5">
-            <span className="h-0.5 w-0.5 rounded-full bg-current" />
-            <span className="h-0.5 w-0.5 rounded-full bg-current" />
-            <span className="h-0.5 w-0.5 rounded-full bg-current" />
-          </span>
-        </span>
+      {/* Header had two dead-mockup affordances — a bare Info icon that
+        * hooked up to nothing and a decorative 3-dot menu placeholder for
+        * an actions menu that was never built. Both removed: the first
+        * conflicts with the actual working MetricInfo popovers elsewhere
+        * on the page (looked like one but did nothing), the second looked
+        * like a menu but did nothing on click. */}
+      <header className="px-5 py-4">
+        <h3 className="font-display text-[15px] font-semibold text-slate-900">
+          {title}
+        </h3>
+        {subtitle && (
+          <p className="text-[12px] text-slate-500 mt-0.5">{subtitle}</p>
+        )}
       </header>
       <div className="px-5 pb-5">
         {yAxisLabel && (
