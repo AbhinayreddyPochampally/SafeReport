@@ -32,7 +32,11 @@
  *            1 otherwise.
  */
 
-import "dotenv/config"
+// Load .env.local first (where the live key lives), then fall back to .env.
+import { config as loadEnv } from "dotenv"
+loadEnv({ path: ".env.local" })
+loadEnv()
+
 import fs from "node:fs"
 import path from "node:path"
 import OpenAI from "openai"
@@ -53,10 +57,25 @@ const TRANSLATION_SYSTEM_PROMPT = `You translate workplace safety incident repor
 Rules:
 - Output only the English translation. No preamble, no notes, no quotes around it.
 - Preserve every concrete detail: locations (e.g. "near trial room 3"), equipment names, times, body parts, severity descriptions.
+- Handle code-mixing gracefully: Indian retail floor speech freely mixes Hindi/Kannada/Telugu/Tamil/Marathi grammar with English nouns ("billing counter", "trial room", "mannequin", "AC unit", "first aid kit"). Keep the English nouns as English nouns; translate only the surrounding language.
 - Use formal English suitable for a Head Office safety officer to read.
 - If the input is already English, return it as-is with only minimal cleanup (punctuation, capitalisation).
-- If the input is unintelligible or empty, output exactly: NO_INTELLIGIBLE_SPEECH
+- Be generous with imperfect transcripts: voice-note transcription introduces minor spelling/word errors. If you can reasonably infer the intended safety meaning, translate it. Only output NO_INTELLIGIBLE_SPEECH when the input is genuinely random characters, pure noise, or empty — never for a transcript that mostly makes sense but has rough spots.
 - Do not add interpretation, recommendations, or context that wasn't in the source.`
+
+// Mirror of detectLanguageFromScript() in app/api/transcribe/route.ts so
+// the smoke output matches what the production pipeline will report.
+function detectLanguageFromScript(text: string): string | null {
+  if (/[ऀ-ॿ]/.test(text)) return "hi"
+  if (/[ಀ-೿]/.test(text)) return "kn"
+  if (/[ఀ-౿]/.test(text)) return "te"
+  if (/[஀-௿]/.test(text)) return "ta"
+  if (/[઀-૿]/.test(text)) return "gu"
+  if (/[ঀ-৿]/.test(text)) return "bn"
+  if (/[਀-੿]/.test(text)) return "pa"
+  if (/[ഀ-ൿ]/.test(text)) return "ml"
+  return null
+}
 
 type FileResult = {
   file: string
@@ -178,14 +197,23 @@ async function processFile(
       result.englishText = ""
       result.error = "no speech detected"
     } else {
+      // Fill in a language code when the transcription model didn't
+      // return one — Unicode-block sniff, no extra API call required.
+      if (!result.detectedLang) {
+        result.detectedLang = detectLanguageFromScript(stageA.text)
+      }
       const isEnglish =
-        (stageA.lang && stageA.lang.startsWith("en")) ||
+        (result.detectedLang && result.detectedLang.startsWith("en")) ||
         looksLikeEnglish(stageA.text)
       if (isEnglish) {
         result.englishText = stageA.text
         result.ok = true
       } else {
-        const stageB = await translateText(openai, stageA.text, stageA.lang)
+        const stageB = await translateText(
+          openai,
+          stageA.text,
+          result.detectedLang,
+        )
         result.englishText = stageB.text
         result.translateMs = stageB.ms
         result.ok = stageB.text.length > 0 && stageB.text !== "NO_INTELLIGIBLE_SPEECH"

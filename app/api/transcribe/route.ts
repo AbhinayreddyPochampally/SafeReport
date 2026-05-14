@@ -61,9 +61,10 @@ const TRANSLATION_SYSTEM_PROMPT = `You translate workplace safety incident repor
 Rules:
 - Output only the English translation. No preamble, no notes, no quotes around it.
 - Preserve every concrete detail: locations (e.g. "near trial room 3"), equipment names, times, body parts, severity descriptions.
+- Handle code-mixing gracefully: Indian retail floor speech freely mixes Hindi/Kannada/Telugu/Tamil/Marathi grammar with English nouns ("billing counter", "trial room", "mannequin", "AC unit", "first aid kit"). Keep the English nouns as English nouns; translate only the surrounding language.
 - Use formal English suitable for a Head Office safety officer to read.
 - If the input is already English, return it as-is with only minimal cleanup (punctuation, capitalisation).
-- If the input is unintelligible or empty, output exactly: NO_INTELLIGIBLE_SPEECH
+- Be generous with imperfect transcripts: voice-note transcription introduces minor spelling/word errors. If you can reasonably infer the intended safety meaning, translate it. Only output NO_INTELLIGIBLE_SPEECH when the input is genuinely random characters, pure noise, or empty — never for a transcript that mostly makes sense but has rough spots.
 - Do not add interpretation, recommendations, or context that wasn't in the source.`
 
 function sleep(ms: number): Promise<void> {
@@ -111,6 +112,66 @@ type TranscribeResult = {
   text: string
   language: string | null
   modelUsed: string
+}
+
+/**
+ * Detect the ISO 639-1 language code from a transcript using Unicode-block
+ * heuristics first (fast, deterministic, zero-cost), then fall back to a
+ * tiny chat-completion call for ambiguous Latin-script inputs.
+ *
+ * Why this exists: `gpt-4o-transcribe` with `response_format: "json"` does
+ * not currently return a `language` field, so `stageA.language` was null
+ * on every transcription and the downstream pipeline lost two things:
+ *   (a) the ability to skip Stage B for genuinely-English audio,
+ *   (b) a useful `transcript_source_lang` value on the report row.
+ * The Unicode pass covers Devanagari/Kannada/Telugu/Tamil/Gujarati/Bengali
+ * without an extra API call; only Latin-script ambiguity (English vs.
+ * romanised Hindi etc.) falls through to the LLM.
+ */
+function detectLanguageFromScript(text: string): string | null {
+  // Devanagari covers Hindi + Marathi. Disambiguating between them from a
+  // single sentence is unreliable; we tag both as "hi" because Whisper /
+  // gpt-4o-transcribe historically returns "hi" for either, and the
+  // downstream translator handles both identically.
+  if (/[ऀ-ॿ]/.test(text)) return "hi"
+  if (/[ಀ-೿]/.test(text)) return "kn" // Kannada
+  if (/[ఀ-౿]/.test(text)) return "te" // Telugu
+  if (/[஀-௿]/.test(text)) return "ta" // Tamil
+  if (/[઀-૿]/.test(text)) return "gu" // Gujarati
+  if (/[ঀ-৿]/.test(text)) return "bn" // Bengali
+  if (/[਀-੿]/.test(text)) return "pa" // Punjabi (Gurmukhi)
+  if (/[ഀ-ൿ]/.test(text)) return "ml" // Malayalam
+  return null
+}
+
+async function detectLanguageWithLLM(
+  openai: OpenAI,
+  text: string,
+): Promise<string | null> {
+  // 60-token cap, near-zero temperature. The whole call costs a few
+  // hundredths of a cent and adds ~300ms — well worth it to give HO a
+  // meaningful language label.
+  try {
+    const result = await openai.chat.completions.create({
+      model: TRANSLATE_MODEL,
+      temperature: 0,
+      max_tokens: 8,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Return only the ISO 639-1 two-letter language code (e.g. 'en', 'hi', 'kn', 'te', 'mr', 'ta', 'bn') of the user's text. If mixed, return the dominant language. No punctuation, no quotes.",
+        },
+        { role: "user", content: text.slice(0, 400) },
+      ],
+    })
+    const code = result.choices[0]?.message?.content?.trim().toLowerCase() ?? ""
+    if (/^[a-z]{2}$/.test(code)) return code
+    return null
+  } catch (e) {
+    console.warn("[transcribe] language detect via LLM failed", errMessage(e))
+    return null
+  }
 }
 
 async function runTranscription(
@@ -324,23 +385,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ transcript: "", empty: true })
   }
 
+  // Resolve the source language. gpt-4o-transcribe with response_format
+  // "json" returns no `language` field, so we fall back to a Unicode-block
+  // sniff and (if still ambiguous) a tiny LLM call. Without this fix the
+  // pipeline persisted `transcript_source_lang = null` for every report.
+  let resolvedLang: string | null = stageA.language
+  if (!resolvedLang) {
+    resolvedLang = detectLanguageFromScript(stageA.text)
+  }
+  if (!resolvedLang) {
+    resolvedLang = await detectLanguageWithLLM(openai, stageA.text)
+  }
+
   // Stage B — translate (skip if source is already English) -------------
   let englishText = stageA.text
   let translationSkipped = false
   const isEnglishSource =
-    (stageA.language && stageA.language.startsWith("en")) ||
+    (resolvedLang && resolvedLang.startsWith("en")) ||
     looksLikeEnglish(stageA.text)
 
   if (!isEnglishSource) {
     try {
-      englishText = await runTranslation(openai, stageA.text, stageA.language)
+      englishText = await runTranslation(openai, stageA.text, resolvedLang)
       if (englishText === "NO_INTELLIGIBLE_SPEECH") {
         await admin
           .from("reports")
           .update({
             transcript_error: "Voice note was not intelligible.",
             transcript_source: stageA.text,
-            transcript_source_lang: stageA.language,
+            transcript_source_lang: resolvedLang,
           })
           .eq("id", reportId)
         return NextResponse.json({ transcript: "", unintelligible: true })
@@ -356,7 +429,7 @@ export async function POST(req: NextRequest) {
         .from("reports")
         .update({
           transcript_source: stageA.text,
-          transcript_source_lang: stageA.language,
+          transcript_source_lang: resolvedLang,
           transcript_error: `Translation failed: ${msg.slice(0, 400)}`,
         })
         .eq("id", reportId)
@@ -375,7 +448,7 @@ export async function POST(req: NextRequest) {
     .update({
       transcript: englishText,
       transcript_source: stageA.text,
-      transcript_source_lang: stageA.language,
+      transcript_source_lang: resolvedLang,
       transcript_error: null,
     })
     .eq("id", reportId)
@@ -391,7 +464,8 @@ export async function POST(req: NextRequest) {
   console.info("[transcribe] ok", {
     reportId,
     sourceModel: stageA.modelUsed,
-    sourceLang: stageA.language,
+    sourceLang: resolvedLang,
+    sourceLangFromModel: stageA.language,
     englishChars: englishText.length,
     sourceChars: stageA.text.length,
     translationSkipped,
