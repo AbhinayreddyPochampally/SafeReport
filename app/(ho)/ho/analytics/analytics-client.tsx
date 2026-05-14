@@ -1189,16 +1189,9 @@ function EmptyState({ label }: { label: string }) {
 
 /* ----------------------------- Formatters -------------------------------- */
 
-function tickDateFmt(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-    })
-  } catch {
-    return iso
-  }
-}
+// tickDateFmt previously lived here too; it moved to analytics-charts.tsx
+// alongside the Recharts BarChart components. The Recharts axes are the
+// only place it was ever used.
 
 function prettyDate(iso: string): string {
   try {

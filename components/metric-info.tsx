@@ -111,7 +111,7 @@ export function MetricInfo({
           {formula && (
             <div className="mt-2 rounded-md bg-slate-50 border border-slate-100 px-2 py-1.5">
               <p className="text-[9.5px] font-bold uppercase tracking-[0.10em] text-slate-500">
-                How it's calculated
+                How it&apos;s calculated
               </p>
               <p className="mt-0.5 font-mono text-[10.5px] leading-[1.4] text-slate-800">
                 {formula}
