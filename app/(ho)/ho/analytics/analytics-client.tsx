@@ -332,40 +332,46 @@ export function AnalyticsClient() {
         </div>
       )}
 
-      {/* Range + filter card */}
-      <section className="bg-white border border-slate-200 rounded-xl p-4 mb-5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] text-slate-500 mr-1">Range:</span>
-          <RangeChip active={preset === "7d"} onClick={() => applyPreset("7d")}>
+      {/* Range + filter card.
+        *
+        * Filter chips were a mix of pill (rounded-full) and rectangular
+        * (rounded-md) shapes at different heights across the page. Unified
+        * here as `FilterChip` — rectangular with rounded corners, h-8,
+        * consistent typography. Range / Brand / Category groups share the
+        * same eyebrow label treatment so the rows line up vertically. */}
+      <section className="bg-white border border-slate-200 rounded-xl p-4 mb-5 space-y-2.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <FilterLabel>Range</FilterLabel>
+          <FilterChip active={preset === "7d"} onClick={() => applyPreset("7d")}>
             7d
-          </RangeChip>
-          <RangeChip
+          </FilterChip>
+          <FilterChip
             active={preset === "30d"}
             onClick={() => applyPreset("30d")}
           >
             30d
-          </RangeChip>
-          <RangeChip
+          </FilterChip>
+          <FilterChip
             active={preset === "90d"}
             onClick={() => applyPreset("90d")}
           >
             90d
-          </RangeChip>
-          <RangeChip
+          </FilterChip>
+          <FilterChip
             active={preset === "custom"}
             onClick={() => setPreset("custom")}
           >
-            <Calendar className="h-3 w-3 inline -mt-0.5 mr-1" />
+            <Calendar className="h-3.5 w-3.5 mr-1" strokeWidth={1.8} aria-hidden />
             Custom
-          </RangeChip>
+          </FilterChip>
           {preset === "custom" && (
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center gap-1.5 ml-1.5">
               <input
                 type="date"
                 value={from}
                 max={to}
                 onChange={(e) => setFrom(e.target.value)}
-                className="px-2 py-1 border border-slate-300 rounded-md text-[12.5px]"
+                className="px-2.5 h-8 border border-slate-300 rounded-md text-[12px] text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
               />
               <span className="text-[11px] text-slate-400">→</span>
               <input
@@ -374,12 +380,12 @@ export function AnalyticsClient() {
                 min={from}
                 max={isoToday()}
                 onChange={(e) => setTo(e.target.value)}
-                className="px-2 py-1 border border-slate-300 rounded-md text-[12.5px]"
+                className="px-2.5 h-8 border border-slate-300 rounded-md text-[12px] text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
               />
             </div>
           )}
           {data && (
-            <span className="ml-2 px-2.5 py-1 rounded-md bg-slate-100 text-[11px] text-slate-700 font-mono">
+            <span className="ml-1.5 inline-flex items-center px-2.5 h-8 rounded-md bg-slate-100 text-[11.5px] text-slate-700 font-mono tabular-nums">
               {prettyDate(data.range.from)} → {prettyDate(data.range.to)}
             </span>
           )}
@@ -390,8 +396,8 @@ export function AnalyticsClient() {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap mt-3">
-          <span className="text-[11px] text-slate-500 mr-1">Brand:</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <FilterLabel>Brand</FilterLabel>
           <FilterChip
             active={brands.length === 0}
             onClick={() => setBrands([])}
@@ -409,8 +415,8 @@ export function AnalyticsClient() {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          <span className="text-[11px] text-slate-500 mr-1">Category:</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <FilterLabel>Category</FilterLabel>
           <FilterChip
             active={categories.length === 0}
             onClick={() => setCategories([])}
@@ -446,9 +452,9 @@ export function AnalyticsClient() {
       <header className="flex items-start gap-3 mb-4">
         <span
           aria-hidden
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800 shrink-0 ring-2 ring-slate-100 shadow-sm"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-indigo-50 text-indigo-700 shrink-0 ring-1 ring-indigo-100 shadow-sm"
         >
-          <Clock className="h-5 w-5" />
+          <Clock className="h-5 w-5" strokeWidth={1.8} />
         </span>
         <div className="min-w-0">
           <h2 className="font-display text-[20px] font-semibold text-slate-900 leading-tight">
@@ -629,30 +635,31 @@ export function AnalyticsClient() {
 
 /* ----------------------------- Small bits -------------------------------- */
 
-function RangeChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
+/**
+ * Tiny uppercase eyebrow label that sits at the start of each filter row.
+ * Pulled out so every filter group shares the same typography and width
+ * cadence — keeps Range / Brand / Category vertically aligned.
+ */
+function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 h-7 text-[12px] rounded-full border transition-colors ${
-        active
-          ? "bg-indigo-700 border-indigo-700 text-white"
-          : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-      }`}
-    >
+    <span className="inline-flex items-center h-8 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 mr-1 min-w-[58px]">
       {children}
-    </button>
+    </span>
   )
 }
 
+/**
+ * Unified filter chip — rectangular with rounded corners, fixed height.
+ *
+ * Replaces the earlier mix of `RangeChip` (rounded-full pill) and the
+ * previous `FilterChip` (rounded-full, different padding/height). All
+ * filter buttons across the HO surface now share this shape so the rows
+ * read as one consistent control set, not three different ones.
+ *
+ * The `incident` flag swaps the active tone to amber-700 to preserve the
+ * palette's "observation → slate / incident → amber" semantic, but the
+ * geometry stays identical so the chips look like siblings.
+ */
 function FilterChip({
   active,
   onClick,
@@ -665,18 +672,18 @@ function FilterChip({
   incident?: boolean
 }) {
   const activeCls = incident
-    ? "bg-amber-700 border-amber-700 text-white"
-    : "bg-slate-900 border-slate-900 text-white"
+    ? "bg-amber-700 border-amber-700 text-white shadow-sm"
+    : "bg-indigo-700 border-indigo-700 text-white shadow-sm"
+  const inactiveCls = incident
+    ? "bg-white border-amber-200 text-amber-800 hover:bg-amber-50 hover:border-amber-300"
+    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400"
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`px-2.5 h-7 text-[11.5px] rounded-full border transition-colors ${
-        active
-          ? activeCls
-          : incident
-            ? "bg-white border-amber-200 text-amber-800 hover:bg-amber-50"
-            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+      aria-pressed={active}
+      className={`inline-flex items-center px-3 h-8 rounded-md border text-[12px] font-medium transition-colors ${
+        active ? activeCls : inactiveCls
       }`}
     >
       {children}
@@ -755,14 +762,20 @@ function TimeCard({
           : `${deltaMagnitude} vs previous period`
   return (
     <div className="bg-gradient-to-br from-white via-slate-50 to-slate-200 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
-      {/* Header row */}
+      {/* Header row.
+        *
+        * Icon tile uses indigo-50 with indigo-700 lucide stroke — same
+        * tone as the section header above. This trades the older
+        * slate-gradient circle (low contrast, blended into the card
+        * background) for a clear, palette-aligned mark that reads at
+        * a glance against the slate gradient card. */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-slate-700 shrink-0 ring-1 ring-slate-200 shadow-sm"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-50 text-indigo-700 shrink-0 ring-1 ring-indigo-100 shadow-sm"
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-4 w-4" strokeWidth={1.8} />
           </span>
           <span className="text-[12.5px] font-medium text-slate-700 leading-tight">
             {label}

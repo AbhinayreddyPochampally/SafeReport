@@ -67,6 +67,13 @@ const STATUS_ORDER: readonly (keyof Omit<BucketedStatus, "date">)[] = [
   "voided",
 ]
 
+// Stack colors run light → dark within each family so the same chart can
+// stack observations (slate) below incidents (amber). The first_aid_case
+// fill was previously `#FEF3C7` (amber-100) which is nearly invisible
+// against the white chart background — and totally invisible in the
+// legend chip. Lifted to amber-300 (#FCD34D) so the segment and its
+// legend swatch both read clearly while staying lighter than the more
+// severe incident categories above it.
 const CATEGORY_STACK_ORDER: ReadonlyArray<{
   key: string
   fill: string
@@ -75,7 +82,7 @@ const CATEGORY_STACK_ORDER: ReadonlyArray<{
   { key: "near_miss", fill: "#475569", label: "Near miss" },
   { key: "unsafe_act", fill: "#64748B", label: "Unsafe act" },
   { key: "unsafe_condition", fill: "#94A3B8", label: "Unsafe condition" },
-  { key: "first_aid_case", fill: "#FEF3C7", label: "First aid" },
+  { key: "first_aid_case", fill: "#FCD34D", label: "First aid" },
   { key: "medical_treatment_case", fill: "#F59E0B", label: "Medical" },
   { key: "restricted_work_case", fill: "#D97706", label: "Restricted work" },
   { key: "lost_time_injury", fill: "#B45309", label: "Lost time" },

@@ -477,7 +477,21 @@ export function AllReportsClient({
         * border divider. Total height was ~280px. Now: 3 dense rows,
         * inline "Brand:" / "Category:" / "Status:" eyebrows acting as
         * the labels, single p-3 padding, no divider. Roughly half the
-        * vertical space. */}
+        * vertical space.
+        *
+        * 2026-05-15 — unified the chip geometry across Status / Category
+        * / Brand. They used to be a mix of `rounded-full` h-6 (Status)
+        * and `rounded-md` h-6 (Category / Brand) at different sizes,
+        * which read as three different control sets stacked on top of
+        * each other. All three now share `rounded-md` h-8 / px-3 /
+        * text-[12px] via the local FilterPill component. The active
+        * tones still carry semantic colour (status pills keep their
+        * status colour; incident categories light up amber; observations
+        * light up slate), but the SHAPE is uniform so the rows read as
+        * siblings. Also: observation categories had no `acronym` field,
+        * so the chips rendered with empty labels — switched both
+        * observation and incident chips to use the full label, matching
+        * what the Analytics page already does. */}
       <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-3 space-y-2 shadow-sm">
         {/* Row 1: search + dates + clear, all inline on md+ */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -528,7 +542,7 @@ export function AllReportsClient({
                   q: "",
                 })
               }
-              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 h-8 text-[11.5px] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 h-8 text-[11.5px] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
             >
               <X className="h-3 w-3" aria-hidden />
               Clear
@@ -536,106 +550,82 @@ export function AllReportsClient({
           )}
         </div>
 
-        {/* Row 2: status + category + brand chips, each prefixed with a
-          * tiny eyebrow label inline. Wraps naturally on narrow widths. */}
+        {/* Row 2+: status, category, brand chips. Each row prefixed with
+          * a fixed-width uppercase eyebrow so the chip columns line up. */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
-            Status
-          </span>
-          <button
-            type="button"
+          <FilterRowLabel>Status</FilterRowLabel>
+          <FilterPill
+            active={
+              filters.status.kind === "preset" &&
+              filters.status.value === "all"
+            }
             onClick={() => apply({ status: { kind: "preset", value: "all" } })}
-            className={`px-2 h-6 rounded-full text-[11px] font-medium border transition-colors ${
-              filters.status.kind === "preset" && filters.status.value === "all"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-            }`}
+            activeTone="indigo"
           >
             All
-          </button>
-          <button
-            type="button"
+          </FilterPill>
+          <FilterPill
+            active={
+              filters.status.kind === "preset" &&
+              filters.status.value === "open"
+            }
             onClick={() => apply({ status: { kind: "preset", value: "open" } })}
-            className={`px-2 h-6 rounded-full text-[11px] font-medium border transition-colors ${
-              filters.status.kind === "preset" && filters.status.value === "open"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-            }`}
+            activeTone="indigo"
           >
             Open
-          </button>
+          </FilterPill>
           {STATUS_ORDER.map((s) => {
             const active = isStatusActive(s)
+            const count = statusCounts[s] ?? 0
             return (
-              <button
+              <FilterPill
                 key={s}
-                type="button"
+                active={active}
                 onClick={() => toggleStatus(s)}
-                className={`inline-flex items-center gap-1 px-2 h-6 rounded-full border text-[11px] font-medium transition-colors ${
-                  active
-                    ? STATUS_PILL_CLASSES[s] + " ring-1 ring-offset-1 ring-slate-300"
-                    : STATUS_PILL_CLASSES[s] + " hover:opacity-90"
-                }`}
-                aria-pressed={active}
+                statusTone={STATUS_PILL_CLASSES[s]}
               >
                 {STATUS_LABEL[s]}
-                <span className="text-[10px] font-semibold tabular-nums opacity-70">
-                  {statusCounts[s] ?? 0}
+                <span className="ml-1.5 text-[10.5px] font-semibold tabular-nums opacity-75">
+                  {count}
                 </span>
-              </button>
+              </FilterPill>
             )
           })}
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
-            Category
-          </span>
+          <FilterRowLabel>Category</FilterRowLabel>
           {CATEGORIES.map((cat) => {
             const active = filters.categories.includes(cat.key)
             const isIncident = cat.kind === "incident"
-            const baseTone = isIncident
-              ? "bg-amber-50 text-amber-800 border-amber-200"
-              : "bg-slate-100 text-slate-700 border-slate-200"
-            const activeTone = isIncident
-              ? "bg-amber-700 text-white border-amber-700"
-              : "bg-slate-700 text-white border-slate-700"
             return (
-              <button
+              <FilterPill
                 key={cat.key}
-                type="button"
+                active={active}
                 onClick={() => toggleCategory(cat.key)}
+                activeTone={isIncident ? "amber" : "slate"}
                 title={cat.label}
-                className={`inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-[10.5px] font-bold border transition-colors ${
-                  active ? activeTone : baseTone
-                }`}
               >
-                {cat.acronym}
-              </button>
+                {cat.label}
+              </FilterPill>
             )
           })}
         </div>
 
         {availableBrands.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-[0.10em] text-slate-500 mr-0.5">
-              Brand
-            </span>
+            <FilterRowLabel>Brand</FilterRowLabel>
             {availableBrands.map((b) => {
               const active = filters.brands.includes(b)
               return (
-                <button
+                <FilterPill
                   key={b}
-                  type="button"
+                  active={active}
                   onClick={() => toggleBrand(b)}
-                  className={`px-2 h-6 rounded-md text-[11px] font-medium border transition-colors ${
-                    active
-                      ? "bg-indigo-700 text-white border-indigo-700"
-                      : "bg-white text-slate-700 border-slate-200 hover:border-indigo-300"
-                  }`}
+                  activeTone="indigo"
                 >
                   {b}
-                </button>
+                </FilterPill>
               )
             })}
           </div>
@@ -666,28 +656,53 @@ export function AllReportsClient({
         <p className="text-slate-500">Sorted by Reported · newest</p>
       </div>
 
-      {/* Table OR split-pane -------------------------------------------- */}
+      {/* Table OR split-pane --------------------------------------------
+        *
+        * Split-pane alignment: the detail pane carries a tinted action
+        * bar on top (status-coloured: amber/teal/slate). Without a
+        * matching strip on the list pane, the two columns started at
+        * the same Y but their *first content row* didn't — the list's
+        * first card sat where the detail's action bar started, and the
+        * detail's first body content (photos, transcript) sat one row
+        * below where the list's first card sat. The list pane now
+        * carries its own slim header strip (sticky to top of the
+        * scroll area) matching the detail action-bar height, so both
+        * columns have a `header / scrollable body / footer` structure
+        * with identical vertical rhythm. */}
       {detail ? (
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4 items-start">
           {/* Compact list ---------------------------------------------- */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto">
-            {rows.length === 0 ? (
-              <div className="p-6 text-center text-[12.5px] text-slate-500">
-                No reports match these filters.
-              </div>
-            ) : (
-              <ul role="listbox" aria-label="Reports">
-                {rows.map((r) => (
-                  <li key={r.id}>
-                    <CompactRow
-                      row={r}
-                      active={r.id === selectedId}
-                      onSelect={selectRow}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-100px)] flex flex-col">
+            {/* List header — same height (≈49px) as the detail action
+              * bar, so the first row of list content aligns with the
+              * first row of detail body content. */}
+            <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.10em] text-slate-500">
+                {total.toLocaleString()} {total === 1 ? "report" : "reports"}
+              </span>
+              <span className="text-[11px] text-slate-500 tabular-nums">
+                Newest first
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {rows.length === 0 ? (
+                <div className="p-6 text-center text-[12.5px] text-slate-500">
+                  No reports match these filters.
+                </div>
+              ) : (
+                <ul role="listbox" aria-label="Reports">
+                  {rows.map((r) => (
+                    <li key={r.id}>
+                      <CompactRow
+                        row={r}
+                        active={r.id === selectedId}
+                        onSelect={selectRow}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {/* Pagination */}
             <div className="flex items-center justify-between px-3 py-2.5 border-t border-slate-200 bg-slate-50/60 text-[11.5px]">
               <p className="text-slate-600 tabular-nums">
@@ -834,6 +849,86 @@ export function AllReportsClient({
         </div>
       )}
     </div>
+  )
+}
+
+/* ------------------------------- Chips ------------------------------- */
+
+/**
+ * Eyebrow label that sits at the start of each filter row.
+ *
+ * Fixed `min-w-[60px]` width + h-8 alignment so the chip columns in
+ * Status / Category / Brand line up vertically — the rows read as one
+ * tabular grouping instead of three loose pile-ups.
+ */
+function FilterRowLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center h-8 mr-1 min-w-[60px] text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+      {children}
+    </span>
+  )
+}
+
+/**
+ * Unified filter chip for the Reports tab.
+ *
+ * One shape (rounded-md, h-8, px-3, text-[12px]) used across Status,
+ * Category, and Brand rows. Active tone is parameterised so the chips
+ * can still carry semantic colour:
+ *   - `statusTone`  — for status pills, the per-status STATUS_PILL_CLASSES
+ *                     string is used as both base and active fill so the
+ *                     chip retains its status hue (slate/indigo/sky/
+ *                     orange/teal). Active state adds a slate ring.
+ *   - `activeTone`  — one of `indigo` (default for All / Open / Brand),
+ *                     `amber` (incident categories), `slate`
+ *                     (observation categories).
+ *
+ * Inactive state is always white with a slate-200 border so the row
+ * looks like a single control set at rest; the colour shows up when
+ * a chip becomes active.
+ */
+function FilterPill({
+  active,
+  onClick,
+  children,
+  activeTone = "indigo",
+  statusTone,
+  title,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+  activeTone?: "indigo" | "amber" | "slate"
+  /** When set, the chip is a status-pill and uses STATUS_PILL_CLASSES
+   * for both rest and active fill. Overrides `activeTone`. */
+  statusTone?: string
+  title?: string
+}) {
+  let cls: string
+  if (statusTone) {
+    cls = active
+      ? `${statusTone} ring-1 ring-offset-1 ring-slate-300`
+      : `${statusTone} hover:brightness-95`
+  } else {
+    const activeMap: Record<typeof activeTone & string, string> = {
+      indigo: "bg-indigo-700 text-white border-indigo-700 shadow-sm",
+      amber: "bg-amber-700 text-white border-amber-700 shadow-sm",
+      slate: "bg-slate-700 text-white border-slate-700 shadow-sm",
+    }
+    cls = active
+      ? activeMap[activeTone]
+      : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50 hover:border-slate-400"
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      className={`inline-flex items-center px-3 h-8 rounded-md border text-[12px] font-medium transition-colors ${cls}`}
+    >
+      {children}
+    </button>
   )
 }
 
