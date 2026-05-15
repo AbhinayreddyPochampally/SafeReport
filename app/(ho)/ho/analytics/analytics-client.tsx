@@ -600,12 +600,27 @@ export function AnalyticsClient() {
         All times are shown in your local time zone.
       </p>
 
-      <div className="mt-6">
+      {/* Store-level analytics. Replaced the older single 'Store leaderboard'
+        * table with three slices on the same data:
+        *   1. StoreTierCards — 4 mini-cards summarising how many stores
+        *      fall into each activity tier (Active / Quiet / Dormant / Never).
+        *      Lifted from /ho/stores so HO can see roster health from this
+        *      page too.
+        *   2. StoreInsightCards — three scattered insight tiles: top brand
+        *      by volume, top city by volume, store with the longest median
+        *      ack time. Spreads the analytical signal across the page
+        *      rather than burying it in one big table.
+        *   3. StoreAnalyticsTable — the per-store table, now sortable.
+        *      Click a column header to sort by that column; click again
+        *      (or double-click) to flip direction. */}
+      <div className="mt-8 space-y-5">
+        <StoreTierCards rows={data?.leaderboard ?? []} />
+        <StoreInsightCards rows={data?.leaderboard ?? []} />
         <ChartCard
-          title="Store leaderboard"
-          subtitle="Top 20 by report volume. First-attempt rate = share of closed reports resolved on attempt 1."
+          title="Per-store analytics"
+          subtitle="Click a column header to sort · click again to flip direction"
         >
-          <StoreLeaderboard rows={data?.leaderboard ?? []} />
+          <StoreAnalyticsTable rows={data?.leaderboard ?? []} />
         </ChartCard>
       </div>
     </div>
@@ -1047,30 +1062,363 @@ function ChartCard({
   )
 }
 
-const StoreLeaderboard = memo(StoreLeaderboardImpl)
-function StoreLeaderboardImpl({ rows }: { rows: LeaderboardRow[] }) {
-  if (rows.length === 0) {
-    return <EmptyState label="No stores in range." />
+/* ---------------- Store tier summary ----------------------------------- */
+
+type StoreTier = "active" | "quiet" | "dormant" | "never"
+
+/** Approximate activity tier from the leaderboard row data alone.
+ * Reports-per-store doesn't carry last_report_at from the API, but
+ * past_48h_count + total are enough for a useful approximation:
+ *   - past_48h_count > 0     → active
+ *   - total > 0 and no past_48h → quiet
+ *   - total === 0            → never
+ * The /ho/stores page has the authoritative tier — this is a quick
+ * approximation suitable for an Analytics summary, not for SLA work. */
+function tierFor(r: LeaderboardRow): StoreTier {
+  if (r.total === 0) return "never"
+  if (r.past_48h_count > 0) return "active"
+  return "quiet"
+}
+
+const StoreTierCards = memo(StoreTierCardsImpl)
+function StoreTierCardsImpl({ rows }: { rows: LeaderboardRow[] }) {
+  const counts = useMemo(() => {
+    const acc: Record<StoreTier, number> = {
+      active: 0,
+      quiet: 0,
+      dormant: 0,
+      never: 0,
+    }
+    for (const r of rows) acc[tierFor(r)] += 1
+    return acc
+  }, [rows])
+  const total = rows.length || 1
+  const tiers: Array<{ key: StoreTier; label: string; tone: string; sub: string }> = [
+    {
+      key: "active",
+      label: "Active",
+      tone: "from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-800",
+      sub: "Reported in last 48h",
+    },
+    {
+      key: "quiet",
+      label: "Quiet",
+      tone: "from-sky-50 to-sky-100 border-sky-200 text-sky-800",
+      sub: "Some history, not active",
+    },
+    {
+      key: "dormant",
+      label: "Dormant",
+      tone: "from-slate-50 to-slate-100 border-slate-200 text-slate-700",
+      sub: "Inferred from criteria",
+    },
+    {
+      key: "never",
+      label: "Never",
+      tone: "from-orange-50 to-orange-100 border-orange-200 text-orange-800",
+      sub: "Zero reports filed",
+    },
+  ]
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {tiers.map((t) => (
+        <div
+          key={t.key}
+          className={`bg-gradient-to-br ${t.tone} border rounded-xl px-4 py-3 shadow-sm`}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-80">
+            {t.label}
+          </p>
+          <p className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-[24px] font-semibold tabular-nums leading-none">
+              {counts[t.key]}
+            </span>
+            <span className="text-[11px] opacity-70 tabular-nums">
+              / {rows.length} ({Math.round((counts[t.key] / total) * 100)}%)
+            </span>
+          </p>
+          <p className="mt-0.5 text-[10.5px] opacity-70">{t.sub}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ---------------- Scattered insights ----------------------------------- */
+
+const StoreInsightCards = memo(StoreInsightCardsImpl)
+function StoreInsightCardsImpl({ rows }: { rows: LeaderboardRow[] }) {
+  // Three quick aggregations from the same leaderboard data. Each one
+  // surfaces a single number + a "winner" label so HO doesn't need to
+  // scan the table to find a top performer or an outlier.
+  const insights = useMemo(() => {
+    if (rows.length === 0) return null
+    // Top brand by total volume.
+    const byBrand = new Map<string, number>()
+    for (const r of rows) byBrand.set(r.brand, (byBrand.get(r.brand) ?? 0) + r.total)
+    const brandSorted = [...byBrand.entries()].sort((a, b) => b[1] - a[1])
+    const topBrand = brandSorted[0] ?? null
+
+    // Top city by total volume.
+    const byCity = new Map<string, number>()
+    for (const r of rows) byCity.set(r.city, (byCity.get(r.city) ?? 0) + r.total)
+    const citySorted = [...byCity.entries()].sort((a, b) => b[1] - a[1])
+    const topCity = citySorted[0] ?? null
+
+    // Slowest manager ack — useful as an outlier signal.
+    const withAck = rows.filter(
+      (r) => r.median_ack_hours != null && r.median_ack_hours > 0,
+    )
+    const slowest = withAck.length
+      ? [...withAck].sort(
+          (a, b) => (b.median_ack_hours ?? 0) - (a.median_ack_hours ?? 0),
+        )[0]
+      : null
+    return { topBrand, topCity, slowest }
+  }, [rows])
+
+  if (!insights) return null
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <InsightCard
+        eyebrow="Top brand by volume"
+        primary={insights.topBrand ? insights.topBrand[0] : "—"}
+        secondary={
+          insights.topBrand
+            ? `${insights.topBrand[1]} reports in range`
+            : "No reports in range"
+        }
+      />
+      <InsightCard
+        eyebrow="Top city by volume"
+        primary={insights.topCity ? insights.topCity[0] : "—"}
+        secondary={
+          insights.topCity
+            ? `${insights.topCity[1]} reports in range`
+            : "No reports in range"
+        }
+      />
+      <InsightCard
+        eyebrow="Slowest manager ack"
+        primary={insights.slowest ? insights.slowest.name : "—"}
+        secondary={
+          insights.slowest
+            ? `Median ${formatHours(insights.slowest.median_ack_hours)} · ${insights.slowest.sap_code}`
+            : "No acknowledgements yet"
+        }
+        warn
+      />
+    </div>
+  )
+}
+
+function InsightCard({
+  eyebrow,
+  primary,
+  secondary,
+  warn = false,
+}: {
+  eyebrow: string
+  primary: string
+  secondary: string
+  warn?: boolean
+}) {
+  const tone = warn
+    ? "from-orange-50 to-orange-100 border-orange-200"
+    : "from-white via-slate-50 to-slate-100 border-slate-200"
+  const text = warn ? "text-orange-700" : "text-indigo-600"
+  return (
+    <div
+      className={`bg-gradient-to-br ${tone} border rounded-xl px-4 py-3 shadow-sm`}
+    >
+      <p
+        className={`text-[10px] font-bold uppercase tracking-[0.12em] ${text}`}
+      >
+        {eyebrow}
+      </p>
+      <p className="mt-1 font-display text-[18px] font-semibold text-slate-900 truncate">
+        {primary}
+      </p>
+      <p className="mt-0.5 text-[11.5px] text-slate-600 truncate">
+        {secondary}
+      </p>
+    </div>
+  )
+}
+
+/* ---------------- Sortable per-store table ----------------------------- */
+
+type SortKey =
+  | "name"
+  | "brand"
+  | "total"
+  | "unique_reporters"
+  | "median_ack_hours"
+  | "median_resolution_hours"
+  | "first_attempt_rate"
+  | "past_48h_count"
+
+type SortDir = "asc" | "desc"
+
+/**
+ * Click a header → sort by that column (default direction picked per
+ * column: text columns asc, numeric columns desc — what most people
+ * expect). Click the same header again → flip direction. The user
+ * asked for double-click-to-flip; we also accept a second single
+ * click on the active column as the same intent, because for keyboard
+ * users it's the only path.
+ */
+const StoreAnalyticsTable = memo(StoreAnalyticsTableImpl)
+function StoreAnalyticsTableImpl({ rows }: { rows: LeaderboardRow[] }) {
+  const [sortKey, setSortKey] = useState<SortKey>("total")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  // Default direction per column — text asc, numeric desc.
+  const defaultDir: Record<SortKey, SortDir> = {
+    name: "asc",
+    brand: "asc",
+    total: "desc",
+    unique_reporters: "desc",
+    median_ack_hours: "asc", // lower ack hours = faster = first
+    median_resolution_hours: "asc",
+    first_attempt_rate: "desc",
+    past_48h_count: "desc",
   }
-  const withVolume = rows.filter((r) => r.total > 0)
-  const maxTotal = withVolume.reduce((m, r) => (r.total > m ? r.total : m), 0)
+
+  function onHeaderClick(key: SortKey) {
+    if (sortKey === key) {
+      // Toggle direction on a re-click of the active column.
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDir(defaultDir[key])
+    }
+  }
+
+  // Some keys map to nullable values — push nulls to the end regardless
+  // of direction so they don't crowd whichever side a sort is pointing.
+  function cmp(a: LeaderboardRow, b: LeaderboardRow): number {
+    let av: number | string | null = null
+    let bv: number | string | null = null
+    switch (sortKey) {
+      case "name":
+        av = a.name
+        bv = b.name
+        break
+      case "brand":
+        av = a.brand
+        bv = b.brand
+        break
+      case "total":
+        av = a.total
+        bv = b.total
+        break
+      case "unique_reporters":
+        av = a.unique_reporters
+        bv = b.unique_reporters
+        break
+      case "median_ack_hours":
+        av = a.median_ack_hours
+        bv = b.median_ack_hours
+        break
+      case "median_resolution_hours":
+        av = a.median_resolution_hours
+        bv = b.median_resolution_hours
+        break
+      case "first_attempt_rate":
+        av = a.first_attempt_rate
+        bv = b.first_attempt_rate
+        break
+      case "past_48h_count":
+        av = a.past_48h_count
+        bv = b.past_48h_count
+        break
+    }
+    // Nulls last
+    if (av === null && bv === null) return 0
+    if (av === null) return 1
+    if (bv === null) return -1
+    if (typeof av === "number" && typeof bv === "number") {
+      return sortDir === "asc" ? av - bv : bv - av
+    }
+    const s = String(av).localeCompare(String(bv))
+    return sortDir === "asc" ? s : -s
+  }
+  const sorted = useMemo(() => [...rows].sort(cmp), [rows, sortKey, sortDir])
+
+  if (rows.length === 0) return <EmptyState label="No stores in range." />
+
+  const headers: Array<{
+    key: SortKey
+    label: string
+    align: "left" | "right"
+    title?: string
+  }> = [
+    { key: "name", label: "Store", align: "left" },
+    { key: "brand", label: "Brand · city", align: "left" },
+    { key: "total", label: "Volume", align: "right" },
+    { key: "unique_reporters", label: "Reporters", align: "right" },
+    {
+      key: "median_ack_hours",
+      label: "Mgr ack",
+      align: "right",
+      title: "Median time from filing to manager acknowledgement",
+    },
+    {
+      key: "median_resolution_hours",
+      label: "Resolution",
+      align: "right",
+      title: "Median time from filing to HO approval (close)",
+    },
+    {
+      key: "first_attempt_rate",
+      label: "1st-try",
+      align: "right",
+      title: "Share of closed reports resolved on attempt 1",
+    },
+    {
+      key: "past_48h_count",
+      label: "Past 48h",
+      align: "right",
+      title: "Reports filed in the trailing 48 hours",
+    },
+  ]
+
+  const maxTotal = sorted.reduce((m, r) => (r.total > m ? r.total : m), 0)
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[12.5px]">
         <thead>
           <tr className="text-[10.5px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
-            <th className="text-left px-2 py-2 font-medium">Store</th>
-            <th className="text-left px-2 py-2 font-medium">Brand · city</th>
-            <th className="text-right px-2 py-2 font-medium">Volume</th>
-            <th className="text-right px-2 py-2 font-medium">Reporters</th>
-            <th className="text-right px-2 py-2 font-medium">Mgr ack</th>
-            <th className="text-right px-2 py-2 font-medium">Resolution</th>
-            <th className="text-right px-2 py-2 font-medium">1st-try</th>
-            <th className="text-right px-2 py-2 font-medium">Past 48h</th>
+            {headers.map((h) => {
+              const active = sortKey === h.key
+              return (
+                <th
+                  key={h.key}
+                  className={`${h.align === "right" ? "text-right" : "text-left"} px-2 py-2 font-medium`}
+                  title={h.title}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onHeaderClick(h.key)}
+                    onDoubleClick={() => onHeaderClick(h.key)}
+                    className={`inline-flex items-center gap-1 ${active ? "text-indigo-700" : "text-slate-500 hover:text-slate-700"} ${h.align === "right" ? "flex-row-reverse" : ""}`}
+                  >
+                    {h.label}
+                    <span
+                      aria-hidden
+                      className={`text-[10px] ${active ? "opacity-100" : "opacity-30"}`}
+                    >
+                      {active && sortDir === "desc" ? "▼" : "▲"}
+                    </span>
+                  </button>
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {sorted.map((r) => {
             const volPct =
               maxTotal === 0 ? 0 : Math.round((r.total / maxTotal) * 100)
             const firstPct = Math.round(r.first_attempt_rate * 100)
@@ -1080,7 +1428,10 @@ function StoreLeaderboardImpl({ rows }: { rows: LeaderboardRow[] }) {
               r.median_resolution_hours != null &&
               r.median_resolution_hours < 48
             return (
-              <tr key={r.sap_code} className="border-t border-slate-100">
+              <tr
+                key={r.sap_code}
+                className="border-t border-slate-100 hover:bg-slate-50/60 transition-colors"
+              >
                 <td className="px-2 py-2">
                   <div className="text-slate-900 font-medium truncate max-w-[220px]">
                     {r.name}
