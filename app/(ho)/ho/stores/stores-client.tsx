@@ -652,7 +652,18 @@ export function StoresClient({
                     <div className="flex items-start gap-2">
                       <StoreIcon className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
                       <div className="min-w-0">
-                        <div className="text-slate-900 font-medium truncate">
+                        {/* Store name carries the postal address in its
+                            native browser tooltip — the address is in
+                            the DB (and the Edit modal) for ops use, but
+                            inline display was blowing the row height up
+                            and squeezing the Brand/Manager columns.
+                            The name already encodes the location
+                            ("Louis Philippe - Sarjapura Road"), so a
+                            hover-to-reveal is the right density. */}
+                        <div
+                          className="text-slate-900 font-medium truncate"
+                          title={r.location ?? undefined}
+                        >
                           {r.name}
                         </div>
                         {!r.qr_downloaded_at && (
@@ -664,11 +675,6 @@ export function StoresClient({
                               <Sparkles className="h-2.5 w-2.5" />
                               New
                             </span>
-                          </div>
-                        )}
-                        {r.location && (
-                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">
-                            {r.location}
                           </div>
                         )}
                       </div>
