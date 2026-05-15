@@ -126,7 +126,12 @@ async function drawOnePage(
   // 2) QR code — centred in the placeholder, sized to the placeholder's
   //    short side with a small breathing-room inset so the navy border on
   //    the template stays visible.
-  const target = `${(baseUrl ?? "").replace(/\/$/, "")}/r/${store.sap_code}`
+  //
+  // The `?src=qr` tag is what splits scan-originated visits from direct
+  // entry on the Analytics → Per-store table. The reporter landing reads
+  // it from searchParams and forwards it to the visit beacon. Don't drop
+  // this query param — without it the QR/direct column is just zeros.
+  const target = `${(baseUrl ?? "").replace(/\/$/, "")}/r/${store.sap_code}?src=qr`
   // High error correction so the QR survives print smudges/folds, plus a
   // generous source resolution — pdf-lib will scale it down to the final
   // print size in vector terms.

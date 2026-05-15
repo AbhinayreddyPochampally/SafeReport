@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ReporterForm } from "./reporter-form"
 import { StoreUnavailable } from "./store-unavailable"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
+import { VisitTracker } from "@/components/visit-tracker"
 
 export const dynamic = "force-dynamic"
 
@@ -41,9 +42,19 @@ export function generateMetadata(props: MetadataProps): Metadata {
 
 export default async function ReporterLandingPage({
   params,
+  searchParams,
 }: {
   params: { sap_code: string }
+  searchParams: { [key: string]: string | string[] | undefined }
 }) {
+  // QR posters embed `?src=qr` in the URL the printed code resolves to,
+  // so a scan-originated visit carries that tag through to the page.
+  // Anything else (direct paste, bookmark, internal link) reads as 'direct'.
+  const srcParam = searchParams.src
+  const visitSource: "qr" | "direct" =
+    (Array.isArray(srcParam) ? srcParam[0] : srcParam) === "qr"
+      ? "qr"
+      : "direct"
   const supabase = createSupabaseServerClient()
 
   // NB: we query the v_store_public VIEW, not the stores table, because the
@@ -107,6 +118,12 @@ export default async function ReporterLandingPage({
       {/* Reporter form - owns the localised intro + name+phone form so the
           language toggle inside it can re-render everything below it. */}
       <ReporterForm sap_code={store.sap_code} />
+
+      {/* Fire-and-forget landing-visit beacon. Renders nothing — sends a
+          single sendBeacon to /api/visits/log on mount so HO can see
+          per-store traffic + QR-vs-direct split on the Analytics page.
+          Server-side cookie throttle keeps refreshes from inflating counts. */}
+      <VisitTracker sap_code={store.sap_code} source={visitSource} />
     </main>
   )
 }

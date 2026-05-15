@@ -115,6 +115,12 @@ type LeaderboardRow = {
   median_ack_hours: number | null
   median_resolution_hours: number | null
   past_48h_count: number
+  /** Landing-page visits in range (mig 006). */
+  visits: number
+  /** Subset of `visits` that arrived via QR scan (?src=qr). */
+  qr_visits: number
+  /** Distinct visitor fingerprints in range — approx unique devices. */
+  unique_visitors: number
 }
 
 type Payload = {
@@ -1270,6 +1276,8 @@ type SortKey =
   | "median_resolution_hours"
   | "first_attempt_rate"
   | "past_48h_count"
+  | "visits"
+  | "submit_rate"
 
 type SortDir = "asc" | "desc"
 
@@ -1296,6 +1304,8 @@ function StoreAnalyticsTableImpl({ rows }: { rows: LeaderboardRow[] }) {
     median_resolution_hours: "asc",
     first_attempt_rate: "desc",
     past_48h_count: "desc",
+    visits: "desc",
+    submit_rate: "desc",
   }
 
   function onHeaderClick(key: SortKey) {
@@ -1346,6 +1356,18 @@ function StoreAnalyticsTableImpl({ rows }: { rows: LeaderboardRow[] }) {
         av = a.past_48h_count
         bv = b.past_48h_count
         break
+      case "visits":
+        av = a.visits
+        bv = b.visits
+        break
+      case "submit_rate":
+        // Reports / visits. Stores with no visits sort to the end (null
+        // handling below), regardless of how many reports they have —
+        // those rows pre-date the visit-tracker cutover and the rate
+        // would be a false 0%.
+        av = a.visits === 0 ? null : a.total / a.visits
+        bv = b.visits === 0 ? null : b.total / b.visits
+        break
     }
     // Nulls last
     if (av === null && bv === null) return 0
@@ -1369,6 +1391,20 @@ function StoreAnalyticsTableImpl({ rows }: { rows: LeaderboardRow[] }) {
   }> = [
     { key: "name", label: "Store", align: "left" },
     { key: "brand", label: "Brand · city", align: "left" },
+    {
+      key: "visits",
+      label: "Visits",
+      align: "right",
+      title:
+        "Landing-page visits in range. The smaller line below is the share that arrived via QR scan vs direct.",
+    },
+    {
+      key: "submit_rate",
+      label: "Submit %",
+      align: "right",
+      title:
+        "Reports filed ÷ visits. Low rate = staff are reaching the page but not filing — copy or trust issue.",
+    },
     { key: "total", label: "Volume", align: "right" },
     { key: "unique_reporters", label: "Reporters", align: "right" },
     {
@@ -1456,6 +1492,49 @@ function StoreAnalyticsTableImpl({ rows }: { rows: LeaderboardRow[] }) {
                 <td className="px-2 py-2 text-slate-700">
                   <div>{r.brand}</div>
                   <div className="text-[11px] text-slate-500">{r.city}</div>
+                </td>
+                {/* Visits — primary number on top, source split as
+                  * micro-info below. Stores with zero visits in range
+                  * (or pre-cutover) show an em dash so the row doesn't
+                  * read as a real "0% QR" data point. */}
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {r.visits === 0 ? (
+                    <span className="text-slate-300">—</span>
+                  ) : (
+                    <div>
+                      <div className="text-slate-900">{r.visits}</div>
+                      <div className="text-[10.5px] text-slate-500">
+                        {Math.round((r.qr_visits / r.visits) * 100)}% QR
+                        {r.unique_visitors > 0 && (
+                          <>
+                            {" · "}
+                            {r.unique_visitors}{" "}
+                            {r.unique_visitors === 1 ? "device" : "devices"}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </td>
+                {/* Submit % — reports / visits. Tinted teal when ≥10%
+                  * (good engagement), orange when <2% with non-trivial
+                  * traffic (looks like leak: people landing but not
+                  * filing), slate otherwise. Em dash when there's no
+                  * traffic data to divide by. */}
+                <td
+                  className={`px-2 py-2 text-right tabular-nums ${
+                    r.visits === 0
+                      ? "text-slate-300"
+                      : r.total / r.visits >= 0.1
+                        ? "text-teal-700"
+                        : r.visits >= 20 && r.total / r.visits < 0.02
+                          ? "text-orange-700"
+                          : "text-slate-700"
+                  }`}
+                >
+                  {r.visits === 0
+                    ? "—"
+                    : `${Math.round((r.total / r.visits) * 100)}%`}
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums">
                   <div className="flex items-center justify-end gap-2">

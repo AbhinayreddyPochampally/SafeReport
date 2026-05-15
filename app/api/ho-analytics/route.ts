@@ -76,6 +76,22 @@ type LeaderboardRow = {
   median_ack_hours: number | null
   median_resolution_hours: number | null
   past_48h_count: number
+  /**
+   * Total landing-page visits to /r/[sap_code] in the active range.
+   * Sourced from the page_visits table (mig 006). Visits are tracked
+   * starting from the cutover date — older ranges show 0 here.
+   */
+  visits: number
+  /**
+   * Subset of `visits` that arrived via a QR scan (URL carried ?src=qr).
+   * Difference (`visits - qr_visits`) is direct entry.
+   */
+  qr_visits: number
+  /**
+   * Distinct visitor fingerprints (per-day hash of UA) in the range.
+   * Approximates unique devices; not unique people.
+   */
+  unique_visitors: number
 }
 
 const CATEGORY_KEYS = [
@@ -211,20 +227,36 @@ export async function GET(req: NextRequest) {
     return q
   }
 
-  const [storesResp, reportsResp, prevReportsResp, resolutionsResp, approvalsResp] =
-    await Promise.all([
-      admin
-        .from("stores")
-        .select("sap_code, name, brand, city, status")
-        .eq("status", "active"),
-      buildReportQuery(from, toExclusive),
-      buildReportQuery(prevFrom, prevTo),
-      admin.from("resolutions").select("report_id, attempt_number"),
-      admin
-        .from("ho_actions")
-        .select("report_id, action, acted_at")
-        .eq("action", "approve"),
-    ])
+  const [
+    storesResp,
+    reportsResp,
+    prevReportsResp,
+    resolutionsResp,
+    approvalsResp,
+    visitsResp,
+  ] = await Promise.all([
+    admin
+      .from("stores")
+      .select("sap_code, name, brand, city, status")
+      .eq("status", "active"),
+    buildReportQuery(from, toExclusive),
+    buildReportQuery(prevFrom, prevTo),
+    admin.from("resolutions").select("report_id, attempt_number"),
+    admin
+      .from("ho_actions")
+      .select("report_id, action, acted_at")
+      .eq("action", "approve"),
+    // page_visits — landing-page hits per store in the active range.
+    // Note: brand/city filters can't be applied here because page_visits
+    // joins to stores by sap_code; we filter the aggregated counts
+    // client-side via the stores set instead. Cheap because the table
+    // is small and the SAP-code lookup is O(1).
+    admin
+      .from("page_visits")
+      .select("sap_code, source, visitor_fingerprint")
+      .gte("visited_at", from.toISOString())
+      .lte("visited_at", toExclusive.toISOString()),
+  ])
 
   if (storesResp.error || reportsResp.error || prevReportsResp.error) {
     console.error(
@@ -447,6 +479,31 @@ export async function GET(req: NextRequest) {
       b.closedCount === 0 ? null : b.within48hClosed / b.closedCount,
   }))
 
+  // ---- Page-visit aggregation (per SAP code) ----------------------------
+  // Bucketed once up-front so the leaderboard loop is O(1) per store.
+  // `unique_visitors` is the distinct count of the daily-rotating
+  // fingerprints we wrote into page_visits — approximates unique devices
+  // in the range. Not unique people; someone visiting from two devices
+  // counts as two.
+  type VisitAgg = {
+    visits: number
+    qr_visits: number
+    fingerprints: Set<string>
+  }
+  const visitAgg = new Map<string, VisitAgg>()
+  for (const v of visitsResp.data ?? []) {
+    const sap = v.sap_code as string
+    let agg = visitAgg.get(sap)
+    if (!agg) {
+      agg = { visits: 0, qr_visits: 0, fingerprints: new Set<string>() }
+      visitAgg.set(sap, agg)
+    }
+    agg.visits += 1
+    if (v.source === "qr") agg.qr_visits += 1
+    if (v.visitor_fingerprint)
+      agg.fingerprints.add(v.visitor_fingerprint as string)
+  }
+
   // ---- Leaderboard ----
   const past48hCutoffMs = Date.now() - SLA_HOURS * 36e5
   type StoreAgg = {
@@ -510,18 +567,24 @@ export async function GET(req: NextRequest) {
     }
   }
   const leaderboard: LeaderboardRow[] = Array.from(storeAgg.entries())
-    .map(([sap_code, v]) => ({
-      sap_code,
-      name: v.name,
-      brand: v.brand,
-      city: v.city,
-      total: v.total,
-      first_attempt_rate: v.closed === 0 ? 0 : v.firstAttempt / v.closed,
-      unique_reporters: v.reporters.size,
-      median_ack_hours: median(v.ackHours),
-      median_resolution_hours: median(v.resHours),
-      past_48h_count: v.past48h,
-    }))
+    .map(([sap_code, v]) => {
+      const visit = visitAgg.get(sap_code)
+      return {
+        sap_code,
+        name: v.name,
+        brand: v.brand,
+        city: v.city,
+        total: v.total,
+        first_attempt_rate: v.closed === 0 ? 0 : v.firstAttempt / v.closed,
+        unique_reporters: v.reporters.size,
+        median_ack_hours: median(v.ackHours),
+        median_resolution_hours: median(v.resHours),
+        past_48h_count: v.past48h,
+        visits: visit?.visits ?? 0,
+        qr_visits: visit?.qr_visits ?? 0,
+        unique_visitors: visit ? visit.fingerprints.size : 0,
+      }
+    })
     .sort((a, b) => b.total - a.total || a.sap_code.localeCompare(b.sap_code))
     .slice(0, 20)
 
