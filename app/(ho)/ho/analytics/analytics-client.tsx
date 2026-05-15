@@ -42,7 +42,7 @@ const CategoryBars = dynamic(
 
 function ChartSkeleton() {
   return (
-    <div className="h-[240px] rounded-md bg-gradient-to-b from-slate-50 to-white border border-slate-100 animate-pulse" />
+    <div className="h-[240px] rounded-md bg-slate-50 border border-slate-100 animate-pulse" />
   )
 }
 
@@ -297,13 +297,16 @@ export function AnalyticsClient() {
       {/* Header — same slate band the other HO pages use. The date-range
         * + totals line stays here because it's load-bearing context for
         * what the page is showing (this page IS the report on a window). */}
-      <header className="mb-5 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Pilot · ABFRL
+          </p>
+          <h1 className="mt-1 font-display text-[28px] leading-9 font-semibold tracking-tight text-slate-900">
             Analytics
           </h1>
           {data && (
-            <p className="text-[12px] text-slate-600 mt-0.5 tabular-nums">
+            <p className="mt-1.5 text-[13px] text-slate-600 tabular-nums">
               {prettyDate(data.range.from)} → {prettyDate(data.range.to)} ·{" "}
               {data.totals.reports} reports · {data.granularity} bars
             </p>
@@ -628,12 +631,159 @@ export function AnalyticsClient() {
       <div className="mt-8 space-y-5">
         <StoreTierCards rows={data?.leaderboard ?? []} />
         <StoreInsightCards rows={data?.leaderboard ?? []} />
+
+        {/* Engagement diagnoses — three signals derived from the
+          * visits/QR/submit data. Surfaces the questions HO actually
+          * asks: are the posters being scanned, are scanners filing,
+          * is the loop healthy. Header doubles as a section anchor. */}
+        <EngagementSection rows={data?.leaderboard ?? []} />
+
         <ChartCard
           title="Per-store analytics"
           subtitle="Click a column header to sort · click again to flip direction"
         >
           <StoreAnalyticsTable rows={data?.leaderboard ?? []} />
         </ChartCard>
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------- Engagement diagnoses --------------------------- */
+
+/**
+ * Three "is the funnel working?" tiles for the engagement leaderboard
+ * section. Computed from the same leaderboard rows the table uses:
+ *
+ *   - Poster not scanned: stores with `visits === 0`. Symptom: poster is
+ *     out of sight (back office, behind a shelf, etc.).
+ *   - High visits, low submits: stores with `visits >= 20` and
+ *     `total / visits < 0.15`. Symptom: poster is doing its job,
+ *     people scan, but the form is bouncing them — copy or trust gap.
+ *   - Healthy engagement: stores with `visits >= 10` and
+ *     `total / visits >= 0.25`. The flow is working as designed.
+ *
+ * Visits data is plumbed via the existing /api/ho-analytics leaderboard
+ * (LeaderboardRow.visits). If telemetry isn't yet populated for a row
+ * the visit count is 0, which falls into the "poster not scanned"
+ * bucket — the footer caveat makes the gap explicit.
+ */
+function EngagementSection({ rows }: { rows: LeaderboardRow[] }) {
+  const insights = useMemo(() => {
+    let posterDead = 0
+    let posterWorks = 0
+    let healthy = 0
+    for (const r of rows) {
+      if (r.visits === 0) posterDead += 1
+      const submit = r.visits === 0 ? null : r.total / r.visits
+      if (r.visits >= 20 && submit !== null && submit < 0.15) posterWorks += 1
+      if (r.visits >= 10 && submit !== null && submit >= 0.25) healthy += 1
+    }
+    return { posterDead, posterWorks, healthy }
+  }, [rows])
+  return (
+    <section>
+      <header className="flex items-end justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            QR + visit telemetry
+          </p>
+          <h2 className="mt-0.5 font-display text-[18px] font-semibold text-slate-900 leading-7">
+            Per-store engagement
+          </h2>
+          <p className="mt-1 text-[12.5px] text-slate-600 max-w-[640px]">
+            Is the poster being scanned? Are scanners filing reports? The
+            submit rate is the single number that tells the story.
+          </p>
+        </div>
+      </header>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <DiagnosisTile
+          n={insights.posterDead}
+          label="Stores with zero scans this period"
+          hint="Poster isn't being seen. Check placement with the manager."
+          tone="warn"
+        />
+        <DiagnosisTile
+          n={insights.posterWorks}
+          label="High visits, low submit rate"
+          hint="Poster works — people scan, then bounce. Likely a trust or copy issue."
+          tone="info"
+        />
+        <DiagnosisTile
+          n={insights.healthy}
+          label="Healthy engagement"
+          hint="Visits and submits both moving — the flow is working as designed."
+          tone="good"
+        />
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500 inline-flex items-center gap-1.5">
+        <Info className="h-3 w-3" aria-hidden />
+        Visits telemetry is captured via{" "}
+        <span className="font-mono text-[10.5px]">/api/ho-analytics</span>{" "}
+        leaderboard rows. Stores without recorded visits in the selected
+        window contribute to the &ldquo;zero scans&rdquo; count.
+      </p>
+    </section>
+  )
+}
+
+function DiagnosisTile({
+  n,
+  label,
+  hint,
+  tone,
+}: {
+  n: number
+  label: string
+  hint: string
+  tone: "warn" | "info" | "good"
+}) {
+  const palette: Record<
+    "warn" | "info" | "good",
+    { bg: string; fg: string; border: string }
+  > = {
+    warn: {
+      bg: "bg-orange-50",
+      fg: "text-orange-700",
+      border: "border-orange-200",
+    },
+    info: { bg: "bg-sky-50", fg: "text-sky-700", border: "border-sky-200" },
+    good: {
+      bg: "bg-teal-50",
+      fg: "text-teal-700",
+      border: "border-teal-200",
+    },
+  }
+  const p = palette[tone]
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex items-start gap-3.5">
+      <span
+        aria-hidden
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${p.bg} ${p.fg} ${p.border} border shrink-0`}
+      >
+        {tone === "warn" ? (
+          <TrendingDown className="h-4 w-4" />
+        ) : tone === "info" ? (
+          <Info className="h-4 w-4" />
+        ) : (
+          <TrendingUp className="h-4 w-4" />
+        )}
+      </span>
+      <div className="min-w-0">
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <span
+            className={`font-display text-[24px] leading-7 font-semibold tabular-nums ${p.fg}`}
+          >
+            {n}
+          </span>
+          <span className="text-[12.5px] font-medium text-slate-800">
+            {label}
+          </span>
+        </div>
+        <p className="mt-1 text-[11.5px] text-slate-600 leading-relaxed">
+          {hint}
+        </p>
       </div>
     </div>
   )
@@ -767,7 +917,7 @@ function TimeCard({
           ? `Down ${deltaMagnitude} vs previous period`
           : `${deltaMagnitude} vs previous period`
   return (
-    <div className="bg-gradient-to-br from-white via-slate-50 to-slate-200 border border-slate-200 rounded-xl p-4 flex flex-col shadow-sm">
+    <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col shadow-sm">
       {/* Header row.
         *
         * Icon tile uses indigo-50 with indigo-700 lucide stroke — same
@@ -1059,7 +1209,7 @@ function ChartCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       {/* Header had two dead-mockup affordances — a bare Info icon that
         * hooked up to nothing and a decorative 3-dot menu placeholder for
         * an actions menu that was never built. Both removed. */}
@@ -1138,12 +1288,25 @@ function StoreTierCardsImpl({ rows }: { rows: LeaderboardRow[] }) {
       sub: "Zero reports filed",
     },
   ]
+  // Flat-fill variants. Earlier rev used a gradient on a tinted bg
+  // (e.g. orange-50 → orange-100). Redesign flattens every card to a
+  // single solid tint; the saturated text colour does the tonal lift.
+  const flatTones: Record<string, string> = {
+    "from-teal-50 to-teal-100 border-teal-200 text-teal-800":
+      "bg-teal-50 border-teal-200 text-teal-800",
+    "from-slate-50 to-slate-100 border-slate-200 text-slate-700":
+      "bg-slate-50 border-slate-200 text-slate-700",
+    "from-amber-50 to-amber-100 border-amber-200 text-amber-800":
+      "bg-amber-50 border-amber-200 text-amber-800",
+    "from-orange-50 to-orange-100 border-orange-200 text-orange-800":
+      "bg-orange-50 border-orange-200 text-orange-800",
+  }
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {tiers.map((t) => (
         <div
           key={t.key}
-          className={`bg-gradient-to-br ${t.tone} border rounded-xl px-4 py-3 shadow-sm`}
+          className={`${flatTones[t.tone] ?? "bg-white border-slate-200 text-slate-700"} border rounded-xl px-4 py-3 shadow-sm`}
         >
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] opacity-80">
             {t.label}
@@ -1242,14 +1405,11 @@ function InsightCard({
   secondary: string
   warn?: boolean
 }) {
-  const tone = warn
-    ? "from-orange-50 to-orange-100 border-orange-200"
-    : "from-white via-slate-50 to-slate-100 border-slate-200"
-  const text = warn ? "text-orange-700" : "text-indigo-600"
+  // Flat-fill variant. Warn keeps orange-50, otherwise a clean white card.
+  const tone = warn ? "bg-orange-50 border-orange-200" : "bg-white border-slate-200"
+  const text = warn ? "text-orange-700" : "text-slate-500"
   return (
-    <div
-      className={`bg-gradient-to-br ${tone} border rounded-xl px-4 py-3 shadow-sm`}
-    >
+    <div className={`${tone} border rounded-xl px-4 py-3 shadow-sm`}>
       <p
         className={`text-[10px] font-bold uppercase tracking-[0.12em] ${text}`}
       >

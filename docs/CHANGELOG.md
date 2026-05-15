@@ -5,6 +5,99 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-15 · HO console redesign (Claude Design handoff)
+
+Implemented the redesign produced via Claude Design (project bundle
+`SafeReport - 3`). The diagnosis matched what reviewers had been
+flagging for weeks: five different gradients per screen with no shared
+rhythm, every panel carrying its own card shape, and the primary job
+(act on the queue) buried under analytics. This rev unifies the visual
+language and re-orders the page so Action leads.
+
+**Visual language (shell + cards).**
+
+- Removed every `bg-gradient-to-br` / `bg-gradient-to-r` / `bg-gradient-to-b`
+  utility from the HO console. Page bg, card bg, icon swatches, summary
+  tiles, queue headers — all flat fills now. VISUAL_LANGUAGE.md's
+  "no gradients" rule the codebase had drifted from.
+- Sidebar: navy gradient → white panel with a 1px slate-200 border.
+  Active nav item: indigo-50 wash + indigo-900 text + indigo-700 badge.
+  Urgent (Action + breached): orange-700 badge fill.
+- Cards unified to one shape: white, 1px slate-200, 12px radius, subtle
+  shadow. Eyebrow (10.5px bold uppercase) + display title (15px IBM Plex)
+  + thin slate-100 rule.
+
+**Overview reorder (lead with action).**
+
+- Added an **Action Hero** band at the top: total items waiting,
+  breach-past-48h subcount, the oldest awaiting row preview, and a
+  one-click into `/ho/action`. Sky-tinted by default, orange-tinted
+  when there's an SLA breach; empty state ("You're caught up") uses
+  the calm white card.
+- Trend chart promoted above the Pulse row so it reads as the follow-up
+  to the velocity tiles ("blip or trend?").
+- Today panel renamed to "Today · activity feed" and now also surfaces
+  up to 3 recent HO actions (approve / return / void from `ho_actions`)
+  and manager acks (reports.acknowledged_at events) from the last 24h.
+  Two new queries fire in the same `Promise.all` as the existing batch.
+
+**Reports — saved-view chips.**
+
+Added a top-row of preset chips above the existing filter card: All
+reports / Open only / Awaiting HO / Past 48h (urgent tone) / Returned /
+Incidents only / + New view (stub). Each preset bulk-sets existing URL
+filter params via the existing `apply()` callback — no new server
+query path. "Past 48h" is a UI affordance only: it narrows to
+awaiting_ho and relies on the row renderer's orange age tint to
+surface the breached rows. A future migration could add a server-side
+age filter.
+
+**Analytics — engagement diagnoses + flat fills.**
+
+Added a "Per-store engagement" section above the existing
+`StoreAnalyticsTable`, with three diagnosis tiles computed from the
+existing `LeaderboardRow.visits` field:
+
+- Stores with zero scans this period (orange-50)
+- High visits, low submit rate (sky-50)
+- Healthy engagement (teal-50)
+
+Existing `InsightCard` / `StoreTierCards` switched from per-tone gradient
+washes to flat tinted fills. Header switched to the eyebrow + title
+pattern.
+
+**Stores — same flat-fill cleanup.**
+
+Page header switched to eyebrow + title. `SummaryTile` per-tone cards
+flattened. The "Stores needing attention" alert banner kept its
+orange-50 wash but dropped the orange-50 → amber-50 gradient and the
+inner orange-200 → orange-300 icon-circle gradient.
+
+**Files touched.**
+
+- `app/(ho)/ho/layout.tsx` — light sidebar shell, flat page bg
+- `app/(ho)/ho/sidebar-nav.tsx` — light variant active states
+- `app/(ho)/ho/page.tsx` — Action Hero + flat panels + activity feed
+- `app/(ho)/ho/queue-list.tsx` — flat fills, eyebrow + title pattern
+- `app/(ho)/ho/all-reports/all-reports-client.tsx` — flat fills,
+  saved-view chips
+- `app/(ho)/ho/analytics/analytics-client.tsx` — engagement diagnoses,
+  flat fills
+- `app/(ho)/ho/stores/stores-client.tsx` — flat fills, eyebrow + title
+
+**Not implemented (per scope discussion).**
+
+- Tweaks panel (Density / Accent / Sidebar / Scenario / module toggles)
+  — prototype-only convention; production runs on the default settings.
+- "+ New view" chip on Reports is a disabled stub. Save-current-filters
+  flow would need a per-user pinned-views table — separate backend
+  follow-up.
+
+`npx tsc --noEmit` clean, `npm run lint:guardrails` clean (no green-*
+or red-* utilities, no Supabase Realtime).
+
+---
+
 ## 2026-05-14 · PWA install actually installs
 
 Pilot smoke surfaced that neither desktop Chrome nor Android Chrome

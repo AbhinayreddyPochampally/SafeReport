@@ -401,11 +401,20 @@ export function StoresClient({
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Page header — same slate band as the other HO pages. */}
-      <header className="mb-5 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
-        <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
-          Stores
-        </h1>
+      {/* Page header — flat eyebrow + title pattern, no gradient band. */}
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Pilot · ABFRL
+          </p>
+          <h1 className="mt-1 font-display text-[28px] leading-9 font-semibold tracking-tight text-slate-900">
+            Stores
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-slate-600 max-w-[720px] leading-relaxed">
+            20 retail locations across 5 brands. Coverage, response times,
+            and recent activity per store.
+          </p>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
@@ -488,7 +497,7 @@ export function StoresClient({
           tight padding so the full set (Activity + Status + Brand) fits
           well within the 1400px content frame; flex-wrap is on as a
           fallback for unusually narrow viewports. */}
-      <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 mb-4 shadow-sm">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -616,7 +625,7 @@ export function StoresClient({
         * the Stores tab is now purely the roster + admin actions. QR and
         * Edit are each in their own column with breathing room so the
         * Actions area no longer reads as a single cramped button group. */}
-      <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <table className="w-full text-[13px]">
           <thead className="bg-slate-50 text-slate-500 text-[10.5px] uppercase tracking-wide font-bold">
             <tr>
@@ -1514,13 +1523,13 @@ function AttentionPanel({
   return (
     <section
       aria-label="Stores needing attention"
-      className="mb-5 overflow-hidden rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 shadow-sm"
+      className="mb-5 overflow-hidden rounded-xl border border-orange-200 bg-orange-50 shadow-sm"
     >
-      <header className="flex items-center justify-between gap-3 border-b border-orange-100 bg-gradient-to-r from-orange-100 via-orange-50 to-transparent px-5 py-3">
+      <header className="flex items-center justify-between gap-3 border-b border-orange-100 bg-orange-100/60 px-5 py-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             aria-hidden
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-200 to-orange-300 text-orange-800 ring-1 ring-orange-200 shadow-sm"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-200 text-orange-800"
           >
             <AlertTriangle className="h-4 w-4" strokeWidth={2} />
           </span>
@@ -1750,22 +1759,22 @@ function StatCard({
   sub: React.ReactNode
   infoTitle?: string
 }) {
-  // Per-accent card gradient + icon-circle gradient + border tint.
-  // Mirrors the Velocity-tile pattern on /ho — each stat now reads as
-  // a coloured metric tile rather than another white square.
+  // Flat-fill variants — redesign rule. Each stat reads as a coloured
+  // metric tile via a single solid tint instead of the previous gradient
+  // wash. Icon swatch is the saturated form of the same hue.
   const cardTone = {
-    indigo: "bg-gradient-to-br from-white via-indigo-50 to-indigo-100/80 border-indigo-100",
-    teal: "bg-gradient-to-br from-white via-teal-50 to-teal-100/80 border-teal-100",
-    slate: "bg-gradient-to-br from-white via-slate-50 to-slate-100 border-slate-200",
-    sky: "bg-gradient-to-br from-white via-sky-50 to-sky-100/80 border-sky-100",
-    orange: "bg-gradient-to-br from-white via-orange-50 to-orange-100/80 border-orange-100",
+    indigo: "bg-white border-indigo-100",
+    teal: "bg-white border-teal-100",
+    slate: "bg-white border-slate-200",
+    sky: "bg-white border-sky-100",
+    orange: "bg-white border-orange-100",
   }[accent]
   const iconTone = {
-    indigo: "bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 ring-indigo-200",
-    teal: "bg-gradient-to-br from-teal-100 to-teal-200 text-teal-700 ring-teal-200",
-    slate: "bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700 ring-slate-200",
-    sky: "bg-gradient-to-br from-sky-100 to-sky-200 text-sky-700 ring-sky-200",
-    orange: "bg-gradient-to-br from-orange-100 to-orange-200 text-orange-700 ring-orange-200",
+    indigo: "bg-indigo-100 text-indigo-700",
+    teal: "bg-teal-100 text-teal-700",
+    slate: "bg-slate-100 text-slate-700",
+    sky: "bg-sky-100 text-sky-700",
+    orange: "bg-orange-100 text-orange-700",
   }[accent]
   return (
     <div className={`border rounded-xl px-4 py-3.5 flex items-start gap-3 shadow-sm ${cardTone}`}>

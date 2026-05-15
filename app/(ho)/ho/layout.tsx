@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import Image from "next/image"
 import { Suspense } from "react"
 import { unstable_cache } from "next/cache"
 import { getHoSession } from "@/lib/ho-auth"
@@ -38,13 +37,22 @@ export const metadata: Metadata = {
 /**
  * Layout for every /ho/* route.
  *
- * Renders a left sidebar (240px) with brand, pilot context block, primary
+ * Renders a left sidebar (232px) with brand, pilot context block, primary
  * nav, and the user/sign-out block at the bottom. Main content fills the
  * rest of the viewport.
  *
- * Per-tab counts (Overview = awaiting HO, Reports = open total, Stores =
- * total active) are fetched server-side once per page load so the sidebar
- * shows live numbers without any client polling.
+ * REDESIGN (May 2026, post-Claude-Design handoff):
+ *   The earlier rev used a navy-gradient sidebar against a slate-to-indigo
+ *   gradient page background. Reviewers flagged it as noisy — five different
+ *   gradients per screen with no shared rhythm. The redesign drops every
+ *   gradient and switches to a light sidebar (white, 1px slate-200 border)
+ *   against a flat slate-50 page. Cards do the visual work; the chrome stays
+ *   out of the way. Matches VISUAL_LANGUAGE.md's "flat fills, no gradients"
+ *   rule that the previous rev had drifted from.
+ *
+ * Per-tab counts (Action = awaiting HO + stale-new, Stores = total active)
+ * are fetched server-side once per page load so the sidebar shows live
+ * numbers without any client polling.
  *
  * Middleware blocks unauthenticated access to non-login /ho routes, and
  * each page calls `requireHoSession()` itself. The "no session" branch
@@ -61,48 +69,44 @@ export default async function HoLayout({
   }
 
   return (
-    // Page background — two-stop diagonal from slate-50 to indigo-100. The
-    // previous version had a `via-white` middle stop that put pure white
-    // through the entire viewport centre, making the gradient effectively
-    // invisible. Dropping it lets the colour carry edge-to-edge so the
-    // GAPS between white cards finally show indigo/slate instead of more
-    // white. Cards stay white on top — the gradient is the *table cloth*,
-    // the cards are the *plates*.
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-100 flex">
+    // Page background — flat slate-50. Earlier rev had a slate-50 → indigo-100
+    // diagonal gradient, but the redesign moved to flat fills (one card style,
+    // one shell colour) so the gradient came out. Cards are still white on
+    // slate-50, which keeps a clear plate-on-tablecloth read without any
+    // colour transitions doing the visual work.
+    <div className="min-h-screen bg-slate-50 flex">
       {/* ----------------------------- Sidebar -----------------------------
-        * Dark navy rail. Matches the SafeReport app icon palette
-        * (#0A1F46 with orange alert mark) and gives maximum differentiation
-        * from the light page area — the standard pattern Linear / Notion /
-        * Vercel use for dashboard chrome. Light page + dark rail removes
-        * any ambiguity about where the app frame ends and content begins,
-        * which is the exact thing the user kept calling out as "still all
-        * white". */}
-      <aside className="w-[240px] shrink-0 bg-gradient-to-b from-slate-900 via-[#0A1F46] to-slate-900 text-slate-200 border-r border-slate-950/40 shadow-2xl flex flex-col sticky top-0 h-screen">
-        {/* Brand band — uses the custom SafeReport icon SVG we built
-          * (navy shield + orange alert mark). Drops the indigo-on-indigo
-          * Lucide Shield placeholder. The icon is decorative so it gets
-          * aria-hidden; the brand text below already carries the meaning. */}
+        * Light rail. White panel with a 1px slate-200 right border — sits
+        * calmly next to the slate-50 page. Active nav items get an indigo
+        * wash; the brand mark keeps the navy + amber alert dot from the
+        * SafeReport icon so the brand still reads from the corner.
+        *
+        * Why the swap from navy: the dark rail was meant to give the chrome
+        * a clear "this is the app frame" read, but it ended up competing
+        * with the content for attention — every velocity tile, every queue
+        * card had to fight against the navy block. Light rail recedes; the
+        * content (the actual signal) carries the page. */}
+      <aside className="w-[232px] shrink-0 bg-white text-slate-700 border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+        {/* Brand band — the SafeReport icon (navy shield + orange alert mark)
+          * lives in a 28px tile so the orange dot from the SVG carries the
+          * brand accent. Drops the indigo-on-indigo Lucide Shield placeholder
+          * the original layout used. */}
         <Link
           href="/ho"
-          className="flex items-center gap-2.5 px-5 pt-5 pb-4 text-white hover:bg-white/5 transition-colors"
+          className="flex items-center gap-2.5 px-[18px] pt-[18px] pb-3 border-b border-slate-200 hover:bg-slate-50 transition-colors"
         >
-          <span className="inline-flex h-9 w-9 items-center justify-center shrink-0">
-            <Image
-              src="/icons/safereport-icon.svg"
-              alt=""
-              width={36}
-              height={36}
-              priority
+          <span className="inline-flex h-7 w-7 items-center justify-center shrink-0 rounded-md bg-indigo-700 text-white font-display text-[13px] font-bold relative">
+            SR
+            <span
               aria-hidden
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
             />
           </span>
           <span className="flex flex-col leading-tight min-w-0">
-            <span className="font-display text-[15px] font-semibold tracking-tight text-white">
+            <span className="font-display text-[14px] font-semibold tracking-tight text-slate-900">
               SafeReport
             </span>
-            <span className="text-[10.5px] text-slate-400">
-              Head Office Console
-            </span>
+            <span className="text-[11px] text-slate-500">Head Office</span>
           </span>
         </Link>
 
@@ -115,19 +119,18 @@ export default async function HoLayout({
         {/* Spacer pushes the user block to the bottom */}
         <div className="flex-1" />
 
-        {/* User block — dark-rail compatible. Teal-300 avatar gradient
-          * pops against the navy bg, top border in white/10 for the
-          * subtlest possible separator. */}
-        <div className="border-t border-white/10 bg-white/5 px-3 py-3">
+        {/* User block — light variant. Indigo-100 avatar tile for the
+          * brand accent against the white rail, slate-200 top border. */}
+        <div className="border-t border-slate-200 px-3.5 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-300 to-teal-500 text-[12px] font-semibold text-teal-950 ring-2 ring-white/30 shadow-md">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-[12px] font-semibold shrink-0">
               {initials(session.display_name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-white truncate">
+              <p className="text-[13px] font-medium text-slate-900 truncate">
                 {session.display_name}
               </p>
-              <p className="text-[11px] text-slate-400 truncate">
+              <p className="text-[11px] text-slate-500 truncate">
                 {session.email ?? formatRole(session.role)}
               </p>
             </div>
@@ -151,19 +154,19 @@ async function SidebarCountsBlock() {
   const counts = await fetchSidebarCounts()
   return (
     <>
-      {/* Pilot info card — dark-rail compatible. Translucent white panel
-        * over the navy bg, sky-300 eyebrow for the brand accent. The
-        * left orange accent line nods to the SafeReport icon's alert
-        * mark colour, tying the rail back to the brand. */}
-      <div className="mx-3 mt-3 mb-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 relative overflow-hidden">
-        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-orange-500" />
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-300 ml-1.5">
-          Pilot · ABFRL
+      {/* Pilot info card — light variant.
+        * 1px slate-200 panel on slate-50 wash, indigo-700 eyebrow for the
+        * brand accent. No translucency, no backdrop-blur, no dark-rail
+        * artifacts — the redesign's "one card style" rule applies in here
+        * too. */}
+      <div className="mx-3.5 mt-3.5 mb-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+          Pilot
         </p>
-        <p className="mt-0.5 font-display text-[14px] font-semibold text-white ml-1.5">
-          {counts.stores ?? 0} retail stores
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-900">
+          ABFRL · {counts.stores ?? 0} stores
         </p>
-        <p className="text-[10.5px] text-slate-400 ml-1.5">In production</p>
+        <p className="text-[11px] text-slate-500">In production · May 2026</p>
       </div>
       <SidebarNav counts={counts} />
     </>
@@ -175,15 +178,14 @@ async function SidebarCountsBlock() {
 function SidebarCountsFallback() {
   return (
     <>
-      <div className="mx-3 mt-3 mb-3 rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm px-3 py-2.5 animate-pulse relative overflow-hidden">
-        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-orange-500" />
-        <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-sky-300 ml-1.5">
-          Pilot · ABFRL
+      <div className="mx-3.5 mt-3.5 mb-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 animate-pulse">
+        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+          Pilot
         </p>
-        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-300 ml-1.5">
-          ─ retail stores
+        <p className="mt-0.5 font-display text-[14px] font-semibold text-slate-400">
+          ABFRL · ─ stores
         </p>
-        <p className="text-[10.5px] text-slate-400 ml-1.5">Loading…</p>
+        <p className="text-[11px] text-slate-500">Loading…</p>
       </div>
       <SidebarNav counts={{}} />
     </>

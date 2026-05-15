@@ -16,12 +16,20 @@ import {
  *
  * Active-state styling is driven by `usePathname()` so the highlight tracks
  * client navigation without a refresh. We deliberately keep the nav lean —
- * Overview / Reports / Analytics / Stores. No Notifications, no Settings,
- * no Help — those would be empty surfaces in the pilot.
+ * Overview / Action / Reports / Analytics / Stores. No Notifications, no
+ * Settings, no Help — those would be empty surfaces in the pilot.
  *
  * Optional `count` lets the server pass per-tab counters (e.g. how many
  * reports are awaiting HO action) so the sidebar can render a numeric badge
  * next to the label without the client having to re-query.
+ *
+ * REDESIGN (May 2026):
+ *   Light-rail variant — paired with the white sidebar shell in layout.tsx.
+ *   Active row: indigo-50 fill, indigo-900 text, indigo-700 numeric badge.
+ *   Urgent (Action with breached count > 0): orange-700 fill on the badge
+ *   only — the label stays slate so the row still reads as a normal nav
+ *   item, the badge does the alert work. The old dark-bg gradient active
+ *   state and white-on-navy badges are gone with the navy sidebar.
  */
 
 export type SidebarCounts = {
@@ -96,13 +104,13 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
   }
 
   return (
-    // Dark-rail navigation. Light text on navy bg, hover lifts to white/10,
-    // active item gets a bright indigo wash + 3px left accent bar in orange
-    // (echoing the SafeReport icon's alert mark colour so the brand
-    // accent reads everywhere it should).
-    <nav className="px-3 py-2" aria-label="Primary">
-      <p className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-        Pilot
+    // Light-rail navigation. Slate text on white bg, hover lifts to slate-100,
+    // active item gets an indigo-50 wash + indigo-900 text. No left accent
+    // bar — the indigo fill carries the active read cleanly without competing
+    // with the row content.
+    <nav className="px-2.5 py-2" aria-label="Primary">
+      <p className="px-2.5 pt-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+        Workspace
       </p>
       <ul className="space-y-0.5">
         {ITEMS.map((item) => {
@@ -120,25 +128,19 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
                 // switch. Prefetching on mount + hover lets the RSC
                 // payload be ready in cache by the time the user clicks.
                 prefetch
-                className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors relative ${
+                className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] transition-colors ${
                   active
-                    ? "bg-gradient-to-r from-indigo-500/30 to-indigo-500/10 text-white font-semibold ring-1 ring-indigo-400/30"
-                    : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    ? "bg-indigo-50 text-indigo-900 font-semibold"
+                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
-                {active && (
-                  <span
-                    aria-hidden
-                    className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-orange-500"
-                  />
-                )}
                 <item.icon
                   className={`h-4 w-4 shrink-0 ${
                     active
-                      ? "text-indigo-200"
+                      ? "text-indigo-700"
                       : urgent
-                        ? "text-orange-400"
-                        : "text-slate-400 group-hover:text-slate-200"
+                        ? "text-orange-700"
+                        : "text-slate-500 group-hover:text-slate-700"
                   }`}
                   strokeWidth={1.8}
                   aria-hidden
@@ -146,12 +148,12 @@ export function SidebarNav({ counts }: { counts: SidebarCounts }) {
                 <span className="flex-1 truncate">{item.label}</span>
                 {typeof count === "number" && count > 0 && (
                   <span
-                    className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums ${
+                    className={`inline-flex items-center justify-center rounded-full px-[7px] py-[1px] text-[11px] font-semibold tabular-nums min-w-[22px] ${
                       urgent
-                        ? "bg-orange-500/90 text-white ring-1 ring-orange-300/50"
+                        ? "bg-orange-700 text-white"
                         : active
-                          ? "bg-white/15 text-white ring-1 ring-white/20"
-                          : "bg-white/10 text-slate-300"
+                          ? "bg-indigo-700 text-white"
+                          : "bg-slate-100 text-slate-600"
                     }`}
                   >
                     {count}

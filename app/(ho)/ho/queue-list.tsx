@@ -70,9 +70,6 @@ export function QueueList({
           ctaLabel: "View all",
           emptyTitle: "All caught up.",
           emptyBody: "Nothing is waiting on Head Office right now.",
-          // Visible sky wash so the Approval card reads as the
-          // action-required surface at a glance.
-          headerGradient: "bg-gradient-to-r from-sky-100 via-sky-50 to-white",
         }
       : {
           eyebrow: "In the pipeline",
@@ -84,27 +81,24 @@ export function QueueList({
           ctaLabel: "All reports",
           emptyTitle: "Pipeline is empty.",
           emptyBody: "No new reports flowing through right now.",
-          // Slate wash for the awareness-only card — cooler than the
-          // Approval queue, makes the visual hierarchy obvious.
-          headerGradient:
-            "bg-gradient-to-r from-slate-200 via-slate-100 to-white",
         }
 
   return (
+    // Flat fill, white card. Redesign drops the two header gradients (sky
+    // wash on Approval, slate wash on Pipeline) and the body gradient —
+    // the eyebrow + accent rail carry the visual distinction now.
     <section
       aria-label={config.title}
-      className="bg-gradient-to-br from-white via-slate-50 to-slate-100 rounded-xl border border-slate-200 overflow-hidden h-full flex flex-col shadow-sm"
+      className="bg-white rounded-xl border border-slate-200 overflow-hidden h-full flex flex-col shadow-sm"
     >
       {/* Header */}
-      <header
-        className={`px-6 pt-5 pb-4 border-b border-slate-100 ${config.headerGradient}`}
-      >
+      <header className="px-6 pt-5 pb-4 border-b border-slate-100 bg-white">
         <div className="flex items-end justify-between gap-3">
           <div className={`pl-3 border-l-2 ${config.accent}`}>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-500">
               {config.eyebrow}
             </p>
-            <h2 className="mt-0.5 font-display text-[18px] font-semibold text-slate-900 leading-tight">
+            <h2 className="mt-0.5 font-display text-[16px] font-semibold text-slate-900 leading-tight">
               {config.title}
             </h2>
             <p className="mt-1 text-[12.5px] leading-5 text-slate-600 max-w-xl">
@@ -113,7 +107,7 @@ export function QueueList({
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {variant === "approval" && breachedCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-orange-700/90">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-700">
                 <AlertCircle className="h-3 w-3" strokeWidth={2} aria-hidden />
                 {breachedCount} past {SLA_HOURS}h
               </span>

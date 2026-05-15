@@ -12,6 +12,8 @@ import {
   Loader2,
   Mic,
   Phone,
+  Pin,
+  Plus,
   RotateCcw,
   Search,
   User,
@@ -455,22 +457,228 @@ export function AllReportsClient({
     window.location.href = `/api/excel/export?${params.toString()}`
   }
 
+  /**
+   * Saved views — top-row preset chips that one-tap into the slices HO
+   * reviews daily. Each preset maps to a combination of existing URL
+   * filter values (status, categories), so the UI is purely a router
+   * shortcut, not a new query path.
+   *
+   * "Past 48h" is intentionally a UI affordance only: it pins the chip
+   * visually and applies status=awaiting_ho, but the server doesn't yet
+   * filter rows by age. The orange age coloring on awaiting_ho rows
+   * past 48h is already there in the row renderer, so HO can scan to
+   * find the breaches. A future migration could add a server-side age
+   * filter — until then this is a router shortcut, not a SQL filter.
+   */
+  const incidentKeys = useMemo(
+    () =>
+      CATEGORIES.filter((c) => c.kind === "incident").map(
+        (c) => c.key as ReportCategory,
+      ),
+    [],
+  )
+  type SavedViewId =
+    | "all"
+    | "open"
+    | "awaiting"
+    | "breach"
+    | "returned"
+    | "incidents"
+
+  const activeSavedView: SavedViewId | null = useMemo(() => {
+    const noOtherFilters =
+      !filters.q && !filters.from && !filters.to && filters.brands.length === 0
+    if (
+      filters.status.kind === "preset" &&
+      filters.status.value === "all" &&
+      filters.categories.length === 0 &&
+      noOtherFilters
+    )
+      return "all"
+    if (
+      filters.status.kind === "preset" &&
+      filters.status.value === "open" &&
+      filters.categories.length === 0 &&
+      noOtherFilters
+    )
+      return "open"
+    if (
+      filters.status.kind === "multi" &&
+      filters.status.values.length === 1 &&
+      filters.status.values[0] === "awaiting_ho" &&
+      filters.categories.length === 0 &&
+      noOtherFilters
+    )
+      return "awaiting"
+    if (
+      filters.status.kind === "multi" &&
+      filters.status.values.length === 1 &&
+      filters.status.values[0] === "returned" &&
+      filters.categories.length === 0 &&
+      noOtherFilters
+    )
+      return "returned"
+    if (
+      filters.status.kind === "preset" &&
+      filters.status.value === "all" &&
+      noOtherFilters &&
+      filters.categories.length === incidentKeys.length &&
+      incidentKeys.every((k) => filters.categories.includes(k))
+    )
+      return "incidents"
+    return null
+  }, [filters, incidentKeys])
+
+  const savedViews: Array<{
+    id: SavedViewId
+    label: string
+    urgent?: boolean
+    apply: () => Partial<Filters>
+  }> = [
+    {
+      id: "all",
+      label: "All reports",
+      apply: () => ({
+        status: { kind: "preset", value: "all" },
+        categories: [],
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+    {
+      id: "open",
+      label: "Open only",
+      apply: () => ({
+        status: { kind: "preset", value: "open" },
+        categories: [],
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+    {
+      id: "awaiting",
+      label: "Awaiting HO",
+      apply: () => ({
+        status: { kind: "multi", values: ["awaiting_ho"] },
+        categories: [],
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+    {
+      id: "breach",
+      label: "Past 48h",
+      urgent: true,
+      apply: () => ({
+        // No server-side age filter yet — preset just narrows to
+        // awaiting_ho rows and relies on the row renderer's orange tint
+        // to surface the breached ones. Future work: add an age
+        // query param to the server.
+        status: { kind: "multi", values: ["awaiting_ho"] },
+        categories: [],
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+    {
+      id: "returned",
+      label: "Returned",
+      apply: () => ({
+        status: { kind: "multi", values: ["returned"] },
+        categories: [],
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+    {
+      id: "incidents",
+      label: "Incidents only",
+      apply: () => ({
+        status: { kind: "preset", value: "all" },
+        categories: incidentKeys,
+        brands: [],
+        from: "",
+        to: "",
+        q: "",
+      }),
+    },
+  ]
+
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Header — same slate band as the other HO pages. */}
-      <header className="mb-6 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
-        <h1 className="font-display text-[24px] font-semibold tracking-tight text-slate-900">
-          Reports
-        </h1>
+      {/* Header — flat eyebrow + title pattern, no gradient band. The
+        * download .xlsx button stays as the page-level action. */}
+      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Pilot · ABFRL
+          </p>
+          <h1 className="mt-1 font-display text-[28px] leading-9 font-semibold tracking-tight text-slate-900">
+            Reports
+          </h1>
+          <p className="mt-1.5 text-[13.5px] text-slate-600 max-w-[720px] leading-relaxed">
+            Every report across the pilot — filter, search, and drill in. Saved
+            views pin the slices you check daily.
+          </p>
+        </div>
         <button
           type="button"
           onClick={downloadXlsx}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 shadow-sm"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 h-9 text-[13px] font-medium text-slate-700 hover:bg-slate-50 shadow-sm"
         >
           <Download className="h-4 w-4" strokeWidth={1.8} aria-hidden />
           Download .xlsx
         </button>
       </header>
+
+      {/* Saved views — one-tap presets. The "+ New view" chip is a stub:
+        * a future iteration would save current filter combinations into
+        * a user-pinned views list. For now it's a discoverability hint. */}
+      <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-500 mr-2 inline-flex items-center gap-1">
+          <Pin className="h-3 w-3" aria-hidden />
+          Saved views
+        </span>
+        {savedViews.map((v) => {
+          const isActive = activeSavedView === v.id
+          const base =
+            "inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-medium border transition-colors"
+          const tone = isActive
+            ? v.urgent
+              ? "bg-orange-700 border-orange-700 text-white"
+              : "bg-slate-900 border-slate-900 text-white"
+            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => apply(v.apply())}
+              className={`${base} ${tone}`}
+            >
+              {v.label}
+            </button>
+          )
+        })}
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 h-7 px-3 rounded-full text-[12px] text-slate-500 border border-dashed border-slate-300 hover:bg-slate-50"
+          title="Future work: save current filter combination as a custom view"
+          disabled
+        >
+          <Plus className="h-3 w-3" aria-hidden />
+          New view
+        </button>
+      </div>
 
       {/* Filter card — compact. Earlier rev gave each filter group its
         * own labeled row with p-5 padding + 4 separate sections + a
@@ -492,7 +700,7 @@ export function AllReportsClient({
         * so the chips rendered with empty labels — switched both
         * observation and incident chips to use the full label, matching
         * what the Analytics page already does. */}
-      <section className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-3 space-y-2 shadow-sm">
+      <section className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 mb-3 space-y-2 shadow-sm">
         {/* Row 1: search + dates + clear, all inline on md+ */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative min-w-0 flex-1 max-w-md">
@@ -744,7 +952,7 @@ export function AllReportsClient({
           />
         </div>
       ) : (
-        <div className="bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-auto" style={{ maxHeight: "65vh" }}>
             <table className="w-full text-[12.5px]">
               <thead className="bg-slate-100/70 backdrop-blur-sm sticky top-0 z-10">
