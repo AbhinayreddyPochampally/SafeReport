@@ -11,7 +11,7 @@ import { resolve } from "node:path"
  * stored in `public/poster-template.png`, and overlay only the two dynamic
  * pieces — the QR code (in the centre placeholder) and the SAP code (on
  * the Store Code underline in the bottom-right). Everything else — the
- * ABFRL header, the headline, the hazard / benefit / 3-step columns, the
+ * ABF header, the headline, the hazard / benefit / 3-step columns, the
  * privacy banner, the info cards, the SafeReport footer panel — lives in
  * the template image.
  *

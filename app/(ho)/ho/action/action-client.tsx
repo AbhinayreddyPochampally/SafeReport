@@ -311,7 +311,7 @@ export function ActionClient({
     <div className="px-6 py-6 max-w-[1500px] mx-auto">
       <header className="mb-4">
         <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
-          Pilot · ABFRL
+          Pilot · ABF
         </p>
         <div className="mt-0.5 flex items-end justify-between gap-4 flex-wrap">
           <div>

@@ -15,7 +15,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "SafeReport",
     short_name: "SafeReport",
     description:
-      "Workplace safety incident reporting for ABFRL retail stores.",
+      "Workplace safety incident reporting for ABF retail stores.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",

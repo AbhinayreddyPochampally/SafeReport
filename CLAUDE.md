@@ -1,7 +1,7 @@
 # SafeReport — Build Brief for Claude Code
 
 You are maintaining **SafeReport**, a workplace safety incident reporting system for
-Aditya Birla Fashion & Retail (ABFRL). The pilot covers 20 retail stores and goes
+Aditya Birla Fashion & Retail (ABF). The pilot covers 20 retail stores and goes
 live tomorrow. This file is your single source of truth — read it end-to-end before
 touching the codebase.
 

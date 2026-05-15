@@ -35,7 +35,7 @@ export function GET() {
     name: "SafeReport — Head Office",
     short_name: "SafeReport HO",
     description:
-      "SafeReport Head Office Console — pilot-wide approvals, analytics, and store roster for ABFRL.",
+      "SafeReport Head Office Console — pilot-wide approvals, analytics, and store roster for ABF.",
     // The pair that does the work: launcher tile reopens /ho, and the
     // unique `id` keeps this PWA install slot separate from the reporter
     // and (future) manager installs.

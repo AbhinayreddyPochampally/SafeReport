@@ -2,7 +2,7 @@
   "name": "safereport",
   "version": "0.1.0",
   "private": true,
-  "description": "Workplace safety reporting system for ABFRL — Team Alpha, IIM Mumbai",
+  "description": "Workplace safety reporting system for ABF — Team Alpha, IIM Mumbai",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

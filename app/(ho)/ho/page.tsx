@@ -175,7 +175,10 @@ function isoDate(d: Date): string {
 const fetchLandingData = unstable_cache(
   fetchLandingDataImpl,
   ["ho-overview-data"],
-  { revalidate: 30, tags: ["ho-overview-data"] },
+  // 60-second TTL — see layout.tsx commentary. Halves cold-cache
+  // misses during a typical HO session; mutating endpoints revalidate
+  // the tag if a fresh snapshot is needed sooner.
+  { revalidate: 60, tags: ["ho-overview-data"] },
 )
 
 async function fetchLandingDataImpl() {
@@ -552,7 +555,7 @@ export default async function HoLandingPage() {
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
-            Pilot · ABFRL · 20 stores
+            Pilot · ABF · 20 stores
           </p>
           <h1 className="mt-1 font-display text-[28px] leading-9 font-semibold tracking-tight text-slate-900">
             Overview

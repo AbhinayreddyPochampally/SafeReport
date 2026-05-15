@@ -112,7 +112,10 @@ function median(xs: number[]): number | null {
 const getStoresPageData = unstable_cache(
   fetchStoresPageData,
   ["ho-stores-data"],
-  { revalidate: 30, tags: ["ho-stores-data"] },
+  // 60-second TTL — see layout.tsx commentary. Mutating endpoints
+  // revalidate the tag immediately on write, so the user never sees
+  // stale state on their own action.
+  { revalidate: 60, tags: ["ho-stores-data"] },
 )
 
 async function fetchStoresPageData(): Promise<{

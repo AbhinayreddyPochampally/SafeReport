@@ -16,9 +16,14 @@ import {
 export default function HoStoresLoading() {
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-8">
-      {/* Header — title + 4-ish action buttons on the right */}
-      <header className="mb-5 rounded-xl bg-gradient-to-r from-slate-100 to-white border border-slate-200 px-5 py-4 shadow-sm flex items-end justify-between gap-4 flex-wrap">
-        <div className="h-7 w-32 rounded bg-slate-200/70 animate-pulse" />
+      {/* Header — flat eyebrow + title block. Matches the real page's
+        * eyebrow + title layout so the swap-in is invisible. */}
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div className="space-y-2">
+          <div className="h-2.5 w-24 rounded bg-slate-200/70 animate-pulse" />
+          <div className="h-8 w-32 rounded bg-slate-200/70 animate-pulse" />
+          <div className="h-3 w-72 rounded bg-slate-200/60 animate-pulse" />
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-9 w-32 rounded-md bg-slate-200/70 animate-pulse" />

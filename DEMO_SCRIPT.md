@@ -85,7 +85,7 @@
 ## Act 5: Bulk Excel (60 seconds)
 
 1. HO sidebar → **Store Management**.
-2. *"The whole ABFRL portfolio is 4,420 stores. We don't manage them one click at a time."*
+2. *"The whole ABF portfolio is 4,420 stores. We don't manage them one click at a time."*
 3. Click **Download Template**. Show the xlsx — has columns for SAP Code, Name, Brand, Manager, etc.
 4. Open a pre-filled demo xlsx (have one ready in `/public/demo/bulk-stores-demo.xlsx`).
 5. Click **Upload Excel**. Pick the file.
@@ -108,7 +108,7 @@
 
 ## Closing (30 seconds)
 
-> "Ten stores seeded. Sixty reports flowing. Built on Supabase and Railway in about three days. At ABFRL's full 4,420-store scale, this costs roughly ₹7.8 per store per month. Whisper handles voice in every Indian language. Managers get realtime pushes. HO gets one dashboard for the entire network.
+> "Ten stores seeded. Sixty reports flowing. Built on Supabase and Railway in about three days. At ABF's full 4,420-store scale, this costs roughly ₹7.8 per store per month. Whisper handles voice in every Indian language. Managers get realtime pushes. HO gets one dashboard for the entire network.
 >
 > *"We're ready to pilot in ten stores."*
 

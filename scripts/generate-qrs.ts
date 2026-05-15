@@ -122,8 +122,8 @@ async function buildPdf(stores: Store[]) {
       color: INDIGO_700,
     })
 
-    // ABFRL pilot note
-    page.drawText("ABFRL safety reporting · pilot", {
+    // ABF pilot note
+    page.drawText("ABF safety reporting · pilot", {
       x: 48,
       y: PAGE_H - 62,
       size: 10,

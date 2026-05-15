@@ -5,6 +5,54 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-15 · Sidebar tone + brand mark + snappier nav
+
+Follow-up tweaks on top of the redesign earlier today.
+
+**Sidebar — indigo → teal gradient + brand SVG.**
+
+Reviewer asked for the colour back on the rail and for the SafeReport
+SVG icon (the same mark on QR posters + PWA tiles) instead of the "SR"
+monogram tile I'd swapped in. Done:
+
+- `bg-gradient-to-b from-indigo-700 via-indigo-700 to-teal-600` on the
+  sidebar shell. Teal-600 reads as the "green" end of the spectrum
+  while staying inside the palette (the no-green rule excludes
+  `green-*` / `emerald-*` / `lime-*` — `teal-*` is in bounds).
+- Active nav row: white/15 fill + amber-300 left accent rail (echoing
+  the SafeReport icon's alert-dot colour). Urgent badges (Action with
+  breached count > 0): orange-500 with a ring.
+- Brand band: `<Image src="/icons/safereport-icon.svg">` with
+  `priority` so the LCP element on /ho is the brand mark, not a
+  velocity tile.
+
+**Branding — ABFRL → ABF.**
+
+Reviewer asked to drop the "RL" everywhere in source + docs. 14 source
+files, 3 docs. The design PDF in `docs/SafeReport_Design_Document_v6.pdf`
+still says ABFRL — that's a binary and the next regen will pick up the
+new name from the markdown sources.
+
+**Snappier nav — cache TTL doubled.**
+
+All three HO server caches (`ho-overview-data`, `ho-sidebar-counts`,
+`ho-stores-data`) bumped from 30s to 60s revalidate. Halves cold-cache
+misses across a typical HO session. Mutating endpoints still call
+`revalidateTag()` on the relevant key, so users never see stale state
+on their own write.
+
+Plus a missing `app/(ho)/ho/action/loading.tsx` skeleton — Action was
+the only HO tab without one, which meant cold navs into the inbox
+showed a blank pane during data fetch. The skeleton mirrors the
+master-detail two-column layout so the swap-in is invisible. The
+stores loading skeleton's gradient header band also flattened to
+match the page proper.
+
+`npx tsc --noEmit --skipLibCheck` clean, `npm run lint:guardrails`
+clean.
+
+---
+
 ## 2026-05-15 · HO console redesign (Claude Design handoff)
 
 Implemented the redesign produced via Claude Design (project bundle

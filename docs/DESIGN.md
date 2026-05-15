@@ -7,7 +7,7 @@ see `/mnt/user-data/outputs/SafeReport_Design_Document_v6.pdf` (49 pages).
 
 ## Product in one paragraph
 
-A voice-first, icon-driven, anonymous-to-manager incident reporting system for ABFRL's
+A voice-first, icon-driven, anonymous-to-manager incident reporting system for ABF's
 off-roll store workers. Reporter scans a QR near the back-of-house notice board, picks
 a category icon, records a voice note in any Indian language, picks a time with an
 Apple-style wheel picker, optionally attaches a photo, submits. Manager sees the report

@@ -58,7 +58,7 @@ export async function GET(
     name: "SafeReport",
     short_name: "SafeReport",
     description:
-      "Workplace safety incident reporting for ABFRL retail stores.",
+      "Workplace safety incident reporting for ABF retail stores.",
     // The pair that actually does the work: each store gets its own start_url
     // (so the icon opens that store's landing) and its own `id` (so two
     // installs from two different stores live as two separate apps).
