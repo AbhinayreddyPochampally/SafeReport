@@ -1,5 +1,6 @@
 import "server-only"
 import { NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
 
@@ -227,6 +228,52 @@ export async function GET(req: NextRequest) {
     return q
   }
 
+  // Server-side cache of the heavy Supabase query bundle. The 6
+  // parallel queries below are the dominant cost of a cold-cache hit
+  // (~hundreds of ms each, multiplied by the cross-region round trip
+  // to Supabase). Cached for 60s keyed by the resolved filter values
+  // so two HO users hitting Analytics within the same minute share
+  // one fetch. Mutating endpoints (POST /api/reports, /api/ho-actions,
+  // /api/resolutions) revalidate the "ho-analytics" tag, so a user
+  // never sees stale numbers on their own write.
+  //
+  // The key array is the stable filter signature — same key → same
+  // cache hit. JSON.stringify the filter arrays so order changes
+  // don't fragment the cache (e.g. ?brand=A&brand=B vs ?brand=B&brand=A
+  // would otherwise be two separate cache entries).
+  const sortedBrandKey = [...brandFilter].sort().join(",")
+  const sortedCityKey = [...cityFilter].sort().join(",")
+  const sortedCatKey = [...categoryFilter].sort().join(",")
+  const cacheKey = [
+    isoDate(from),
+    isoDate(to),
+    sortedBrandKey,
+    sortedCityKey,
+    sortedCatKey,
+  ]
+  const fetchBundle = unstable_cache(
+    async () =>
+      Promise.all([
+        admin
+          .from("stores")
+          .select("sap_code, name, brand, city, status")
+          .eq("status", "active"),
+        buildReportQuery(from, toExclusive),
+        buildReportQuery(prevFrom, prevTo),
+        admin.from("resolutions").select("report_id, attempt_number"),
+        admin
+          .from("ho_actions")
+          .select("report_id, action, acted_at")
+          .eq("action", "approve"),
+        admin
+          .from("page_visits")
+          .select("sap_code, source, visitor_fingerprint")
+          .gte("visited_at", from.toISOString())
+          .lte("visited_at", toExclusive.toISOString()),
+      ]),
+    ["ho-analytics-bundle", ...cacheKey],
+    { revalidate: 60, tags: ["ho-analytics"] },
+  )
   const [
     storesResp,
     reportsResp,
@@ -234,29 +281,13 @@ export async function GET(req: NextRequest) {
     resolutionsResp,
     approvalsResp,
     visitsResp,
-  ] = await Promise.all([
-    admin
-      .from("stores")
-      .select("sap_code, name, brand, city, status")
-      .eq("status", "active"),
-    buildReportQuery(from, toExclusive),
-    buildReportQuery(prevFrom, prevTo),
-    admin.from("resolutions").select("report_id, attempt_number"),
-    admin
-      .from("ho_actions")
-      .select("report_id, action, acted_at")
-      .eq("action", "approve"),
-    // page_visits — landing-page hits per store in the active range.
-    // Note: brand/city filters can't be applied here because page_visits
-    // joins to stores by sap_code; we filter the aggregated counts
-    // client-side via the stores set instead. Cheap because the table
-    // is small and the SAP-code lookup is O(1).
-    admin
-      .from("page_visits")
-      .select("sap_code, source, visitor_fingerprint")
-      .gte("visited_at", from.toISOString())
-      .lte("visited_at", toExclusive.toISOString()),
-  ])
+  ] = await fetchBundle()
+  // page_visits — landing-page hits per store in the active range.
+  // Note inside the fetchBundle above: brand/city filters can't be
+  // applied to the page_visits select because that table joins to
+  // stores by sap_code; we filter the aggregated counts client-side
+  // via the stores set instead. Cheap because the table is small
+  // and the SAP-code lookup is O(1).
 
   if (storesResp.error || reportsResp.error || prevReportsResp.error) {
     console.error(
@@ -588,26 +619,49 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.total - a.total || a.sap_code.localeCompare(b.sap_code))
     .slice(0, 20)
 
-  return NextResponse.json({
-    range: { from: isoDate(from), to: isoDate(to), span_days: spanDays },
-    granularity,
-    filters: {
-      brands,
-      cities,
-      categories: CATEGORY_KEYS,
-      applied: {
-        brand: brandFilter,
-        city: cityFilter,
-        category: categoryFilter,
+  // Cache the response for 60s in the browser, with a 5-minute
+  // stale-while-revalidate window so back-and-forth nav between
+  // Analytics and other HO tabs in the same session reuses the
+  // browser-cached payload instead of round-tripping to Supabase.
+  //
+  // `private` because the response is per-session (the auth check
+  // gates access). `no-transform` blocks any intermediary from
+  // recompressing or otherwise mutating the JSON.
+  //
+  // The browser cache key is the full URL (including all filter
+  // query params), so a user toggling between presets cycles
+  // through cached responses without hitting the server again
+  // within the window. The client component is also updated to
+  // drop its `cache: "no-store"` directive — without that change
+  // these headers are ignored.
+  return NextResponse.json(
+    {
+      range: { from: isoDate(from), to: isoDate(to), span_days: spanDays },
+      granularity,
+      filters: {
+        brands,
+        cities,
+        categories: CATEGORY_KEYS,
+        applied: {
+          brand: brandFilter,
+          city: cityFilter,
+          category: categoryFilter,
+        },
+      },
+      totals,
+      time_analytics,
+      time_analytics_prev,
+      time_series_status,
+      time_series_categories,
+      time_series_medians,
+      leaderboard,
+      sla_hours: SLA_HOURS,
+    },
+    {
+      headers: {
+        "Cache-Control":
+          "private, max-age=60, stale-while-revalidate=300, no-transform",
       },
     },
-    totals,
-    time_analytics,
-    time_analytics_prev,
-    time_series_status,
-    time_series_categories,
-    time_series_medians,
-    leaderboard,
-    sla_hours: SLA_HOURS,
-  })
+  )
 }

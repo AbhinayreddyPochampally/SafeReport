@@ -201,8 +201,13 @@ export function AnalyticsClient() {
         qs.set("to", to)
         for (const b of brands) qs.append("brand", b)
         for (const k of categories) qs.append("category", k)
+        // Browser cache is opted into here — the API route sets
+        // `Cache-Control: private, max-age=60, stale-while-revalidate=300`
+        // so cycling between filter presets within a minute serves from
+        // the local HTTP cache without a server round trip. The
+        // AbortController above still cancels in-flight requests when
+        // the user clicks several chips in a row.
         const res = await fetch(`/api/ho-analytics?${qs.toString()}`, {
-          cache: "no-store",
           signal: ctrl.signal,
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)

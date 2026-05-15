@@ -224,9 +224,13 @@ export async function POST(req: NextRequest) {
 
   // Bust the cached Overview + sidebar counts so the action lands on
   // the next page render. Without this, the queue counts and the
-  // velocity tiles would stay stale for up to 30s after an HO approval.
+  // velocity tiles would stay stale for up to 60s after an HO approval.
   revalidateTag("ho-overview-data")
   revalidateTag("ho-sidebar-counts")
+  // HO approval / return / void changes the closed counts, the
+  // first-attempt rate, and the SLA-within numbers — every cached
+  // analytics bundle is now stale.
+  revalidateTag("ho-analytics")
   return NextResponse.json({
     ok: true,
     report_id,
