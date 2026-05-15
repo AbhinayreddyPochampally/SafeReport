@@ -77,17 +77,18 @@ export default async function HoLayout({
     // colour transitions doing the visual work.
     <div className="min-h-screen bg-slate-50 flex">
       {/* ----------------------------- Sidebar -----------------------------
-        * Indigo → teal vertical gradient. Brings back the colour-on-the-
-        * rail feel the user wanted, with teal-600 reading as the "green"
-        * end of the spectrum while staying inside the palette (the
-        * no-green-* rule excludes Tailwind's `green-*` / `emerald-*` /
-        * `lime-*` utilities — `teal-*` is still in bounds and the
-        * closest sophisticated-green we have).
+        * Dark indigo → deep teal vertical gradient. Reviewer asked for a
+        * deeper, calmer rail than the mid-tone indigo-700 → teal-600
+        * earlier today — the saturated mids competed with content. This
+        * deep variant (slate-900 → indigo-900 → teal-900) gives the
+        * "navy with a green nod" feel without the visual weight.
+        * `teal-*` keeps the no-green-* lint satisfied; `green-*` /
+        * `emerald-*` / `lime-*` remain off-limits.
         *
         * Light text on top. The SafeReport SVG icon (the same one shown
         * on QR posters and PWA tiles) lives in the brand band so the
         * branding stays consistent across surfaces. */}
-      <aside className="w-[232px] shrink-0 bg-gradient-to-b from-indigo-700 via-indigo-700 to-teal-600 text-white border-r border-indigo-900/50 flex flex-col sticky top-0 h-screen">
+      <aside className="w-[232px] shrink-0 bg-gradient-to-b from-slate-900 via-indigo-900 to-teal-900 text-white border-r border-slate-950/80 flex flex-col sticky top-0 h-screen">
         {/* Brand band — uses the SafeReport icon SVG (navy shield + orange
           * alert dot) so the sidebar mark matches the QR poster + PWA
           * launcher tile. The icon already carries the alert dot, so no
@@ -123,9 +124,11 @@ export default async function HoLayout({
         {/* Spacer pushes the user block to the bottom */}
         <div className="flex-1" />
 
-        {/* User block — translucent against the gradient. Top border in
-          * white/15 for the subtlest possible separator on dark bg. */}
-        <div className="border-t border-white/15 bg-black/10 px-3.5 py-3">
+        {/* User block — translucent against the gradient. Slightly darker
+          * wash (black/25) since the deep gradient already runs darker
+          * than the previous indigo-700 rail — keeps the bottom block
+          * distinguishable from the body of the nav. */}
+        <div className="border-t border-white/15 bg-black/25 px-3.5 py-3">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white text-[12px] font-semibold shrink-0 ring-1 ring-white/25">
               {initials(session.display_name)}
