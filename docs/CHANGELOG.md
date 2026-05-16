@@ -5,6 +5,37 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-15 · Doc: Manager actions clarified to Resolve-only
+
+Doc-only edit, but flagged here because it corrected a recurring misread of
+the manager surface that had started bleeding into onboarding copy. The
+manager has **one terminal write action: Resolve.** Return and Void are
+HO-only and live behind `/api/ho-actions`. The `returned` status on the
+manager's inbox is HO-initiated rework, not a manager-set state.
+
+Added a new top-level **§Manager actions — Resolve only** section to
+`CLAUDE.md` (after §Manager auth) spelling out what the manager can and
+cannot do, with the rationale: pilot reporters are off-roll and the system
+isn't built for round-trip clarification, so "send back to reporter" is not
+a valid flow. Cross-referenced from the Reported Queue description so
+anyone reading about the `returned` rows there gets routed to the right
+section.
+
+`docs/DESIGN.md` §Manager flow also rewritten: PIN login replaced with the
+current email+phone shape (mig 004), and the CTA-per-status table reworded
+so it's clear every CTA routes into the single resolution form (fresh or
+rework mode). The status state-machine block was already correct and was
+left as-is.
+
+Adjacent stale-comment fixes in CLAUDE.md route-group listing: the
+`(manager)/m/[sap_code]/page.tsx` and `auth/manager/route.ts` inline
+comments both said "phone+password", carryover from mig 002 — now
+"email+phone".
+
+No code changes, no migrations.
+
+---
+
 ## 2026-05-15 · Sidebar tone + brand mark + snappier nav
 
 Follow-up tweaks on top of the redesign earlier today.

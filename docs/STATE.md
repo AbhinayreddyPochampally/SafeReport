@@ -18,7 +18,7 @@ prose.
 | ✓ | Translation pipeline (gpt-4o two-stage) | `app/api/transcribe/route.ts`, mig 003 | 2026-05-14 |
 | ✓ | Reporter i18n (en + kn) | `lib/reporter-i18n.ts`, `lib/categories.ts` | 2026-05-14 |
 | ✓ | HO console (light sidebar + Action Hero + queues + Reports + Analytics + Stores) | `app/(ho)/ho/*` | 2026-05-15 |
-| ✓ | Manager surface (login, inbox 30s poll, detail, resolve) | `app/(manager)/m/[sap_code]/*` | 2026-05-14 |
+| ✓ | Manager surface (login, inbox 30s poll, detail, resolve — Resolve is the only manager write action; see CLAUDE.md §"Manager actions — Resolve only") | `app/(manager)/m/[sap_code]/*` | 2026-05-15 |
 | ✓ | Photo capture (camera + gallery split) | `components/photo-capture.tsx` | 2026-05-14 |
 | ✓ | Web push + dispatch | `app/api/push/*`, `app/api/notifications/dispatch/route.ts` | 2026-05-14 |
 | ✓ | PWA install prompt + SW | `components/pwa-install-prompt.tsx`, `public/sw.js` | 2026-05-14 |

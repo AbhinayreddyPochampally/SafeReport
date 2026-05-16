@@ -19,11 +19,11 @@ the store manager.
 
 ## Three surfaces
 
-| Surface   | Route               | Auth                      | Users                        |
-| --------- | ------------------- | ------------------------- | ---------------------------- |
-| Reporter  | `/r/[sap_code]`     | None                      | Off-roll, on-roll, visitors  |
-| Manager   | `/m/[sap_code]`     | Four-digit store PIN      | Store + deputy managers      |
-| HO        | `/ho`               | Supabase email auth       | Cluster leads, safety team   |
+| Surface   | Route               | Auth                                  | Users                        |
+| --------- | ------------------- | ------------------------------------- | ---------------------------- |
+| Reporter  | `/r/[sap_code]`     | None                                  | Off-roll, on-roll, visitors  |
+| Manager   | `/m/[sap_code]`     | Email + phone (no password, mig 004)  | Store + deputy managers      |
+| HO        | `/ho`               | Supabase email auth                   | Cluster leads, safety team   |
 
 ---
 
@@ -74,10 +74,20 @@ the store manager.
 
 ## Manager flow
 
-### PIN login
-- Four-digit PIN, bcrypt-hashed in `stores.pin_hash`
-- On success: signed JWT cookie, HttpOnly, SameSite=Lax, 7-day TTL
-- Three wrong attempts → 15-min lockout per SAP code
+The manager has **one terminal write action: Resolve.** No Return, no
+Escalate, no Void. See CLAUDE.md §"Manager actions — Resolve only" for the
+full rationale; the summary below describes the surface as it actually
+ships.
+
+### Login (email + phone, mig 004)
+- `POST /api/auth/manager` with `{ sap_code, email, phone }`. No password.
+- Email matched case-insensitively; phone matched on trailing 10 digits.
+- On success: signed JWT cookie (`sr_mgr`), HttpOnly, SameSite=Lax, 7-day TTL,
+  carries `manager_session_epoch` for server-side invalidation on credential
+  rotation.
+- Three wrong attempts → 15-min lockout per SAP code (in-process memory).
+- PIN and password flows are gone — old clients hitting `{ pin }` or
+  `{ password }` get a `410 Gone` with a "refresh the page" message.
 
 ### Inbox
 - Scrollable list of report cards, newest first
@@ -91,12 +101,14 @@ the store manager.
 - English transcript in a Stone 100 card below the audio
 - Photo full-width, tap to expand
 - Context: event time, reporter role (name/phone NOT shown)
-- CTA depends on status:
-  - New → **Acknowledge**
-  - Acknowledged → **File resolution** (opens form)
-  - Awaiting HO → read-only, "Waiting for HO approval" banner
-  - Returned → **Revise resolution** (form pre-filled, HO comment shown)
-  - Closed → read-only, "Resolution approved by HO" banner
+- The CTA shape per status, all routing into the single resolution form
+  (no Return / Escalate / Void affordances exist on this surface):
+  - `new` → **Acknowledge** (opens resolution form fresh)
+  - `in_progress` → **File resolution** (same form, fresh mode)
+  - `awaiting_ho` → read-only, "Waiting for HO approval" banner
+  - `returned` → **Revise resolution** (same form, `isRework = true`;
+    previous resolution and HO's return comment surfaced inline)
+  - `closed` → read-only, "Resolution approved by HO" banner
 
 ### Resolution form
 - What was done — multiline 20–500 chars, required
@@ -226,7 +238,7 @@ Pipeline:
 | Resolution closed             | Store manager          | Web push         |
 | Fatality reported             | National HO + cluster  | SMS + email      |
 
-- **Web push** via VAPID. Manager grants permission on first PIN login.
+- **Web push** via VAPID. Manager grants permission on first login (mig 004 — email + phone).
 - **Email** via Resend (free tier covers pilot volume).
 - **SMS** via MSG91 (pre-paid), used only for fatality alerts.
 - **Nothing listens in-app for "something happened" events.** No websockets, no Supabase Realtime.
@@ -237,7 +249,7 @@ Pipeline:
 
 Seven tables:
 
-- `stores` — SAP-code keyed registry (name, brand, city, pin_hash, status)
+- `stores` — SAP-code keyed registry (name, brand, city, manager_email, manager_phone, manager_session_epoch, status; pin_hash and password_hash columns are legacy — see STALE.md)
 - `reports` — the core record (SR-NNNNNN human ID, category, voice_path, transcript_en, event_at, status)
 - `resolutions` — manager-filed, 1:many with reports (attempt_no, description, action_taken)
 - `ho_actions` — HO approve/return/void audit trail

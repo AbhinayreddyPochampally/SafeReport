@@ -68,9 +68,9 @@ app/
     confirm/[report_id]/page.tsx   # confirmation
 
   (manager)/m/[sap_code]/
-    page.tsx              # phone+password login OR inbox (depending on cookie)
-    r/[report_id]/page.tsx       # report detail
-    r/[report_id]/resolve/page.tsx  # resolution form
+    page.tsx              # email+phone login OR inbox (depending on cookie)
+    r/[report_id]/page.tsx       # report detail (read + Resolve CTA)
+    r/[report_id]/resolve/page.tsx  # resolution form — manager's only write action
 
   (ho)/ho/
     layout.tsx            # 240px left sidebar shell
@@ -85,7 +85,7 @@ app/
     reports/route.ts          # POST (new report), returns SR-NNNNNN
     reports/[id]/route.ts     # GET, PATCH (status transitions)
     resolutions/route.ts      # POST
-    auth/manager/route.ts     # phone+password → signed cookie
+    auth/manager/route.ts     # email+phone → signed cookie
     auth/ho/route.ts
     transcribe/route.ts       # two-stage pipeline, fired from /api/reports
     excel/export/route.ts
@@ -174,6 +174,60 @@ HO auth is unchanged — Supabase Auth email + password, gated by middleware on
 
 ---
 
+## Manager actions — Resolve only
+
+The manager surface has **one terminal write action: Resolve** (submit a
+resolution). The manager does not have Escalate, does not have Return, does
+not have Void. Anything that conflates the manager with those actions is
+either stale doc copy or a bug — fix the doc/UI, don't add the action.
+
+What the manager can do:
+
+- **Open the inbox.** Default filter `["new", "returned"]` — i.e. reports
+  that need their action (new arrivals + ones HO has bounced back for redo).
+  Other statuses (`in_progress`, `awaiting_ho`, `closed`) are filterable but
+  not in the default view. See `app/(manager)/m/[sap_code]/manager-inbox.tsx`.
+- **Open a report.** Read-only view of photo, translated note, category,
+  event time. Reporter identity is excluded at query time.
+- **Submit a resolution** via `/m/[sap_code]/r/[report_id]/resolve` — the
+  only write endpoint exposed to the manager. The form runs in one of two
+  modes:
+  - **Fresh** when the report is `new` or `in_progress` — POST creates a
+    resolution row and transitions the report to `awaiting_ho`.
+  - **Rework** when the report is `returned` — `resolve-form.tsx` flips
+    `isRework = true`, surfaces HO's return comment, and the same POST
+    increments `resolutions.attempt_no` rather than creating from scratch.
+- **Log out.** That's it.
+
+What the manager **cannot** do:
+
+- Mark a report as not-actionable, duplicate, wrong store, or unclear. There
+  is no API route or UI control for this. Such reports either get resolved
+  with an appropriate note, or they sit in the inbox and HO voids/returns
+  them after review.
+- Send a report back to the reporter for clarification. Reporters in the
+  pilot are off-roll staff who scan the QR once — there is no reporter inbox
+  to receive a follow-up. The system isn't built for round-trip clarification.
+- Approve or close their own resolution. Every resolution flows to
+  `awaiting_ho` and waits for HO's call.
+
+HO's three terminal actions on `awaiting_ho` reports — **Approve**,
+**Return**, **Void** — all live behind `/api/ho-actions/route.ts` and are
+gated by the `/ho/*` middleware. Manager-side code never calls that route.
+
+The `returned` status surfaces in the manager's Reported Queue / default
+inbox not because the manager set it, but because HO has bounced a
+previous resolution back and the manager owes a rework. Same for any UI
+status pill labelled "Returned" on the manager surface — it's an inbound
+signal, not an outbound action.
+
+If you find yourself drafting copy, a poster, an email, or a UI affordance
+that puts a "Return for clarification" or "Escalate to HO" button in the
+manager's hands, stop. That's the invented flow this section exists to
+prevent.
+
+---
+
 ## HO console layout
 
 The HO console lives behind a left sidebar (240px, sticky, white-on-slate-50).
@@ -216,7 +270,11 @@ already visible in the queues. The new layout, top → bottom:
      (orange-700 left bar, "SLA breach > 48h · N" header pill).
    - **Reported Queue** — slate-accented (`border-l-slate-400`). Statuses =
      `new` | `in_progress` | `returned`, newest-first. Read-only awareness;
-     the store manager owns these. Each row carries a status pill.
+     the store manager owns these. Each row carries a status pill. The
+     `returned` rows here are reports HO previously bounced back to the
+     manager for rework (via `/api/ho-actions`); they are not
+     manager-initiated returns — the manager has no such action. See
+     §"Manager actions — Resolve only".
 
 The "Stores needing attention" panel that lived above the queues was dropped
 in the same rev — the past-48h-waiting subsection duplicated the Approval
