@@ -7,6 +7,19 @@ import { resolve } from "node:path"
 /**
  * SafeReport "See Something? Say Something." A4 poster generator.
  *
+ * Output shape (v5, May 2026): each store gets a TWO-PAGE PDF.
+ *   - Page 1 (front): the v4 customer-facing design with the QR code in
+ *     the centre placeholder and the SAP code on the underline at the
+ *     bottom-right. Identical to the single-page output we had before.
+ *   - Page 2 (back): nearly-blank A4 with the store NAME rendered very
+ *     large and very pale (slate-200) in the middle of the page, with
+ *     the SAP code slightly darker (slate-300) beneath it. Purpose: when
+ *     HO duplex-prints a stack of bulk posters, the back side identifies
+ *     each sheet at a glance without flipping. The text is intentionally
+ *     low-contrast so it doesn't compete visually with the front design
+ *     if you're holding the sheet up to light, but stays readable from
+ *     arm's length.
+ *
  * Approach (v3): we embed a high-quality design as a full-page PNG template
  * stored in `public/poster-template.png`, and overlay only the two dynamic
  * pieces — the QR code (in the centre placeholder) and the SAP code (on
@@ -57,12 +70,19 @@ const CODE_UNDERLINE_X_START = 435
 const CODE_UNDERLINE_X_END   = 544
 
 const NAVY = rgb(0x0A / 255, 0x1F / 255, 0x46 / 255)
+// Back-page colours. Slate-200 for the name (so it reads as a watermark,
+// not a headline) and slate-300 for the SAP code (slightly darker so the
+// hierarchy still reads when both are scanned by eye). Anything lighter
+// disappears on most laser printers; anything darker competes with the
+// front-page design when you hold the sheet up to a window.
+const BACK_NAME_COLOR = rgb(0xE2 / 255, 0xE8 / 255, 0xF0 / 255) // slate-200
+const BACK_CODE_COLOR = rgb(0xCB / 255, 0xD5 / 255, 0xE1 / 255) // slate-300
 
 export type PosterStore = {
   sap_code: string
-  /** Optional store name. Kept on the type for backwards compatibility with
-   * callers; the template doesn't render it on-page (the SAP code is what
-   * the printer routes by). */
+  /** Store name. Rendered very lightly on the back side of each sheet so
+   * a duplex-printed stack identifies itself at a glance. If null or
+   * empty, the back falls back to the SAP code only. */
   name?: string | null
 }
 
@@ -93,14 +113,17 @@ export async function generateStorePoster(
   const templateBytes = await loadTemplate()
   const templateImg = await doc.embedPng(templateBytes)
 
-  await drawOnePage(doc, templateImg, helvBold, store, baseUrl)
+  await drawFrontPage(doc, templateImg, helvBold, store, baseUrl)
+  drawBackPage(doc, helvBold, store)
   return doc.save()
 }
 
 /**
- * Render every store's poster into a single multi-page PDF — one A4 page
- * per store. Embeds the template image once and reuses the same XObject
- * across every page, so bulk PDFs stay small.
+ * Render every store's poster into a single multi-page PDF — TWO A4 pages
+ * per store (front design + back identifier). Embeds the template image
+ * once and reuses the same XObject across every front page, so bulk PDFs
+ * stay small. For N stores this returns a 2N-page PDF; pair with the
+ * printer's duplex setting to get a single physical sheet per store.
  */
 export async function generatePosterBatch(
   stores: PosterStore[],
@@ -112,12 +135,13 @@ export async function generatePosterBatch(
   const templateImg = await doc.embedPng(templateBytes)
 
   for (const s of stores) {
-    await drawOnePage(doc, templateImg, helvBold, s, baseUrl)
+    await drawFrontPage(doc, templateImg, helvBold, s, baseUrl)
+    drawBackPage(doc, helvBold, s)
   }
   return doc.save()
 }
 
-async function drawOnePage(
+async function drawFrontPage(
   doc: PDFDocument,
   templateImg: Awaited<ReturnType<PDFDocument["embedPng"]>>,
   helvBold: Awaited<ReturnType<PDFDocument["embedFont"]>>,
@@ -195,4 +219,85 @@ async function drawOnePage(
     font: helvBold,
     color: NAVY,
   })
+}
+
+/**
+ * Render the back page — a near-blank A4 carrying the store name in
+ * very-light text so a duplex-printed stack identifies itself.
+ *
+ *  - Name is auto-fit to ~90% of the page width: starts at 80 pt and
+ *    steps down by 2 pt until it fits, never below 24 pt. A two-line
+ *    fallback would be nicer for very long names but adds complexity;
+ *    the longest active pilot store name fits at 36 pt, so a single
+ *    line works for the pilot.
+ *  - Vertical centring puts the visual mid of the cap-height text on
+ *    PAGE_H/2 (Helvetica's cap height is ~0.72 em, hence the 0.36
+ *    offset). The SAP code sits in a fixed gap below.
+ *  - If `store.name` is null, empty, or just the SAP code repeated,
+ *    we skip the name line and render the SAP code alone in the
+ *    centre at a larger size. Same visual purpose, less repetition.
+ */
+function drawBackPage(
+  doc: PDFDocument,
+  helvBold: Awaited<ReturnType<PDFDocument["embedFont"]>>,
+  store: PosterStore,
+) {
+  const page = doc.addPage([PAGE_W, PAGE_H])
+
+  const rawName = (store.name ?? "").trim()
+  const hasName = rawName.length > 0 && rawName.toUpperCase() !== store.sap_code
+
+  if (hasName) {
+    const targetW = PAGE_W * 0.9
+    let nameSize = 80
+    while (
+      helvBold.widthOfTextAtSize(rawName, nameSize) > targetW &&
+      nameSize > 24
+    ) {
+      nameSize -= 2
+    }
+    const nameW = helvBold.widthOfTextAtSize(rawName, nameSize)
+    const nameX = (PAGE_W - nameW) / 2
+    const nameY = PAGE_H / 2 - 0.36 * nameSize + 30 // nudge up so SAP code below stays balanced
+    page.drawText(rawName, {
+      x: nameX,
+      y: nameY,
+      size: nameSize,
+      font: helvBold,
+      color: BACK_NAME_COLOR,
+    })
+
+    const codeSize = Math.max(18, Math.round(nameSize * 0.35))
+    const codeW = helvBold.widthOfTextAtSize(store.sap_code, codeSize)
+    const codeX = (PAGE_W - codeW) / 2
+    const codeY = nameY - codeSize - 24
+    page.drawText(store.sap_code, {
+      x: codeX,
+      y: codeY,
+      size: codeSize,
+      font: helvBold,
+      color: BACK_CODE_COLOR,
+    })
+  } else {
+    // Name missing — render the SAP code as the sole identifier, larger
+    // so the back side still carries a usable signal.
+    const targetW = PAGE_W * 0.85
+    let size = 90
+    while (
+      helvBold.widthOfTextAtSize(store.sap_code, size) > targetW &&
+      size > 32
+    ) {
+      size -= 2
+    }
+    const codeW = helvBold.widthOfTextAtSize(store.sap_code, size)
+    const codeX = (PAGE_W - codeW) / 2
+    const codeY = PAGE_H / 2 - 0.36 * size
+    page.drawText(store.sap_code, {
+      x: codeX,
+      y: codeY,
+      size,
+      font: helvBold,
+      color: BACK_NAME_COLOR,
+    })
+  }
 }
