@@ -1,0 +1,48 @@
+# Mark binary files explicitly so core.autocrlf=true (the Windows default)
+# doesn't strip CR bytes from inside them. The v3 poster PNG previously
+# committed without this protection was silently corrupted (~7 KB of CRs
+# stripped) — pdf-lib happened to tolerate the bad chunks, but the v4 swap
+# made it visible: the committed blob was 37 KB smaller than the working
+# tree. Don't trust autocrlf to leave binary content alone.
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+
+# Vector / interchange formats that ARE text but we don't want EOL conversion
+# disturbing (some tools embed binary payloads in SVG via base64).
+*.svg binary
+
+# Documents / archives
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+
+# Audio / video
+*.mp3 binary
+*.mp4 binary
+*.mov binary
+*.wav binary
+*.ogg binary
+*.webm binary
+
+# Fonts
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Anything compiled
+*.wasm binary
+*.exe binary
+*.dll binary

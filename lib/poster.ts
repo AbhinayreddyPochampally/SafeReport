@@ -21,32 +21,40 @@ import { resolve } from "node:path"
  * part that needs to vary per store, so the cost is paid once at template
  * design time and never again.
  *
- * Template dimensions are 1055 × 1491 px (A4 portrait aspect, drawn to fill
- * the full 595.28 × 841.89 pt page). The two overlay regions were measured
- * once from the rendered template:
+ * Template dimensions: A4 portrait aspect (drawn to fill the full
+ * 595.28 × 841.89 pt page). The currently installed template is the v4
+ * "See Something? Say Something." redesign (1054 × 1492 px, May 2026 —
+ * supersedes the v3 hand-laid version that had a 1055 × 1491 px export).
+ * The two overlay regions were measured from the rendered template:
  *
  *   - QR placeholder (the bordered white square in the centre column):
- *       x ≈ 205–388 pt,  y ≈ 336–620 pt  (PDF coords, bottom-up)
+ *       x ≈ 225–386 pt,  y ≈ 343–568 pt  (PDF coords, bottom-up)
  *   - Store Code underline (bottom-right):
- *       y ≈ 26 pt,  x ≈ 446–542 pt
+ *       y ≈ 19 pt,  x ≈ 435–544 pt
  *
- * If the template image is ever regenerated, re-measure these coordinates
- * (scripts/measure-template.py in the repo's history shows the technique).
+ * If the template image is ever regenerated, drop the new PNG into
+ * public/poster-template.png and re-measure with:
+ *
+ *     python3 scripts/measure-template.py
+ *
+ * Paste the printed constants back into the block below. The PNG swap
+ * and the constants update must land in the same change — a mismatched
+ * pair will misplace the QR and the store code on the printed poster.
  */
 
 const PAGE_W = 595.28
 const PAGE_H = 841.89
 
-// QR placeholder bounds (measured from public/poster-template.png).
-const QR_LEFT   = 205
-const QR_RIGHT  = 388
-const QR_TOP    = 620
-const QR_BOTTOM = 336
+// QR placeholder bounds (measured from public/poster-template.png — v4).
+const QR_LEFT   = 225
+const QR_RIGHT  = 386
+const QR_TOP    = 568
+const QR_BOTTOM = 343
 
 // Store Code underline (measured from same template).
-const CODE_UNDERLINE_Y       = 27
-const CODE_UNDERLINE_X_START = 446
-const CODE_UNDERLINE_X_END   = 542
+const CODE_UNDERLINE_Y       = 19
+const CODE_UNDERLINE_X_START = 435
+const CODE_UNDERLINE_X_END   = 544
 
 const NAVY = rgb(0x0A / 255, 0x1F / 255, 0x46 / 255)
 
