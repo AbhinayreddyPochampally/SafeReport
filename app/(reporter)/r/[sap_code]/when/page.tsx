@@ -79,7 +79,7 @@ export default function WhenPage({
   function onContinue() {
     const iso = toISO(value)
     writeDraft({ sap_code: params.sap_code, event_at: iso })
-    router.push(`/r/${params.sap_code}/evidence`)
+    router.push(`/r/${params.sap_code}/photo`)
   }
 
   if (!checked) {

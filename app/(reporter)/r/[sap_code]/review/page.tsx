@@ -63,7 +63,10 @@ export default function ReviewPage({
   useEffect(() => {
     const p = readProfile()
     if (!p) {
-      router.replace(`/r/${params.sap_code}`)
+      // Phase 4 facelift: profile is now collected at /identity, not on the
+      // landing. Send the reporter there if they reach /review without a
+      // profile (typical for a brand-new draft).
+      router.replace(`/r/${params.sap_code}/identity`)
       return
     }
     const d = readDraft()
@@ -83,12 +86,14 @@ export default function ReviewPage({
     const blobs = getDraftBlobs(d.draftId)
     if (!blobs.photo) {
       // Photo is required and the in-tab store is empty (user reopened the
-      // tab or navigated here directly). Send them back to re-capture.
-      router.replace(`/r/${params.sap_code}/evidence`)
+      // tab or navigated here directly). Phase 3 facelift sends them to
+      // the dedicated /photo screen rather than the legacy /evidence.
+      router.replace(`/r/${params.sap_code}/photo`)
       return
     }
     if (!blobs.audio && !d.description_text) {
-      router.replace(`/r/${params.sap_code}/evidence`)
+      // Voice OR text required (Phase 3). Send to /describe.
+      router.replace(`/r/${params.sap_code}/describe`)
       return
     }
 
@@ -153,7 +158,7 @@ export default function ReviewPage({
     <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-8">
       <div className="flex items-center justify-between text-slate-700">
         <Link
-          href={`/r/${params.sap_code}/evidence`}
+          href={`/r/${params.sap_code}/identity`}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -185,7 +190,7 @@ export default function ReviewPage({
             />
           )}
           <Link
-            href={`/r/${params.sap_code}/evidence`}
+            href={`/r/${params.sap_code}/photo`}
             className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-700 shadow backdrop-blur hover:bg-white"
           >
             <Pencil className="h-3 w-3" strokeWidth={1.8} aria-hidden /> {t(locale, "common.edit")}
@@ -230,7 +235,7 @@ export default function ReviewPage({
         <Row
           label={t(locale, "review.row.added")}
           editLabel={t(locale, "common.edit")}
-          editHref={`/r/${params.sap_code}/evidence`}
+          editHref={`/r/${params.sap_code}/describe`}
           body={
             <div className="space-y-1 text-[13px] text-slate-700">
               {audio && (
