@@ -4,7 +4,9 @@ import { ArrowLeft, Loader2, LogIn, Mail, Phone, Shield } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ManagerPwaPrompt } from "@/components/manager-pwa-prompt"
+// Phase 6 facelift: install + notification asks now happen post-sign-in
+// (handled by ManagerOnboarding inside ManagerInbox), so the login screen
+// no longer renders the inline PWA prompt. Login is just a credentials gate.
 
 /**
  * Email + phone login screen for a specific store.
@@ -110,10 +112,6 @@ export function ManagerLogin({ store }: { store: Store }) {
         <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         Back to store
       </Link>
-
-      <div className="mt-8">
-        <ManagerPwaPrompt variant="login" />
-      </div>
 
       <div className="mt-8 flex flex-col items-center">
         <div
