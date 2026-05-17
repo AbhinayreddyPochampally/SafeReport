@@ -39,6 +39,7 @@ type ResolvableReport = {
   status: "new" | "in_progress" | "returned"
   description: string | null
   transcript: string | null
+  transcript_error: string | null
   photo_url: string
   audio_url: string | null
   incident_datetime: string
@@ -112,7 +113,7 @@ export default async function ResolvePage({
   const { data: reportRow, error: reportErr } = await admin
     .from("reports")
     .select(
-      "id, store_code, type, category, status, description, transcript, photo_url, audio_url, incident_datetime, reported_at",
+      "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at",
     )
     .eq("id", params.report_id)
     .eq("store_code", store.sap_code)
@@ -124,6 +125,7 @@ export default async function ResolvePage({
       status: string
       description: string | null
       transcript: string | null
+      transcript_error: string | null
       photo_url: string
       audio_url: string | null
       incident_datetime: string
@@ -150,6 +152,7 @@ export default async function ResolvePage({
     status: reportRow.status,
     description: reportRow.description,
     transcript: reportRow.transcript,
+    transcript_error: reportRow.transcript_error,
     photo_url: reportRow.photo_url,
     audio_url: reportRow.audio_url,
     incident_datetime: reportRow.incident_datetime,

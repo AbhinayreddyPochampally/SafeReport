@@ -603,10 +603,18 @@ function DetailPane({
 }) {
   const cat = CATEGORIES.find((c) => c.key === detail.category)
   const latestRes = detail.resolutions[detail.resolutions.length - 1] ?? null
+  // "Pending" wording is only honest while transcription is still in flight.
+  // Once `transcript_error` is set, the job is dead — letting the row keep
+  // claiming "pending" was misleading HO into thinking the transcript would
+  // show up on its own. We drop the fallback string in that case; the
+  // orange error banner rendered below is the only thing that should speak
+  // for the failed state.
   const reporterText =
     detail.transcript?.trim() ||
     detail.description?.trim() ||
-    (detail.audio_url ? "Voice note attached — transcript pending." : null)
+    (detail.audio_url && !detail.transcript_error
+      ? "Voice note attached — transcript pending."
+      : null)
 
   const isStaleNew = listItem?.bucket === "stale_new"
   const isSlaBreached = listItem?.bucket === "sla_breached"
@@ -838,7 +846,7 @@ function DetailPane({
               </p>
             )}
             {detail.transcript_error && (
-              <p className="text-[11px] text-orange-700 mt-1">
+              <p className={`text-orange-700 ${reporterText ? "text-[11px] mt-1" : "text-[12.5px] leading-5"}`}>
                 Transcript couldn&apos;t be generated automatically. Voice note
                 is still available on the full view.
               </p>

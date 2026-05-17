@@ -50,6 +50,10 @@ type ResolvableReport = {
   status: "new" | "in_progress" | "returned"
   description: string | null
   transcript: string | null
+  /** Non-null when /api/transcribe wrote a failure reason and no transcript
+   *  was produced. We use this to suppress the misleading "pending" snippet
+   *  when the pipeline has already given up. */
+  transcript_error: string | null
   photo_url: string
   audio_url: string | null
 }
@@ -163,7 +167,10 @@ export function ResolveForm({
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
 
-      // Stash a one-shot success flag so the inbox can flash a toast.
+      // Stash a one-shot success flag so the inbox (eventual destination)
+      // can flash a toast when the manager taps "Back to inbox" from the
+      // post-submit screen. The post-submit screen itself is silent — the
+      // big SR ID + Awaiting HO badge is its own confirmation.
       try {
         sessionStorage.setItem(
           "sr_mgr_toast",
@@ -178,7 +185,10 @@ export function ResolveForm({
         /* sessionStorage unavailable — no-op */
       }
 
-      router.replace(`/m/${store.sap_code}`)
+      // Phase 7 facelift: route to the post-submit confirmation screen
+      // instead of straight to the inbox. Manager sees the SR ID, status,
+      // and a single "Back to inbox" CTA. Previously was inbox-direct.
+      router.replace(`/m/${store.sap_code}/r/${report.id}/sent`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't submit.")
       setBusy(false)
@@ -190,7 +200,11 @@ export function ResolveForm({
   const snippet =
     report.transcript?.trim() ||
     report.description?.trim() ||
-    (report.audio_url ? "Voice note attached — transcript pending." : "")
+    (report.audio_url
+      ? report.transcript_error
+        ? "Voice note attached — transcript couldn't be generated. Play it from the report view."
+        : "Voice note attached — transcript pending."
+      : "")
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-10 pt-5 lg:max-w-5xl lg:px-8">

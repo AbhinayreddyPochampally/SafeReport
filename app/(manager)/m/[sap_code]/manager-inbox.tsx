@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CATEGORY_BY_KEY, type CategoryDef } from "@/lib/categories"
 import type { ReportCategory } from "@/lib/reporter-state"
-import { ManagerPwaPrompt } from "@/components/manager-pwa-prompt"
+import { ManagerOnboarding } from "@/components/manager-onboarding"
 import {
   ensurePushSubscription,
   clearPushSubscription,
@@ -76,6 +76,10 @@ type InboxReport = {
   preview: string
   has_photo: boolean
   has_audio: boolean
+  /** True iff the row has audio but `/api/transcribe` set transcript_error
+   *  and no transcript was produced. The row should say "couldn't be
+   *  transcribed" rather than the misleading "pending" fallback. */
+  transcript_failed: boolean
 }
 
 type FilterKey = "needs_action" | "in_progress" | "awaiting_ho" | "closed"
@@ -518,9 +522,13 @@ export function ManagerInbox({ store }: { store: Store }) {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 px-4 py-4 md:px-6 lg:flex-row lg:items-start lg:gap-6 lg:px-8 lg:py-6">
         {/* ---------------- LIST PANE ---------------- */}
         <aside className="w-full lg:w-[420px] lg:shrink-0">
-          {/* PWA install prompt. Hidden when both gates have already been
-            * cleared, otherwise persistent across sessions. */}
-          <ManagerPwaPrompt variant="inbox" />
+          {/* Manager onboarding overlay — install (Android Chrome native /
+            * iOS Safari manual) then allow-notifications (only inside
+            * installed PWA). Self-detects state via localStorage + matchMedia.
+            * Mounted at the same position the legacy ManagerPwaPrompt used,
+            * but renders as a fixed full-screen overlay rather than an inline
+            * card. Renders null once both gates are decided. */}
+          <ManagerOnboarding />
 
           {/* Filter pills — 2-col grid on phone, single row on sm+. No
             * horizontal scroll, so "Closed" never gets clipped. */}
@@ -692,8 +700,17 @@ function ReportCardImpl({
             <span className="text-slate-400"> · {cat.acronym}</span>
           ) : null}
         </p>
-        <p className="mt-0.5 line-clamp-2 text-[12px] leading-4 text-slate-600">
-          {r.preview || "— no text yet, voice transcript pending."}
+        <p
+          className={`mt-0.5 line-clamp-2 text-[12px] leading-4 ${
+            !r.preview && r.transcript_failed ? "text-orange-700" : "text-slate-600"
+          }`}
+        >
+          {r.preview ||
+            (r.transcript_failed
+              ? "— voice note attached, transcript couldn't be generated. Play to listen."
+              : r.has_audio
+                ? "— no text yet, voice transcript pending."
+                : "— no text added.")}
         </p>
         <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-400">
           {r.has_photo && (

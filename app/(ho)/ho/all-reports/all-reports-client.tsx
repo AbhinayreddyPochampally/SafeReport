@@ -1304,10 +1304,16 @@ function DetailPane({
 }) {
   const cat = CATEGORIES.find((c) => c.key === detail.category)
   const latestRes = detail.resolutions[detail.resolutions.length - 1] ?? null
+  // See note in action-client.tsx — once `transcript_error` is set, the
+  // transcript job is dead and "pending" copy was misleading. Drop the
+  // fallback string in that case so the orange error banner is the only
+  // thing speaking for the failed state.
   const reporterText =
     detail.transcript?.trim() ||
     detail.description?.trim() ||
-    (detail.audio_url ? "Voice note attached — transcript pending." : null)
+    (detail.audio_url && !detail.transcript_error
+      ? "Voice note attached — transcript pending."
+      : null)
 
   // Action availability by status. Approve/Return only on awaiting_ho;
   // Void allowed on every non-terminal status (new, in_progress, awaiting_ho,
@@ -1583,7 +1589,7 @@ function DetailPane({
               </p>
             )}
             {detail.transcript_error && (
-              <p className="text-[11px] text-orange-700 mt-1">
+              <p className={`text-orange-700 ${reporterText ? "text-[11px] mt-1" : "text-[12.5px] leading-5"}`}>
                 Transcript couldn&apos;t be generated automatically. Voice note
                 is still available on the full view.
               </p>

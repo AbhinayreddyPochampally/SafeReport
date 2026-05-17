@@ -5,6 +5,61 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-18 · Failed transcriptions no longer masquerade as "pending"
+
+A report whose voice note failed `/api/transcribe` (Stage A or Stage B) has
+`transcript_error` set but `transcript` null. Every surface that rendered
+reporter text had a fallback that said either "Transcript is still being
+prepared… will appear here shortly." or "Voice note attached — transcript
+pending." That fallback fired whenever `audio_url` was set, regardless of
+`transcript_error` — so failed rows kept claiming they were in flight,
+making the manager and HO wait for text that would never arrive.
+
+Fixed eight rendering sites:
+
+- `app/(manager)/m/[sap_code]/r/[report_id]/report-detail.tsx` — the
+  failed-state branch now preempts the "still being prepared" branch in
+  the body card, with orange-700 copy directing the reader to the audio
+  player. The old footnote-style error line below the pending text is
+  gone.
+- `app/(ho)/ho/reports/[report_id]/report-detail.tsx` — same pattern, plus
+  the technical reason (`transcript_error` verbatim) for HO since they own
+  the re-trigger.
+- `app/(ho)/ho/reports/[report_id]/report-detail.tsx` — second
+  `reporterText` derivation in the Before/After panel had the same
+  "pending" fallback; gated on `!transcript_error`.
+- `app/(ho)/ho/action/action-client.tsx` and
+  `app/(ho)/ho/all-reports/all-reports-client.tsx` — `reporterText`
+  fallback gated on `!detail.transcript_error`; when it's the only thing
+  speaking for the failed state, the error banner now renders at body
+  size (12.5px) instead of 11px footnote size.
+- `app/(manager)/m/[sap_code]/r/[report_id]/resolve/resolve-form.tsx` —
+  snippet at the top of the resolution form uses a "couldn't be
+  generated" message when `transcript_error` is set.
+- `app/(manager)/m/[sap_code]/manager-inbox.tsx` — row preview falls back
+  to a failed-state line (orange-700) rather than the misleading
+  "voice transcript pending" copy. As a side fix, a text-only report
+  with no description no longer claims a voice transcript is pending.
+- `app/api/reports/route.ts` — inbox feed `GET` now selects
+  `transcript_error` and returns a derived `transcript_failed: boolean`
+  per row so the client can render the right fallback without a second
+  round trip.
+- `app/(manager)/m/[sap_code]/r/[report_id]/resolve/page.tsx` — added
+  `transcript_error` to the load select + passthrough so resolve-form
+  has the data it needs.
+
+Re-trigger helper: `scripts/retrigger-transcripts.ts` lists every report
+with audio + a transcribe failure, prints the reason and which stage
+died, then POSTs each one back to `/api/transcribe`. The route is
+idempotent, so it's safe to run repeatedly. Use `--list-only` to inspect
+without retrying.
+
+No schema change. No data migration. Lint guardrails clean; tsc clean
+(modulo the pre-existing `dispatch/route.ts` TS2322 about
+`"reporter" | "manager" | "ho"`, untouched here).
+
+---
+
 ## 2026-05-15 · Doc: Manager actions clarified to Resolve-only
 
 Doc-only edit, but flagged here because it corrected a recurring misread of

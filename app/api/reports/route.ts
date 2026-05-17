@@ -355,7 +355,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await admin
     .from("reports")
     .select(
-      "id, category, type, status, reported_at, acknowledged_at, incident_datetime, description, transcript, photo_url, audio_url",
+      "id, category, type, status, reported_at, acknowledged_at, incident_datetime, description, transcript, transcript_error, photo_url, audio_url",
     )
     .eq("store_code", sap_code)
     .in("status", requested)
@@ -373,6 +373,11 @@ export async function GET(req: NextRequest) {
     const src = (r.transcript as string | null) || (r.description as string | null) || ""
     const preview =
       src.length > 80 ? src.slice(0, 77).trimEnd() + "…" : src
+    // True when the row has audio but the transcribe pipeline gave up. We
+    // surface this on the inbox row so the manager doesn't sit waiting for a
+    // transcript that will never arrive.
+    const transcript_failed =
+      Boolean(r.transcript_error) && !(r.transcript as string | null)
 
     return {
       id: r.id as string,
@@ -385,6 +390,7 @@ export async function GET(req: NextRequest) {
       preview,
       has_photo: Boolean(r.photo_url),
       has_audio: Boolean(r.audio_url),
+      transcript_failed,
     }
   })
 

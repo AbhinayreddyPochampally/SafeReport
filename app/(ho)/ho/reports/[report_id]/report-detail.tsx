@@ -361,6 +361,16 @@ export function HoReportDetail({
                 <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
                   {report.description}
                 </p>
+              ) : report.transcript_error ? (
+                <div className="text-sm leading-5 text-orange-700">
+                  <p>
+                    Transcript couldn&apos;t be generated automatically. Play
+                    the voice note above to hear what the reporter said.
+                  </p>
+                  <p className="mt-1 text-xs text-orange-700/80">
+                    Reason: {report.transcript_error}
+                  </p>
+                </div>
               ) : report.audio_url ? (
                 <p className="text-sm italic leading-5 text-slate-500">
                   Transcript is still being prepared.
@@ -370,12 +380,6 @@ export function HoReportDetail({
                   No description was added.
                 </p>
               )}
-              {report.transcript_error ? (
-                <p className="mt-2 text-xs text-orange-700">
-                  Transcript couldn&apos;t be generated automatically. Voice
-                  note is still available above.
-                </p>
-              ) : null}
             </div>
           </section>
         </div>
@@ -816,11 +820,16 @@ function ComparisonSection({
 }) {
   // Trim the reporter description to the most signal-dense field. Voice
   // transcripts win over typed descriptions because that's what the reporter
-  // actually said in their own words.
+  // actually said in their own words. Once `transcript_error` is set the
+  // pipeline has given up — don't keep advertising the row as "pending".
   const reporterText =
     report.transcript?.trim() ||
     report.description?.trim() ||
-    (report.audio_url ? "Voice note attached — transcript pending." : null)
+    (report.audio_url
+      ? report.transcript_error
+        ? "Voice note attached — transcript couldn't be generated."
+        : "Voice note attached — transcript pending."
+      : null)
 
   return (
     <section className="mt-6" aria-label="Before and after comparison">

@@ -270,6 +270,12 @@ export function ReportDetail({
             <p className="whitespace-pre-wrap text-[14px] leading-6 text-slate-800">
               {report.description}
             </p>
+          ) : report.transcript_error ? (
+            <p className="text-[13px] leading-5 text-orange-700">
+              Transcript couldn&apos;t be generated automatically. Play the
+              voice note above to hear what the reporter said — no further
+              text will appear here.
+            </p>
           ) : report.audio_url ? (
             <p className="text-[13px] italic leading-5 text-slate-500">
               Transcript is still being prepared. Play the voice note above
@@ -278,12 +284,6 @@ export function ReportDetail({
           ) : (
             <p className="text-[13px] italic leading-5 text-slate-500">
               No description was added.
-            </p>
-          )}
-          {report.transcript_error && (
-            <p className="mt-2 text-[11px] text-orange-700">
-              Transcript couldn&apos;t be generated automatically. Voice note is
-              still available above.
             </p>
           )}
         </div>
