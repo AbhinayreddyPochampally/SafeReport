@@ -9,7 +9,6 @@ import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
   readDraft,
-  readProfile,
   setDraftPhoto,
 } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
@@ -38,10 +37,7 @@ export default function PhotoPage({
   const [photo, setPhoto] = useState<Blob | null>(null)
 
   useEffect(() => {
-    if (!readProfile()) {
-      router.replace(`/r/${params.sap_code}`)
-      return
-    }
+    // Phase 10: profile no longer gating; collected at /identity.
     const draft = readDraft()
     if (!draft || draft.sap_code !== params.sap_code) {
       router.replace(`/r/${params.sap_code}/category`)

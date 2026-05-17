@@ -243,12 +243,16 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
 
     "triage.title": "What happened?",
     "triage.lede": "Pick the one that best describes it.",
-    "triage.observation.title": "Observation",
+    // Phase 10 facelift: triage labels rewritten in plain English. Formal
+    // "Observation" / "Incident" terms moved to the subtitle where they're
+    // still discoverable for HO-savvy reporters, but the headline reads
+    // like spoken language.
+    "triage.observation.title": "Something looked unsafe",
     "triage.observation.subtitle":
-      "I noticed something unsafe — no one was hurt.",
-    "triage.incident.title": "Incident",
+      "I noticed it before anyone got hurt.",
+    "triage.incident.title": "Someone got hurt",
     "triage.incident.subtitle":
-      "Someone was hurt, or there was a serious event.",
+      "An injury or serious event happened.",
 
     "subcat.observation.kind": "Observation",
     "subcat.incident.kind": "Incident",

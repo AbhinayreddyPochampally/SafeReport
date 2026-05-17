@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { readDraft, readProfile, writeProfile } from "@/lib/reporter-state"
+import { readDraft, writeProfile } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
@@ -52,12 +52,11 @@ export default function IdentityPage({
       router.replace(`/r/${params.sap_code}/when`)
       return
     }
-    // Returning reporter shortcut: profile already saved, skip ahead.
-    const existing = readProfile()
-    if (existing) {
-      router.replace(`/r/${params.sap_code}/review`)
-      return
-    }
+    // Phase 10: no session memory. /identity always asks fresh, even if a
+    // profile was saved on a prior submission. User said "no need to
+    // remember the reporter session." Profile still persists for the
+    // duration of THIS draft so /review can read it; clearDraft on submit
+    // wipes both.
     setChecked(true)
   }, [params.sap_code, router])
 

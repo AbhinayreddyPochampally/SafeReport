@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Loader2, LogIn, Mail, Phone, Shield } from "lucide-react"
+import { ArrowLeft, Loader2, LogIn, Mail, Phone, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -114,11 +114,15 @@ export function ManagerLogin({ store }: { store: Store }) {
       </Link>
 
       <div className="mt-8 flex flex-col items-center">
+        {/* APP icon — same brand mark used across the reporter flow.
+            Phase 10: switched from soft round indigo-100 + outline shield
+            to the canonical APP icon (rounded indigo-700 tile + white
+            filled ShieldCheck + drop shadow). */}
         <div
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-700"
           aria-hidden
+          className="inline-flex h-14 w-14 items-center justify-center rounded-[14px] bg-indigo-700 text-white shadow-[0_4px_14px_rgba(67,56,202,0.28)]"
         >
-          <Shield className="h-8 w-8" strokeWidth={1.8} />
+          <ShieldCheck className="h-8 w-8" strokeWidth={2} />
         </div>
         <p className="mt-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
           {store.brand} · {store.city}

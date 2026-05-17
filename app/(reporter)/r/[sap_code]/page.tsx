@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
-import { KeyRound, ShieldCheck, Store } from "lucide-react"
+import { ArrowRight, KeyRound, Languages, ShieldCheck, Store } from "lucide-react"
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { ReporterForm } from "./reporter-form"
 import { StoreUnavailable } from "./store-unavailable"
 import { ReporterIntro } from "@/components/reporter-intro"
 import { VisitTracker } from "@/components/visit-tracker"
@@ -119,16 +118,32 @@ export default async function ReporterLandingPage({
         </p>
       </section>
 
-      {/* NOTE: The legacy two-step PWA install + notification nag (gating the
-          landing) is removed in this facelift. Install + notification asks
-          are now persistent on the Confirm screen for reporters (after
-          they've submitted a report) and one-time on the Manager flow
-          (after login). See components/reporter-intro.tsx for the new
-          first-visit cinematic intro that replaces the landing gating. */}
+      {/* Phase 10 facelift: landing is now intro overlay + brand bar + store
+          card + Get started CTA. No name+phone form here — identity moved to
+          /identity (Phase 4). No inline language picker — language has its own
+          page /language with a small "Change language" link below the CTA.
+          No PWA install nag — that lives on Confirm now. */}
 
-      {/* Reporter form - owns the localised intro + name+phone form so the
-          language toggle inside it can re-render everything below it. */}
-      <ReporterForm sap_code={store.sap_code} />
+      <div className="mt-8 flex flex-col gap-3">
+        <Link
+          href={`/r/${store.sap_code}/category`}
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(67,56,202,0.25)] transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+        >
+          Get started
+          <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </Link>
+        <Link
+          href={`/r/${store.sap_code}/language`}
+          className="inline-flex items-center justify-center gap-1.5 self-center text-[13px] font-medium text-slate-600 underline-offset-2 hover:text-indigo-700 hover:underline"
+        >
+          <Languages className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+          Change language
+        </Link>
+      </div>
+
+      <p className="mt-6 text-center text-[11px] uppercase tracking-wide text-slate-400">
+        Anonymous to your store manager
+      </p>
 
       {/* Fire-and-forget landing-visit beacon. Renders nothing — sends a
           single sendBeacon to /api/visits/log on mount so HO can see

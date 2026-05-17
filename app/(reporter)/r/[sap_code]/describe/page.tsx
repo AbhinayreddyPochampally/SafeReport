@@ -9,7 +9,6 @@ import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
   readDraft,
-  readProfile,
   setDraftAudio,
   writeDraft,
 } from "@/lib/reporter-state"
@@ -52,12 +51,8 @@ export default function DescribePage({
   const [text, setText] = useState("")
 
   useEffect(() => {
-    if (!readProfile()) {
-      // Profile-on-landing is no longer the norm after Phase 4 — but if
-      // somebody navigates here without it, send them to /identity instead.
-      router.replace(`/r/${params.sap_code}/identity`)
-      return
-    }
+    // Phase 10: profile is collected at /identity AFTER describe. So we no
+    // longer guard on profile here.
     const draft = readDraft()
     if (!draft || draft.sap_code !== params.sap_code) {
       router.replace(`/r/${params.sap_code}/category`)

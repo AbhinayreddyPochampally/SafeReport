@@ -10,7 +10,7 @@ import {
   labelFor,
   type CategoryDef,
 } from "@/lib/categories"
-import { readProfile, writeDraft } from "@/lib/reporter-state"
+import { writeDraft } from "@/lib/reporter-state"
 import { t, useReporterLocale, type Locale } from "@/lib/reporter-i18n"
 
 /**
@@ -104,12 +104,9 @@ export default function SubCategoryPage({
   const kind = params.kind as Kind
 
   useEffect(() => {
-    if (!readProfile()) {
-      router.replace(`/r/${params.sap_code}`)
-      return
-    }
+    // Phase 10: profile no longer required to enter the flow.
     setChecked(true)
-  }, [params.sap_code, router])
+  }, [])
 
   const tiles = CATEGORIES.filter((c) => c.kind === kind)
 

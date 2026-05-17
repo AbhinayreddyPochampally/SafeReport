@@ -11,7 +11,7 @@ import {
   toISO,
   type DateTimeValue,
 } from "@/components/wheel-picker"
-import { readDraft, readProfile, writeDraft } from "@/lib/reporter-state"
+import { readDraft, writeDraft } from "@/lib/reporter-state"
 import { bcp47, t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
@@ -33,10 +33,7 @@ export default function WhenPage({
   const [categoryKey, setCategoryKey] = useState<string>("")
 
   useEffect(() => {
-    if (!readProfile()) {
-      router.replace(`/r/${params.sap_code}`)
-      return
-    }
+    // Phase 10: profile no longer gating; collected at /identity.
     const draft = readDraft()
     if (!draft || !draft.category || draft.sap_code !== params.sap_code) {
       router.replace(`/r/${params.sap_code}/category`)

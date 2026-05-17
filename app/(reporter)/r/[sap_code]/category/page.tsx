@@ -2,9 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Eye, KeyRound, TriangleAlert } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { readProfile } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
@@ -69,18 +67,14 @@ export default function TriagePage({
 }: {
   params: { sap_code: string }
 }) {
-  const router = useRouter()
   const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    // Guard: must have a reporter profile to be here. If not, bounce back.
-    if (!readProfile()) {
-      router.replace(`/r/${params.sap_code}`)
-      return
-    }
+    // Phase 10 facelift: profile is collected at /identity (after evidence),
+    // not at the landing. So /category no longer requires a profile to enter.
     setChecked(true)
-  }, [params.sap_code, router])
+  }, [])
 
   if (!checked) {
     return <main className="min-h-screen bg-slate-50" aria-hidden />

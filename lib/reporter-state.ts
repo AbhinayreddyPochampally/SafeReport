@@ -130,6 +130,10 @@ export function clearDraft() {
   const existing = readDraft()
   if (existing) blobStore.delete(existing.draftId)
   window.sessionStorage.removeItem(DRAFT_KEY)
+  // Phase 10: no reporter session memory. Wipe the profile too so each
+  // new submission starts from a blank /identity form. (Was previously
+  // retained between reports so a returning reporter could short-circuit.)
+  window.localStorage.removeItem(PROFILE_KEY)
 }
 
 // ---- Blobs (in-memory) ---------------------------------------------------
