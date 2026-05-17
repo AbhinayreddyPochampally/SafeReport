@@ -43,15 +43,21 @@ type Body = {
   ho_comment?: string
 }
 
+/**
+ * Notification copy uses the plain-language category labels from the
+ * Phase 2 facelift (the same strings the reporter sees in the i18n table).
+ * Manager surface is English-only so we keep these inline rather than
+ * routing through the i18n loader.
+ */
 const CATEGORY_LABEL: Record<string, string> = {
   near_miss: "Near miss",
-  unsafe_act: "Unsafe act",
+  unsafe_act: "Working unsafely",
   unsafe_condition: "Unsafe condition",
-  first_aid_case: "First aid case",
-  medical_treatment_case: "Medical treatment",
-  restricted_work_case: "Restricted work",
-  lost_time_injury: "Lost time injury",
-  fatality: "Fatality",
+  first_aid_case: "Minor injury",
+  medical_treatment_case: "Needed a doctor",
+  restricted_work_case: "Working with restrictions",
+  lost_time_injury: "Couldn't come to work",
+  fatality: "Someone died",
 }
 
 function label(cat: string | undefined): string {
@@ -98,12 +104,16 @@ export async function POST(req: NextRequest) {
 
   switch (event) {
     case "new_report": {
+      // v6 notification copy. Split incident vs observation in the TITLE
+      // so the manager can triage urgency at the lock-screen glance.
+      // Fatality is special-cased — its category label IS "Someone died"
+      // and the title format becomes "Incident reported — Someone died".
+      const cat = label(body.category)
+      const titleVerb =
+        body.type === "incident" ? "Incident reported" : "Safety observation"
       const payload = {
-        title: `New ${label(body.category)} · ${body.report_id}`,
-        body:
-          body.type === "incident"
-            ? "Incident reported at your store. Open to acknowledge."
-            : "Observation reported at your store. Open to review.",
+        title: `${titleVerb} — ${cat}`,
+        body: "just now",
         url: `/m/${sapCode}/r/${body.report_id}`,
         tag: `report-${body.report_id}`,
       }
@@ -133,28 +143,43 @@ export async function POST(req: NextRequest) {
       break
     }
     case "approved": {
-      const payload = {
-        title: `${body.report_id} approved`,
-        body: "Head Office approved this report. No further action needed.",
-        url: `/m/${sapCode}/r/${body.report_id}`,
-        tag: `report-${body.report_id}`,
-      }
-      results.push = await dispatchPush(
-        { role: "manager", sap_code: sapCode },
-        payload,
-        { report_id: body.report_id, event_type: event },
-      )
+      // Per v6 design — manager doesn't need a push for approval (the
+      // inbox status pill flip is enough; this is informational closure,
+      // not an action moment). Just log an audit row.
+      //
+      // Reporter-side push ("your safety report has been resolved") is a
+      // future phase — push_subscriptions table is currently keyed by
+      // role + sap_code, not by report_id, so subscribing a one-shot
+      // reporter device to a specific SR-ID requires a small schema
+      // extension (nullable report_id column). Deferred until Phase 9.
+      const admin = createSupabaseAdminClient()
+      await admin.from("notification_log").insert({
+        report_id: body.report_id,
+        recipient_type: "manager",
+        recipient_identifier: "all",
+        channel: "push",
+        event_type: event,
+        payload: {
+          note: "manager push suppressed for approval per v6 facelift",
+        } as Record<string, unknown>,
+        delivery_status: "skipped",
+      })
+      results.skipped = "manager push suppressed for approval per v6"
       break
     }
     case "returned": {
+      // v6 copy: "Revise SR-XXXXXX" with HO's first ~40 chars of comment.
+      // Tap target is the report DETAIL (not /resolve directly) so the
+      // manager sees the HO return alert + report context before opening
+      // the rework form.
       const comment = (body.ho_comment ?? "").trim()
+      const truncated =
+        comment.length > 40 ? comment.slice(0, 37).trimEnd() + "…" : comment
       const payload = {
-        title: `${body.report_id} returned for rework`,
-        body: comment
-          ? comment.length > 120
-            ? comment.slice(0, 117).trimEnd() + "…"
-            : comment
-          : "Head Office returned this report. Open to see the reason.",
+        title: `Revise ${body.report_id}`,
+        body: truncated
+          ? `Head Office: "${truncated}"`
+          : "Head Office sent back this resolution — tap to open.",
         url: `/m/${sapCode}/r/${body.report_id}`,
         tag: `report-${body.report_id}`,
       }

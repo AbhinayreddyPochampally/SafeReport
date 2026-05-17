@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useEffect } from "react"
 import { clearDraft } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
+import { ReporterConfirmAsks } from "@/components/reporter-confirm-asks"
 
 /**
  * Screen 7 — Confirmation.
@@ -22,6 +23,17 @@ export default function ConfirmPage({
   const locale = useReporterLocale()
   useEffect(() => {
     clearDraft()
+    // Persistent install/notification ask: clear the per-submission flag so
+    // the ask reappears on this submission. The card itself handles the
+    // "decided" persistence — if the reporter tapped Not now last time,
+    // they'll be asked again here. Once they tap Install / Allow, the flag
+    // sticks and never reappears.
+    try {
+      window.localStorage.removeItem("sr_install_decided")
+      window.localStorage.removeItem("sr_notif_decided")
+    } catch {
+      // ignore
+    }
   }, [])
 
   // The id comes straight out of the URL path and we validate the shape
@@ -70,7 +82,12 @@ export default function ConfirmPage({
         {t(locale, "confirm.privacy")}
       </p>
 
-      <div className="mt-10 flex w-full flex-col gap-3">
+      {/* Install or notification ask (state-gated by the component). */}
+      <div className="w-full max-w-sm">
+        <ReporterConfirmAsks reportId={prettyId} />
+      </div>
+
+      <div className="mt-8 flex w-full flex-col gap-3">
         <Link
           href={`/r/${params.sap_code}`}
           className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-6 text-[15px] font-medium text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"

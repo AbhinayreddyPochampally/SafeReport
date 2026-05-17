@@ -4,7 +4,7 @@ import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ReporterForm } from "./reporter-form"
 import { StoreUnavailable } from "./store-unavailable"
-import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
+import { ReporterIntro } from "@/components/reporter-intro"
 import { VisitTracker } from "@/components/visit-tracker"
 
 export const dynamic = "force-dynamic"
@@ -74,13 +74,22 @@ export default async function ReporterLandingPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-10">
-      {/* Brand bar - SafeReport logo on the left, discreet manager-login button on the right */}
+      {/* Cinematic first-visit intro. Self-detects first visit via
+          localStorage and overlays the rest of the page until dismissed.
+          On return visits this renders nothing — the landing below shows
+          immediately. */}
+      <ReporterIntro />
+
+      {/* Brand bar — APP icon (rounded indigo tile with white shield) on the
+          left, discreet manager-login key on the right. The wordmark is
+          dropped in favor of icon-only chrome; "SafeReport" is retained in
+          aria-label for screen readers. */}
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-indigo-900">
+        <div
+          aria-label="SafeReport"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-indigo-700 text-white shadow-[0_2px_6px_rgba(67,56,202,0.25)]"
+        >
           <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
-          <span className="font-display text-[18px] font-bold tracking-tight">
-            SafeReport
-          </span>
         </div>
         <Link
           href={`/m/${params.sap_code}`}
@@ -110,10 +119,12 @@ export default async function ReporterLandingPage({
         </p>
       </section>
 
-      {/* PWA setup nag - persistent until both notifications and home-screen
-          install are done. Re-shows on every fresh visit if either is still
-          missing, even though the reporter may have been here before. */}
-      <PwaInstallPrompt />
+      {/* NOTE: The legacy two-step PWA install + notification nag (gating the
+          landing) is removed in this facelift. Install + notification asks
+          are now persistent on the Confirm screen for reporters (after
+          they've submitted a report) and one-time on the Manager flow
+          (after login). See components/reporter-intro.tsx for the new
+          first-visit cinematic intro that replaces the landing gating. */}
 
       {/* Reporter form - owns the localised intro + name+phone form so the
           language toggle inside it can re-render everything below it. */}

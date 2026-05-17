@@ -348,27 +348,32 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
       "Now open SafeReport from your home screen icon to finish — that's where notifications get switched on.",
     "pwa.cta.install": "Install",
 
-    "category.near_miss.label": "Near Miss",
-    "category.near_miss.blurb":
-      "An event with potential for harm, but no injury occurred.",
-    "category.unsafe_act.label": "Unsafe Act",
+    // PLAIN-LANGUAGE CATEGORY LABELS (May 2026 facelift).
+    // The internal codes (near_miss / unsafe_act / etc.) stay unchanged in
+    // lib/categories.ts so HO analytics aren't affected — only the reporter-
+    // facing label + blurb change here. Manager and HO surfaces continue to
+    // read cat.label (the formal English term) directly.
+    "category.near_miss.label": "Near miss",
+    "category.near_miss.blurb": "Something almost happened",
+    "category.unsafe_act.label": "Working unsafely",
     "category.unsafe_act.blurb":
-      "A deviation from safety procedures by an individual.",
-    "category.unsafe_condition.label": "Unsafe Condition",
+      "Someone skipped a rule or worked unsafely",
+    "category.unsafe_condition.label": "Unsafe condition",
     "category.unsafe_condition.blurb":
-      "An environmental hazard that could cause harm.",
-    "category.first_aid_case.label": "First Aid Case",
-    "category.first_aid_case.blurb": "Minor injury, treated on-site.",
-    "category.medical_treatment_case.label": "Medical Treatment",
+      "A hazard like wet floor or broken equipment",
+    "category.first_aid_case.label": "Minor injury",
+    "category.first_aid_case.blurb": "First aid given on the spot",
+    "category.medical_treatment_case.label": "Needed a doctor",
     "category.medical_treatment_case.blurb":
-      "Requires professional medical care.",
-    "category.restricted_work_case.label": "Restricted Work",
-    "category.restricted_work_case.blurb": "Injury limits work duties.",
-    "category.lost_time_injury.label": "Lost Time Injury",
+      "Hospital or doctor visit needed",
+    "category.restricted_work_case.label": "Working with restrictions",
+    "category.restricted_work_case.blurb":
+      "Came back but couldn't do usual duties",
+    "category.lost_time_injury.label": "Couldn't come to work",
     "category.lost_time_injury.blurb":
-      "Results in days away from work.",
-    "category.fatality.label": "Fatality",
-    "category.fatality.blurb": "Resulting in death.",
+      "Missed days because of the injury",
+    "category.fatality.label": "Someone died",
+    "category.fatality.blurb": "",
   },
   kn: {
     "page.title": "ಸುರಕ್ಷತೆ ಸಮಸ್ಯೆಯನ್ನು ವರದಿ ಮಾಡಿ",
