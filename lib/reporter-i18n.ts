@@ -230,10 +230,15 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "common.optional": "optional",
     "common.edit": "Edit",
     "common.anonymous_footer": "Anonymous to store manager",
-    "common.step.1of4": "Step 1 of 4",
-    "common.step.2of4": "Step 2 of 4",
-    "common.step.3of4": "Step 3 of 4",
-    "common.step.4of4": "Step 4 of 4",
+    // Phase 3+4 facelift: total steps grew from 4 (single-evidence) to 6
+    // (photo, describe, identity now each their own screen). Keys retain
+    // their original names for back-compat — only the visible string and
+    // total count change. /photo, /describe, /identity hardcode their own
+    // step text locally so they don't need new keys here.
+    "common.step.1of4": "Step 1 of 6",
+    "common.step.2of4": "Step 2 of 6",
+    "common.step.3of4": "Step 3 of 6",
+    "common.step.4of4": "Step 4 of 6",
     "common.step.review": "Review",
 
     "triage.title": "What happened?",
@@ -406,10 +411,10 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "common.optional": "ಐಚ್ಛಿಕ",
     "common.edit": "ಬದಲಾಯಿಸಿ",
     "common.anonymous_footer": "ಅಂಗಡಿ ವ್ಯವಸ್ಥಾಪಕರಿಗೆ ಅನಾಮಧೇಯ",
-    "common.step.1of4": "4 ರಲ್ಲಿ 1ನೇ ಹಂತ",
-    "common.step.2of4": "4 ರಲ್ಲಿ 2ನೇ ಹಂತ",
-    "common.step.3of4": "4 ರಲ್ಲಿ 3ನೇ ಹಂತ",
-    "common.step.4of4": "4 ರಲ್ಲಿ 4ನೇ ಹಂತ",
+    "common.step.1of4": "6 ರಲ್ಲಿ 1ನೇ ಹಂತ",
+    "common.step.2of4": "6 ರಲ್ಲಿ 2ನೇ ಹಂತ",
+    "common.step.3of4": "6 ರಲ್ಲಿ 3ನೇ ಹಂತ",
+    "common.step.4of4": "6 ರಲ್ಲಿ 4ನೇ ಹಂತ",
     "common.step.review": "ಪರಿಶೀಲನೆ",
 
     "triage.title": "ಏನಾಯಿತು?",
@@ -582,10 +587,10 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "common.optional": "वैकल्पिक",
     "common.edit": "बदलें",
     "common.anonymous_footer": "स्टोर मैनेजर के लिए गुमनाम",
-    "common.step.1of4": "4 में से 1",
-    "common.step.2of4": "4 में से 2",
-    "common.step.3of4": "4 में से 3",
-    "common.step.4of4": "4 में से 4",
+    "common.step.1of4": "6 में से 1",
+    "common.step.2of4": "6 में से 2",
+    "common.step.3of4": "6 में से 3",
+    "common.step.4of4": "6 में से 4",
     "common.step.review": "समीक्षा",
 
     "triage.title": "क्या हुआ?",
@@ -755,10 +760,10 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "common.optional": "ఐచ్ఛికం",
     "common.edit": "మార్చండి",
     "common.anonymous_footer": "స్టోర్ మేనేజర్‌కు అజ్ఞాతం",
-    "common.step.1of4": "4లో 1వ దశ",
-    "common.step.2of4": "4లో 2వ దశ",
-    "common.step.3of4": "4లో 3వ దశ",
-    "common.step.4of4": "4లో 4వ దశ",
+    "common.step.1of4": "6లో 1వ దశ",
+    "common.step.2of4": "6లో 2వ దశ",
+    "common.step.3of4": "6లో 3వ దశ",
+    "common.step.4of4": "6లో 4వ దశ",
     "common.step.review": "సమీక్ష",
 
     "triage.title": "ఏం జరిగింది?",
