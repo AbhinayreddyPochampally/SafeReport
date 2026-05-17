@@ -28,14 +28,21 @@ import { useEffect, useState } from "react"
  *      the manager isn't asked again on this device.
  *
  *  Step 2: Allow notifications.
- *    - Only shown when running in standalone mode (display-mode: standalone
- *      or navigator.standalone on iOS Safari). Web push requires the PWA
- *      to be installed on iOS 16.4+ so this gate naturally falls AFTER step 1.
+ *    - Shown unconditionally after Step 1 (install decided — success OR
+ *      skip), matching install_notification_design_v3 which places the ask
+ *      between Login and Inbox regardless of standalone mode. Previous
+ *      revision gated this on isStandalone so a browser-mode manager never
+ *      saw the ask; the mockup-audit flagged that as a divergence.
  *    - Three trigger rows explain when the manager will be pinged: new
  *      report, HO return, report waiting (24h+).
  *    - Allow → Notification.requestPermission(). On grant, success state.
  *      On deny, soft "you can change this in browser settings" copy.
  *    - "Not now" records the decision and dismisses.
+ *    - Gracefully no-ops when the Notification API is unavailable (old
+ *      Android WebView etc.) — we transition straight to "hidden" instead
+ *      of showing a useless ask. On iOS Safari in browser mode the API
+ *      exists; requestPermission may resolve to denied, which is handled
+ *      by the declined state in the existing UI.
  *
  * Both steps are one-time per device. localStorage holds the flags so
  * future sign-ins (cookie expired → re-login) skip onboarding.
@@ -76,30 +83,57 @@ export function ManagerOnboarding() {
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true
 
+    // Decide initial step.
+    //
+    // Notif-step gate (shared between standalone + browser paths):
+    //   - Notification API exists in window
+    //   - Browser permission is still "default" (user hasn't already
+    //     granted or blocked)
+    //   - We haven't already recorded a decision this device
+    const supportsNotif = "Notification" in window
+    const notifPerm = supportsNotif ? Notification.permission : "denied"
+    const notifDecided = localStorage.getItem(STORAGE_NOTIF_KEY) === "1"
+    const notifAsk = supportsNotif && notifPerm === "default" && !notifDecided
+    const installDecided = localStorage.getItem(STORAGE_INSTALL_KEY) === "1"
+
     if (isStandalone) {
-      // Already installed — check notification step
-      const supportsNotif = "Notification" in window
-      const notifPerm = supportsNotif ? Notification.permission : "denied"
-      const notifDecided = localStorage.getItem(STORAGE_NOTIF_KEY) === "1"
-      if (!supportsNotif || notifPerm !== "default" || notifDecided) {
-        setStep("hidden")
-      } else {
-        setStep("notif")
-      }
+      // Already installed — install step doesn't apply, jump straight to
+      // the notif ask (or hidden if nothing to ask).
+      setStep(notifAsk ? "notif" : "hidden")
+    } else if (!installDecided) {
+      // Browser — start at the install step. Notif ask follows after the
+      // manager either installs or skips (see transitionPostInstall).
+      setStep(isIos ? "install_ios" : "install_android")
     } else {
-      // Browser — install step (unless already decided)
-      const installDecided = localStorage.getItem(STORAGE_INSTALL_KEY) === "1"
-      if (installDecided) {
-        setStep("hidden")
-      } else if (isIos) {
-        setStep("install_ios")
-      } else {
-        setStep("install_android")
-      }
+      // Browser, install already decided previously — don't re-nag the
+      // install, but DO surface the notif ask if it's still open (mockup
+      // calls for the ask between login and inbox regardless of standalone).
+      setStep(notifAsk ? "notif" : "hidden")
     }
 
     return () => window.removeEventListener("beforeinstallprompt", handler)
   }, [])
+
+  // Decide what to render after the install step is "decided" (either
+  // the install completed, or the manager skipped). The mockup
+  // (install_notification_design_v3) puts the notif ask unconditionally
+  // here, so we route to the notif step whenever it would do anything
+  // useful (API exists, permission is still "default", not already
+  // decided this session) and fall through to hidden otherwise.
+  function transitionPostInstall() {
+    if (typeof window === "undefined") {
+      setStep("hidden")
+      return
+    }
+    const supportsNotif = "Notification" in window
+    const notifPerm = supportsNotif ? Notification.permission : "denied"
+    const notifDecided = localStorage.getItem(STORAGE_NOTIF_KEY) === "1"
+    if (!supportsNotif || notifPerm !== "default" || notifDecided) {
+      setStep("hidden")
+    } else {
+      setStep("notif")
+    }
+  }
 
   async function handleInstall() {
     if (!installEvent) {
@@ -116,11 +150,12 @@ export function ManagerOnboarding() {
       if (choice.outcome === "accepted") {
         setInstallAction("success")
         localStorage.setItem(STORAGE_INSTALL_KEY, "1")
-        // After install, the manager typically opens the app from the home
-        // screen — that launch will detect standalone and surface the notif
-        // step. We dismiss the overlay here so the inbox is visible while
-        // they make that home-screen tap.
-        setTimeout(() => setStep("hidden"), 1800)
+        // After install, fade in the notification ask. (Previously the
+        // overlay just dismissed itself and waited for the manager to
+        // re-launch via the home-screen icon to trigger the standalone-
+        // only notif gate — the mockup wants the ask unconditionally,
+        // so we ask right here on the browser tab.)
+        setTimeout(() => transitionPostInstall(), 1800)
       } else {
         setInstallAction("declined")
       }
@@ -131,7 +166,11 @@ export function ManagerOnboarding() {
 
   function skipInstall() {
     localStorage.setItem(STORAGE_INSTALL_KEY, "1")
-    setStep("hidden")
+    // Mockup: even when the manager declines install, they still see the
+    // notif ask before the inbox. Old behavior dropped them straight into
+    // the inbox with no chance to enable alerts unless they later
+    // re-installed and re-opened from the home screen.
+    transitionPostInstall()
   }
 
   async function handleNotif() {

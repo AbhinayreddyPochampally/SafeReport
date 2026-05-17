@@ -75,9 +75,14 @@ export default async function ReporterLandingPage({
     <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-10">
       {/* Cinematic first-visit intro. Self-detects first visit via
           localStorage and overlays the rest of the page until dismissed.
-          On return visits this renders nothing — the landing below shows
-          immediately. */}
-      <ReporterIntro />
+          "Get started" routes to /r/[sap_code]/language so the reporter
+          picks their script before any other reporter screen renders
+          (canonical Intro → Language → flow order). Returning reporters
+          who already have a locale set see nothing — the landing below
+          shows immediately. Migration: returning reporters with
+          sr_intro_seen=1 but no sr_locale are redirected to /language
+          on mount instead of seeing the intro again. */}
+      <ReporterIntro sap_code={store.sap_code} />
 
       {/* Brand bar — APP icon (rounded indigo tile with white shield) on the
           left, discreet manager-login key on the right. The wordmark is

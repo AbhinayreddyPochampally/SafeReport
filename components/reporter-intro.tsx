@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 /**
@@ -15,17 +16,28 @@ import { useEffect, useState } from "react"
  *  - First visit only. Persisted via localStorage key `sr_intro_seen`.
  *  - Mounts a full-viewport overlay; below it the normal landing continues
  *    to render but is hidden until dismiss.
- *  - "Get started" CTA writes the flag and unmounts the overlay.
+ *  - "Get started" CTA writes the flag and either navigates to the Language
+ *    picker (if the reporter hasn't chosen a locale yet — the canonical
+ *    Intro → Language → flow order) or unmounts the overlay (returning
+ *    reporters who already have a locale set).
  *  - prefers-reduced-motion bypasses scenes 1-2 and lands on scene 3 +
  *    final layout statically.
+ *  - Migration safety: returning reporters who saw the old (pre-Language-
+ *    as-Screen-1) intro have sr_intro_seen=1 but no sr_locale. We detect
+ *    that case on mount and route them straight to /language instead of
+ *    showing the intro again.
  *
  * Total sequence ~9s with breathing CTA at the end. Tap "Get started" at
- * any point to skip out and proceed to the landing form.
+ * any point to skip out and proceed to the language picker.
  */
 
 const STORAGE_KEY = "sr_intro_seen"
+const LOCALE_KEY = "sr_locale"
 
-export function ReporterIntro() {
+type Props = { sap_code: string }
+
+export function ReporterIntro({ sap_code }: Props) {
+  const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [visible, setVisible] = useState(false)
 
@@ -33,17 +45,37 @@ export function ReporterIntro() {
     setMounted(true)
     try {
       const seen = window.localStorage.getItem(STORAGE_KEY)
-      if (!seen) setVisible(true)
+      const locale = window.localStorage.getItem(LOCALE_KEY)
+      if (!seen) {
+        // First visit — play the cinematic intro. Language pick happens
+        // when the reporter taps "Get started" (see dismiss()).
+        setVisible(true)
+      } else if (!locale) {
+        // Returning reporter who saw the old intro but never picked a
+        // language. Skip the intro and send them straight to the picker
+        // so every screen from here on renders in their chosen script.
+        router.replace(`/r/${sap_code}/language`)
+      }
+      // Otherwise (seen + locale set) render nothing — the welcome landing
+      // shows immediately.
     } catch {
       // localStorage unavailable (private mode etc.) — skip the intro
     }
-  }, [])
+  }, [router, sap_code])
 
   function dismiss() {
     try {
       window.localStorage.setItem(STORAGE_KEY, "1")
+      const locale = window.localStorage.getItem(LOCALE_KEY)
+      if (!locale) {
+        // No locale yet — canonical Intro → Language → flow order: route
+        // the reporter to the picker. Leave the overlay visible during
+        // the navigation so the welcome screen doesn't flash behind it.
+        router.push(`/r/${sap_code}/language`)
+        return
+      }
     } catch {
-      // ignore
+      // ignore — fall through to plain dismiss
     }
     setVisible(false)
   }

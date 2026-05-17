@@ -1,112 +1,261 @@
-# Goal
+# SafeReport — Handoff
 
-Ship the SafeReport pilot — workplace safety incident reporting for ABFRL, 20 retail stores, mobile reporter flow + manager phone+password flow + HO desktop console with two queues, all-reports browser, analytics, store registry, and printable QR posters. Pilot launches today (12 May 2026); production is live on Railway.
+Last updated: 2026-05-18 (Phase 10 shipped, audit complete, divergence batch (a)
+— structural flow-order fixes — shipped. Batches (b)–(g) still queued).
 
-## Current State
+This is the operational handoff. CLAUDE.md is the authoritative spec; this file
+captures the live state, what's already wrong against the mockup spec, and the
+queue of things the next person should pick up.
 
-Production is on `main`, deployed to `safereport-production-cb1c.up.railway.app` (Railway, Hobby plan, Nixpacks build). Latest commits since the last handoff:
+---
 
-- `43b215d` — chore: clear remnants (legacy handoff doc, dead /voice route, .next/out/tsbuildinfo)
-- `c660b55` — docs: add agents.md (coordination layer for autonomous coding agents)
-- `8ceede0` — fix(transcribe): remove orphan duplicate block after success return
-- `5ea56e2` — fix(tsconfig): set target es2017 so Set/Map iteration typechecks
-- `924f623` — feat(reporter): extend Kannada to the full reporter flow
-- `6057b34` — fix(reporter): keep locale pill visible for returning reporters
-- (about to push) docs: align CLAUDE.md with deployed reality — 4-col wheel picker, PWA install nag section, dual locale toggle
+## Where things stand
 
-Schema is at migrations 001 + 002 (manager_password_hash + qr_downloaded_at) + 003 (transcript_source columns) + 004 (manager_session_epoch). Smoke (`scripts/smoke-api.sh`) returns 12/13 — the single failing check is the manager landing 404 for stores with no password set, which is correct guard behaviour.
+Production is `safereport-production-cb1c.up.railway.app` (Railway, Hobby plan,
+Nixpacks build, auto-deploy from `main`). Source of truth is
+`github.com/AbhinayreddyPochampally/SafeReport`. Latest commit on main:
+`7d8e6fa` — "Phase 10: drop name+phone from landing, plain-tone triage,
+/language route, APP icon on manager login, no session memory."
 
-What ships and works: phone+password manager auth with per-store session-epoch invalidation; gpt-4o-transcribe → gpt-4o-mini translate pipeline with a Hinglish-resistant English-skip gate; HO sidebar console with two-queue Overview, Reports tab (URL-driven filters, sticky-header table, pagination), Analytics, Stores; Add Store + inline password reset + per-store QR poster + bulk poster PDF; CSV import with parallel bcrypt and SAP-code dedupe; **Kannada localisation across the full reporter flow** (landing → triage → sub-category → when → evidence → review → confirm, plus the store-not-found fallback and the PhotoCapture / VoiceRecorder / PwaInstallPrompt components, plus category labels and blurbs); PWA install + notification prompt persistent on every reporter visit; voice recorder with 1-second pre-roll and a larger orange stop button; Tailwind palette extended to full 50-900 ramps.
+The 20 pilot stores are seeded in Supabase. Valid SAP codes are 4-digit numbers
+like `4587` (Allen Solly · 100 Feet Road Indira Nagar, Bangalore). Five stores
+are flagged "Active" in HO, the rest are "Never" (no scans yet). All twenty are
+in Bangalore, Karnataka, across four brands: Allen Solly, Louis Philippe,
+Peter England, Van Heusen. The reporter landing for any of them is reachable
+at `/r/<sap_code>`.
 
-What does not yet ship: 20 stores have not been seeded (waiting on user data); manager and HO surfaces remain English-only by design.
+Manager auth is on migration 004 — email + phone, no password. Both must match
+the store row (email case-insensitive, phone compared on the trailing 10 digits).
+Three-strikes lockout per SAP code, 15-minute TTL, lives in process memory.
+HO auth is unchanged: Supabase Auth email + password, gated by middleware on
+`/ho/*`.
+
+Translation pipeline is the two-stage v2: `gpt-4o-transcribe` (fallback
+`whisper-1`) for transcription, `gpt-4o-mini` for translation, with
+`transcript_source` + `transcript_source_lang` columns persisted for audit.
+
+Note that the CLAUDE.md runbook still references the bare `safereport.up.railway.app`
+in a couple of places. That domain returns "Application not found" — the live
+URL is the `safereport-production-cb1c.up.railway.app` one above. Patch the
+runbook URLs in the next doc-only pass.
+
+## What was shipped in Phases 1–10
+
+Phases 1 through 8 (mid-May 2026) added the cinematic intro, plain-language
+category labels, split the old Evidence screen into Photo + Describe, moved
+Identity to after Describe, replaced the manager PIN keypad with the post-login
+install + notification onboarding overlay, wired the post-submit Sent screen
+for managers, and built the notification dispatch infrastructure (web-push
+subscriptions, VAPID, `/api/notifications/dispatch`).
+
+Phase 9 (reporter push subscription + SLA nudge cron) is deferred.
+
+Phase 10 (this session) addressed the four specific gaps the user flagged from
+the live deploy: the name+phone form was removed from the landing (identity now
+collected only at Step 6 after evidence), triage labels were rewritten to plain
+language with easy icons, a dedicated `/r/[sap]/language` route was added so a
+non-English reporter can find the picker without reading English first, and the
+manager login screen now uses the canonical APP icon (rounded indigo-700 tile
+with white ShieldCheck and drop shadow) instead of the soft indigo-100 outline
+circle. `lib/reporter-state.ts.clearDraft()` now wipes the reporter profile
+alongside the draft so each new submission starts blank — there is no session
+memory across reports.
+
+All Phase 1–10 commits passed both local `tsc --noEmit` and Railway's
+Next.js build.
+
+## The audit — what diverges from the mockup spec
+
+The full audit lives in the conversation transcript and in `mockups/`. The
+canonical spec files are `reporter_intro_flow_v6.html` (intro animation),
+`reporter_flow_v14.html` (reporter Screens 1–12), `manager_flow_v3.html`
+(manager flow), and `install_notification_design_v3.html` (install + notification
+ask design). All other mockups in `mockups/` are intermediate iterations.
+
+Critical structural divergences:
+
+The Language picker is the first forced screen in v14 but only reachable as a
+"Change language" side-link in live. The `reporter-form.tsx` name+phone form
+still injects below the landing Get-started CTA for first-time visitors —
+Phase 10 removed it from the directly-rendered landing but the old form
+component is still mounted via `app/(reporter)/r/[sap_code]/page.tsx`. The
+manager Allow-Notifications step in `components/manager-onboarding.tsx` is
+gated on `isStandalone` so a manager logged in via browser never sees the ask;
+mockup puts it between Login and Inbox unconditionally. Neither reporter nor
+manager surface enforces a phone-only viewport — reporter uses `max-w-xl` and
+manager inbox uses `max-w-7xl` with a desktop two-pane master/detail at `lg+`,
+contrary to the "phone-only ~375px" rule in CLAUDE.md.
+
+High-severity content and copy divergences:
+
+Triage cards are stripped down — mockup has kind eyebrow + bold tagline +
+italic description + examples row + a 7-dot progress indicator; live cards are
+flat horizontal rows with only title + 1-line subtitle. Sub-category renders
+as N rounded shadowed tiles rather than one container with internal hairlines.
+The 7-dot progress indicator is missing on every screen post-Welcome (live
+uses a small "Step N of 6" text label instead). The brand bar only appears
+on the landing and `/language` — every other reporter screen drops it. The
+locale set is incoherent across four sources: the picker offers en/hi/kn/te,
+the intro overlay's language pills show en/kn/ta/hi, v14's picker mockup
+shows en/kn/ta, and the text-mode placeholder lists en/kn/hi/te. Tamil is in
+marketing copy but absent from the picker; Telugu is in the picker but absent
+from marketing. The identity helper says "Anonymous to store manager" — CLAUDE.md
+flags this exact line as a hard verbatim rule with the mandatory text being
+"Your name is visible only to Head Office." The review screen heading reads
+"One last check." rather than mockup's "Ready to submit?". The manager inbox
+filter pills use labels (Needs action / In progress / Awaiting HO / Closed)
+that differ from the mockup's All / New + Returned / Acknowledged / Awaiting
+HO / Closed. The manager report-detail page doesn't render the Stone-100 audio
+plate with indigo play button + scrubber that the mockup specifies — none of
+those tokens grep up in `report-detail.tsx`.
+
+Low-severity polish: intro overlay `padding-top: 124px` vs mockup's 74px so
+the rising-icon lands further from the title; the Confirm screen bubble is
+`bg-teal-700/10` instead of slate-100; the Photo screen sub copy drifted from
+"understand the issue" to "understand what you saw"; the Describe heading
+stays "Tell us what happened" during recording instead of switching to
+"Recording — tap to stop"; the manager login uses center-stacked hero with
+icon-in-input fields rather than the mockup's left-aligned store card with
+plain bordered inputs.
+
+The user explicitly said "the entire flow itself" needs rectifying, so the
+above isn't a polish list — it's the next-up queue. Triage decision is open;
+no fixes have been started since the audit completed.
+
+## Operational gotchas
+
+The Railway URL changed at some point. CLAUDE.md says `safereport.up.railway.app`;
+the actual reachable host is `safereport-production-cb1c.up.railway.app`. The
+bare domain returns "Application not found" from Railway's router. Don't waste
+debug time on what looks like a failed deploy — check the URL first. The
+Railway dashboard project name is `charming-upliftment` under the personal
+workspace `abhinayreddypochampally's Projects`.
+
+The bash workspace mount (`/sessions/<id>/mnt/2nd Attempt - SafeReport/`) is
+read-only-ish and serves stale views of large files after the user saves
+locally. Use the file tools (Read/Write/Edit) for file operations and
+Windows-MCP PowerShell for git operations. Bash mount is fine for `npx tsc
+--noEmit` and `npx eslint`, but `npm run build` will fail to clean `.next/`
+because of permission denials. To get a real production build verification,
+use Windows-MCP PowerShell: `cd "C:\Users\VICTUS\Desktop\2nd Attempt -
+SafeReport"; npm run build`.
+
+The Windows-MCP PowerShell tool times out after roughly 60 seconds at the MCP
+layer even when the underlying command is still running. If a tool returns
+"Request timed out", that doesn't mean the operation failed — re-poll the
+filesystem (look for `.next/BUILD_ID`, `git log --oneline -1`, etc.) to see
+whether it finished. The fresh Next.js build on this machine takes ~75 seconds.
+
+The reporter intro overlay (`components/reporter-intro.tsx`) gates on
+`localStorage.sr_intro_seen`. For testing, clear it via Chrome devtools or
+`javascript: localStorage.removeItem('sr_intro_seen'); location.reload()`. The
+overlay also has a "Skip" affordance top-right that's always tappable.
+
+Chrome's `resize_window` MCP tool resizes the OS window frame but doesn't
+necessarily propagate to the viewport — confirmed via `window.innerWidth`
+reading 1536 even after a successful 412-px resize. Windows DPI scaling at
+1.25 may be the culprit. To test phone-width rendering reliably, use Chrome
+devtools device mode rather than `resize_window`.
+
+The Phase 10 commit narrowly avoided a Railway build failure caused by an
+unused `useRouter` import + assignment in `category/page.tsx`. Strict-mode
+ESLint blocks the build on unused-vars. The Phase 5 round of commits hit
+similar failures on unused imports and unescaped `"` in JSX. Run `npx eslint
+<paths> --max-warnings 0` against any modified files before pushing.
+
+## Suggested next-up queue
+
+Triage decisions (locked 2026-05-18):
+  - **Flow order** — Intro → Language → flow. Cinematic intro plays first
+    in English; "Get started" routes the reporter to the Language picker;
+    pick a locale; land on Welcome; tap Get started; into the Triage flow.
+  - **Locale set canonical** — en + kn + hi + ta + te. Tamil strings still
+    need drafting (not in `lib/reporter-i18n.ts.STRINGS` yet) — see batch
+    (d). Today's batch only added Tamil as a structural target, not a
+    rendered locale.
+  - **First batch to ship** — (a) flow-order fixes. Done; see below.
+
+Batch (a) — flow order + missing screens — **shipped 2026-05-18**:
+  - Reporter intro overlay (`components/reporter-intro.tsx`) now accepts a
+    `sap_code` prop and, on dismiss, routes to `/r/[sap_code]/language`
+    instead of just hiding. A migration path is wired for returning
+    reporters with `sr_intro_seen=1` but no `sr_locale` — they skip the
+    intro entirely and go straight to the picker. After the locale is
+    chosen, the picker routes back to the Welcome landing.
+  - Orphaned `app/(reporter)/r/[sap_code]/reporter-form.tsx` deleted (was
+    not mounted anywhere; flagged in the prior audit as a residual identity
+    form on the landing — it was already off the mount path, just dead code
+    on disk).
+  - Manager onboarding (`components/manager-onboarding.tsx`) Allow-
+    Notifications step is no longer gated on standalone mode. New helper
+    `transitionPostInstall()` decides notif-vs-hidden based on
+    `Notification` API availability + `Notification.permission === "default"`
+    + `STORAGE_NOTIF_KEY` decision. Called from `skipInstall()`,
+    `handleInstall()` success setTimeout, AND from the startup `useEffect`
+    when in browser mode with install already decided. Browser-mode
+    managers now see the notif ask between Login and Inbox (the mockup
+    `install_notification_design_v3.html` shape).
+
+Remaining batches:
+  - (b) triage card content rebuilt to mockup spec (kind eyebrow + tagline
+    + description + examples + 7-dot progress dots)
+  - (c) brand bar persistence on every reporter screen
+  - (d) locale set reconciliation: draft Tamil strings, complete any
+    partial Hindi/Telugu strings, extend `LOCALES` in `lib/reporter-i18n.ts`
+    to `["en","hi","kn","ta","te"]`, add Tamil to `LOCALE_LABELS` /
+    `LOCALE_ENGLISH_NAMES` / `LOCALE_BCP47` / the language picker
+    page. Tamil font is already wired in the intro overlay's
+    Scene 2 (`.sr-lang-ta { font-family: 'Noto Sans Tamil', ... }`)
+    and the language picker page has an inline `Noto Sans` fallback
+    style switch that needs a Tamil branch.
+  - (e) verbatim copy corrections per CLAUDE.md hard rules
+  - (f) phone-viewport enforcement on both reporter and manager surfaces
+  - (g) manager inbox single-column rewrite + filter-pill relabel + Stone-
+    100 audio plate on the detail page
+
+Phase 9 (reporter push subscription + SLA nudge cron) is still open and
+unrelated to the divergence work — it needs a schema migration to add
+`push_subscriptions.report_id` and a cron job for the 24-hour-no-acknowledge
+nudge. The DESIGN.md update for "voice-primary with text fallback (mandatory
+either way)" is also still pending.
+
+If the user asks for the PRD + System/Process docs in two versions (Railway
+current + Azure full plan) that the prior `AskUserQuestion` round was about to
+clarify, the question stub captured three decisions: output format (.docx vs
+.md vs both), cleanup aggressiveness (delete vs archive vs leave), and Azure
+depth (full migration with cost + cutover vs architecture-and-cost-only vs
+architecture-only). Those need answers before drafting begins.
+
+## Mockup → code map
+
+The current state of the `mockups/` directory is a long history of iterations.
+The canonical specs are: `reporter_intro_flow_v6.html` is the spec for
+`components/reporter-intro.tsx`. `reporter_flow_v14.html` is the spec for the
+twelve reporter screens — Language (`app/(reporter)/r/[sap_code]/language/page.tsx`),
+Welcome (`r/[sap_code]/page.tsx` + `reporter-form.tsx`), Triage (`category/page.tsx`),
+Subcategory (`category/[kind]/page.tsx`), When (`when/page.tsx` + `components/wheel-picker.tsx`),
+Photo (`photo/page.tsx` + `components/photo-capture.tsx`), Describe in idle/recording/text
+modes (`describe/page.tsx` + `components/voice-recorder.tsx`), Identity
+(`identity/page.tsx`), Review (`review/page.tsx`), Confirm
+(`confirm/[report_id]/page.tsx` + `components/reporter-confirm-asks.tsx`).
+`manager_flow_v3.html` is the spec for the manager flow — Login
+(`m/[sap_code]/manager-login.tsx`), the Allow-Notifications overlay
+(`components/manager-onboarding.tsx`), Inbox (`m/[sap_code]/manager-inbox.tsx`),
+Detail (`r/[report_id]/page.tsx` + `report-detail.tsx`), Resolve
+(`r/[report_id]/resolve/resolve-form.tsx`), Sent (`r/[report_id]/sent/page.tsx`).
+`install_notification_design_v3.html` is the spec for both the manager
+onboarding overlay and the reporter post-submit ask card.
+
+The other 22 mockup files (`reporter_flow_v2.html` through `v13.html`,
+`manager_flow_v1.html` and `v2.html`, `install_notification_design_v1.html`
+and `v2.html`, `reporter_intro_flow_v1.html` through `v5.html`) are
+intermediate iterations kept for paper trail. They can be archived under
+`docs/archive/mockups/` or deleted outright in a future cleanup pass.
 
 ## Files in flight
 
-Nothing actively edited mid-batch. Last batch (Kannada full-flow + doc updates) is staged and about to commit.
-
-## Changed (this session)
-
-- **Cleanup pass.** Deleted `.next/` (110 MB), `out/`, `tsconfig.tsbuildinfo`, the empty `next` file, and `design-mockups/`. `git rm`-ed `HANDOFF_TO_CLAUDE_CODE.md` (legacy scaffold instructions) and `app/(reporter)/r/[sap_code]/voice/page.tsx` (dead redirect route, comment marked it for removal, no inbound links).
-- **agents.md added** at repo root — coordination doc for autonomous coding agents (Claude Code, Cursor, Aider, Codex CLI). Defines a seven-role agent roster (`frontend-ui`, `backend-api`, `db-schema`, `voice-pipeline`, `qa-smoke`, `design-verifier`, `release-engineer`), five orchestration patterns, hand-off discipline, stop-the-line conditions, and Cowork-specific sandbox quirks. Peer to CLAUDE.md, not a duplicate.
-- **Transcribe pipeline fixed.** Removed 21 lines of orphan/duplicate code after the success return in `app/api/transcribe/route.ts` — botched paste from `81d08d1` that Railway's Nixpacks build never typechecked.
-- **tsconfig.json target.** Added `"target": "es2017"` so standalone `tsc --noEmit` no longer rejects `for...of` over `Set<string>` in `app/api/excel/stores/route.ts`. Was masked by stale `tsbuildinfo`; surfaced after cleanup.
-- **Kannada full reporter flow.**
-  - `lib/reporter-i18n.ts` expanded from a landing-only surface (~15 keys) to the full reporter copy (~110 keys) covering triage / sub-category / when / evidence / review / confirm / unavailable / photo-capture / voice-recorder / pwa-install + per-category label + blurb. Added a `useReporterLocale()` React hook so screens don't each re-implement the `sr:locale` event subscription.
-  - `lib/categories.ts` — each `CategoryDef` now carries `labelKey` + `blurbKey` pointing into the i18n map; `labelFor(cat, locale)` and `blurbFor(cat, locale)` helpers added. `cat.label` and `cat.blurb` retained as English fallbacks for manager / HO / Excel consumers.
-  - Every reporter screen (`app/(reporter)/r/[sap_code]/**/page.tsx`) converted to use `useReporterLocale()` + `t()`. The store-not-found fallback was extracted to its own `store-unavailable.tsx` client component because the parent landing is an async server component.
-  - `components/photo-capture.tsx`, `components/voice-recorder.tsx`, `components/pwa-install-prompt.tsx` — all three subscribe to locale via the hook and pull all user-facing strings from the i18n map.
-  - Wheel-picker preview and review-screen timestamp now call `toLocaleString("kn-IN", …)` when locale is Kannada so weekday and month render in Kannada script on Chrome / iOS Safari.
-  - CLAUDE.md §"Reporter landing — language toggle" rewritten to reflect the expanded scope.
-- **Returning-reporter locale pill (`6057b34`).** The Reporting-as summary card on the landing now carries a compact locale toggle on a slate-50 strip beneath the name+phone row. Closes the regression where a returning Kannada reporter had to tap Switch (clearing their saved profile) to change locale.
-- **Doc alignment pass (about to commit).**
-  - CLAUDE.md §"Wheel picker spec (Screen 4)" rewritten from 3-column 24-hour to the deployed 4-column 12h+AM/PM shape. Notes that the PDF reference still shows the old layout.
-  - CLAUDE.md routes block — `voice/page.tsx` removed from the reporter directory listing (file was deleted in `43b215d`).
-  - CLAUDE.md §"Reporter localisation" extended to document the dual-instance pattern (full toggle for first visit + compact pill inside the Reporting-as card for returning reporters).
-  - New CLAUDE.md §"PWA install nag (reporter landing)" describes the two-gate state machine, iOS Safari fallback, per-session dismiss, and co-located service-worker registration.
-
-## Earlier this session, by way of background
-
-Full HO console redesign with sidebar replacing top nav, two-queue Overview, new /ho/all-reports tab; manager auth migration from PIN to phone+password (migration 002); translation pipeline v2 (migration 003); Stores page rewrite with Add Store, password reset, QR poster, new-store badge, master-list prune; Android gallery upload split into two buttons on both reporter evidence and manager resolution screens; side-by-side report+resolution photo block on the HO report detail; demo data wipe SQL.
-
-## Failed attempts (kept as scar tissue)
-
-Bash heredoc writes (`cat > file << EOF`) do not propagate from the sandbox mount to the user's actual disk; only the `Read` / `Edit` / `Write` tools sync. Fix is to never use heredoc for file writes.
-
-The `Write` tool truncates files larger than roughly 100 lines or ~2KB on first attempt and on long-comment payloads (em-dash `—` characters seem to compound this). Fix in each case is to restore from `git show HEAD:path` then re-apply via small `Edit` calls only. Today's `lib/reporter-i18n.ts` rewrite (~470 lines, includes Kannada Unicode + em-dashes) went through cleanly on a single `Write` — the truncation issue seems sensitive to payload + tool-state interactions rather than raw size.
-
-Railway build initially failed because Nixpacks defaults `NODE_ENV=production`, which makes `npm ci` skip devDependencies and `next build` then can't find `tailwindcss`. Fix was `--include=dev` in `nixpacks.toml`.
-
-Running `npx next build` in the sandbox `SIGBUS`s on memory pressure — typecheck (`tsc --noEmit`) and lint (`next lint --no-cache`) work, but the production build itself can only be verified by pushing to Railway.
-
-PowerShell mangles backticks inside commit messages — `` `next` `` literal becomes `ext` because the backtick is the PowerShell escape character. Use forward-slash phrasing or single-quote with care.
-
-## Out-of-scope findings from the Chrome live-flow audit (now resolved)
-
-All three findings from the previous handoff have shipped. Keeping them
-here as a paper trail so a future agent can see the cleanup path.
-
-1. ~~**Wheel picker is 12-hour AM/PM, not 24-hour as CLAUDE.md says.**~~
-   Resolved in the doc-alignment commit: the deployed 4-column picker
-   (Day · Hour 1-12 · Minute 00/15/30/45 · AM/PM) is now the documented
-   spec. The PDF reference still shows the old 3-column shape; the
-   CLAUDE.md section notes that the deployed component supersedes it.
-2. ~~**The PWA install banner on the reporter landing isn't documented
-   in CLAUDE.md.**~~ Resolved: new §"PWA install nag (reporter landing)"
-   section covers the two-gate state machine (notifications +
-   home-screen install), the iOS Safari fallback, the per-session
-   dismiss via `sessionStorage`, and the co-located service-worker
-   registration.
-3. ~~**Language toggle disappears for returning reporters.**~~ Resolved
-   in `6057b34`. A compact locale pill (smaller padding, same indigo-700
-   active state) now sits inside the "Reporting as …" summary card on
-   a slate-50 strip beneath the name+phone row. Both the full toggle
-   (first visit) and the compact pill (returning) flip via the same
-   `sr:locale` event. CLAUDE.md §"Reporter localisation" describes the
-   dual-instance pattern and notes that they should not be collapsed.
-
-## Next step
-
-Pilot is essentially feature-complete for the reporter half. Suggested
-priorities for the next batch, lowest-friction first:
-
-1. **HO Analytics refresh.** The page hasn't been touched since the
-   nav switched from top bar to sidebar. Likely still functional, but
-   the surrounding shell expects a sidebar-shell layout while
-   Analytics may still render with the old top-bar assumptions.
-   Worth a visual audit + structural alignment to the rest of the HO
-   console.
-2. **Seed the 20 pilot stores.** Waiting on the SAP-code list + manager
-   phone/name data from ABFRL. The Stores page already supports CSV
-   import (`POST /api/excel/stores`) with the optional master-list
-   prune flag, so the actual ingest is a one-command operation once
-   the CSV lands.
-3. **PDF design doc realignment.** `docs/SafeReport_Design_Document_v6.pdf`
-   page 18 still illustrates the 3-column 24-hour wheel picker. Either
-   regenerate that page from the current component or add a "v7
-   addendum" page noting the 4-column shape. Not blocking, but it'll
-   be the next confusion source for anyone reading the doc cold.
-
-Out-of-scope but worth noting: the brand kicker on the reporter
-landing ("PANTALOONS" / "ALLEN SOLLY" etc) is intentionally not
-localised — those are proper nouns and they show up in the store
-identity card alongside the city. Don't localise.
+Nothing actively edited mid-batch. Phase 10 commit `7d8e6fa` is the head of
+`main`. The audit findings are in conversation context only; if the next
+session is a fresh conversation, the next person should re-read the four
+canonical mockup files alongside the live code paths above before deciding
+which divergence to fix first.
