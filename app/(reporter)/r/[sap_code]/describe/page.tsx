@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, Mic, PenLine } from "lucide-react"
+import { ArrowLeft, ArrowRight, Mic } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"

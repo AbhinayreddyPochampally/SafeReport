@@ -234,10 +234,10 @@ export function ManagerOnboarding() {
             icon at the bottom of Safari.
           </IosStep>
           <IosStep n={2}>
-            Choose <strong>"Add to Home Screen"</strong>.
+            Choose <strong>&ldquo;Add to Home Screen&rdquo;</strong>.
           </IosStep>
           <IosStep n={3}>
-            Tap <strong>"Add"</strong> in the top-right.
+            Tap <strong>&ldquo;Add&rdquo;</strong> in the top-right.
           </IosStep>
         </ol>
         <p className="mt-3 text-center text-[12px] text-slate-500">

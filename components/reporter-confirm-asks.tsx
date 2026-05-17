@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Download, Share2, X } from "lucide-react"
+import { Bell, Download, Share2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 /**
@@ -241,7 +241,7 @@ export function ReporterConfirmAsks({ reportId }: { reportId: string }) {
               2
             </span>
             <span>
-              Choose <strong>"Add to Home Screen"</strong>
+              Choose <strong>&ldquo;Add to Home Screen&rdquo;</strong>
             </span>
           </li>
           <li className="flex items-center gap-2">
@@ -249,7 +249,7 @@ export function ReporterConfirmAsks({ reportId }: { reportId: string }) {
               3
             </span>
             <span>
-              Tap <strong>"Add"</strong>
+              Tap <strong>&ldquo;Add&rdquo;</strong>
             </span>
           </li>
         </ol>
