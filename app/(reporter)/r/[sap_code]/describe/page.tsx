@@ -55,29 +55,84 @@ const TEXT_MAX = 500
  */
 function ScriptWatermark() {
   type Tok = { c: string; x: number; y: number; s: number; o: number; f?: string }
+  // Watermark density bumped May 2026 — earlier rev clustered tokens at
+  // the top and bottom, leaving a visible "dead band" through the middle
+  // of the screen where the recorder card sat. Now every horizontal band
+  // gets glyphs from at least three scripts so the texture reads as a
+  // continuous wash rather than two header/footer crops.
+  const DV = "'Noto Sans Devanagari'"
+  const TE = "'Noto Sans Telugu'"
+  const KN = "'Noto Sans Kannada'"
+  const TA = "'Noto Sans Tamil'"
+  const GU = "'Noto Sans Gujarati'"
+  const BN = "'Noto Sans Bengali'"
+  const ML = "'Noto Sans Malayalam'"
   const tokens: Tok[] = [
+    // --- Band 1 (y 40-160): hero title sits here on the page; we keep
+    // tokens to the screen edges so they don't fight the headline ---
     { c: "A", x: 80, y: 70, s: 36, o: 0.18 },
-    { c: "अ", x: 200, y: 80, s: 36, o: 0.18, f: "'Noto Sans Devanagari'" },
-    { c: "क", x: 285, y: 76, s: 36, o: 0.18, f: "'Noto Sans Devanagari'" },
-    { c: "मराठी", x: 300, y: 130, s: 18, o: 0.2, f: "'Noto Sans Devanagari'" },
-    { c: "ద", x: 235, y: 145, s: 28, o: 0.16, f: "'Noto Sans Telugu'" },
-    { c: "తెలుగు", x: 215, y: 175, s: 16, o: 0.2, f: "'Noto Sans Telugu'" },
-    { c: "ಕ", x: 70, y: 180, s: 26, o: 0.18, f: "'Noto Sans Kannada'" },
-    { c: "ಕನ್ನಡ", x: 110, y: 235, s: 18, o: 0.2, f: "'Noto Sans Kannada'" },
-    { c: "தமிழ்", x: 240, y: 220, s: 18, o: 0.2, f: "'Noto Sans Tamil'" },
-    { c: "ಶ್", x: 40, y: 270, s: 30, o: 0.18, f: "'Noto Sans Kannada'" },
-    { c: "क", x: 245, y: 280, s: 28, o: 0.16, f: "'Noto Sans Devanagari'" },
-    { c: "ગુજરાતી", x: 270, y: 305, s: 18, o: 0.2, f: "'Noto Sans Gujarati'" },
-    { c: "क", x: 22, y: 540, s: 30, o: 0.14, f: "'Noto Sans Devanagari'" },
-    { c: "ગુ", x: 320, y: 740, s: 26, o: 0.18, f: "'Noto Sans Gujarati'" },
-    { c: "మ", x: 345, y: 575, s: 22, o: 0.18, f: "'Noto Sans Telugu'" },
-    { c: "త", x: 38, y: 622, s: 24, o: 0.14, f: "'Noto Sans Telugu'" },
-    { c: "తెలుగు", x: 30, y: 760, s: 16, o: 0.2, f: "'Noto Sans Telugu'" },
-    { c: "বাংলা", x: 285, y: 815, s: 18, o: 0.2, f: "'Noto Sans Bengali'" },
+    { c: "अ", x: 200, y: 80, s: 36, o: 0.18, f: DV },
+    { c: "क", x: 285, y: 76, s: 36, o: 0.18, f: DV },
+    { c: "ক", x: 28, y: 110, s: 24, o: 0.16, f: BN },
+    { c: "मराठी", x: 300, y: 130, s: 18, o: 0.2, f: DV },
+    { c: "ద", x: 235, y: 145, s: 28, o: 0.16, f: TE },
+    { c: "ണ", x: 360, y: 155, s: 22, o: 0.18, f: ML },
+
+    // --- Band 2 (y 160-320): sub-copy + top of the recorder card ---
+    { c: "తెలుగు", x: 215, y: 175, s: 16, o: 0.2, f: TE },
+    { c: "ಕ", x: 70, y: 180, s: 26, o: 0.18, f: KN },
+    { c: "ಕನ್ನಡ", x: 110, y: 235, s: 18, o: 0.2, f: KN },
+    { c: "தமிழ்", x: 240, y: 220, s: 18, o: 0.2, f: TA },
+    { c: "ಶ್", x: 40, y: 270, s: 30, o: 0.18, f: KN },
+    { c: "क", x: 245, y: 280, s: 28, o: 0.16, f: DV },
+    { c: "ગુજરાતી", x: 270, y: 305, s: 18, o: 0.2, f: GU },
+    { c: "অ", x: 22, y: 320, s: 24, o: 0.16, f: BN },
+    { c: "த", x: 360, y: 220, s: 28, o: 0.18, f: TA },
+
+    // --- Band 3 (y 320-470): middle of the recorder card. Tokens hug the
+    // left/right gutters since the card itself is opaque-ish; the goal is
+    // to keep the watermark visible in the margins ---
+    { c: "ਪ", x: 12, y: 360, s: 24, o: 0.16, f: DV },
+    { c: "क", x: 370, y: 370, s: 26, o: 0.16, f: DV },
+    { c: "ಕ", x: 22, y: 410, s: 22, o: 0.18, f: KN },
+    { c: "ਅ", x: 365, y: 410, s: 22, o: 0.16, f: DV },
+    { c: "ద", x: 8, y: 450, s: 26, o: 0.14, f: TE },
+    { c: "த", x: 372, y: 460, s: 24, o: 0.16, f: TA },
+
+    // --- Band 4 (y 470-620): bottom of the recorder card + helper bar.
+    // Slightly higher opacity here to balance the busier top half ---
+    { c: "क", x: 22, y: 540, s: 30, o: 0.16, f: DV },
+    { c: "मराठी", x: 280, y: 500, s: 18, o: 0.2, f: DV },
+    { c: "மொ", x: 26, y: 500, s: 22, o: 0.18, f: TA },
+    { c: "మ", x: 345, y: 575, s: 22, o: 0.18, f: TE },
+    { c: "త", x: 38, y: 622, s: 24, o: 0.16, f: TE },
+    { c: "অ", x: 312, y: 610, s: 26, o: 0.18, f: BN },
+    { c: "ગુ", x: 198, y: 595, s: 22, o: 0.14, f: GU },
+    { c: "ண", x: 110, y: 632, s: 26, o: 0.16, f: TA },
+
+    // --- Band 5 (y 620-780): "Prefer typing?" row + Continue button ---
+    { c: "ಶ್", x: 24, y: 680, s: 28, o: 0.16, f: KN },
+    { c: "ਅ", x: 372, y: 700, s: 26, o: 0.18, f: DV },
+    { c: "ગુ", x: 320, y: 740, s: 26, o: 0.18, f: GU },
+    { c: "தமிழ்", x: 38, y: 730, s: 18, o: 0.2, f: TA },
+    { c: "ক", x: 200, y: 758, s: 22, o: 0.16, f: BN },
+    { c: "ద", x: 358, y: 778, s: 24, o: 0.16, f: TE },
+
+    // --- Band 6 (y 780-900): bottom margin under the CTA ---
+    { c: "తెలుగు", x: 30, y: 800, s: 16, o: 0.2, f: TE },
+    { c: "বাংলা", x: 240, y: 830, s: 18, o: 0.2, f: BN },
+    { c: "क", x: 20, y: 870, s: 26, o: 0.16, f: DV },
+    { c: "ಕ", x: 360, y: 870, s: 26, o: 0.16, f: KN },
+    { c: "ந", x: 145, y: 880, s: 22, o: 0.16, f: TA },
+
+    // --- Curly quotation marks scattered as accents (mirror the mockup) ---
     { c: "“", x: 270, y: 200, s: 44, o: 0.22 },
     { c: "”", x: 90, y: 720, s: 44, o: 0.18 },
     { c: "“", x: 350, y: 690, s: 32, o: 0.18 },
     { c: "”", x: 18, y: 850, s: 32, o: 0.18 },
+    { c: "“", x: 12, y: 450, s: 36, o: 0.18 },
+    { c: "”", x: 358, y: 540, s: 36, o: 0.18 },
+    { c: "“", x: 168, y: 392, s: 30, o: 0.16 },
   ]
   return (
     <div
