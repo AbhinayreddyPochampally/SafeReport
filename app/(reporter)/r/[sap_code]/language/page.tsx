@@ -61,7 +61,7 @@ export default function LanguagePage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-8">
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
       <header className="flex items-center justify-between">
         <Link
           href={`/r/${params.sap_code}`}

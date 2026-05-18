@@ -72,7 +72,7 @@ export default async function ReporterLandingPage({
   const store = data
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-10">
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-9">
       {/* Cinematic first-visit intro. Self-detects first visit via
           localStorage and overlays the rest of the page until dismissed.
           "Get started" routes to /r/[sap_code]/language so the reporter

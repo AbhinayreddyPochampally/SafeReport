@@ -1,37 +1,64 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, Eye, KeyRound, TriangleAlert } from "lucide-react"
+import { ArrowRight, Eye, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { ReporterScreenHeader } from "@/components/reporter-chrome"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 2 — triage.
  *
- * Two big cards: "Observation" vs "Incident". The user picks which of the
- * two buckets applies, and we send them to `/r/[sap_code]/category/[kind]`
- * for the fine-grained sub-category choice. This mirrors the HTML mockup
- * the team agreed on (uploads/reporter-flow-002.html).
+ * Two cards: "Something looked unsafe" (observation) vs "Someone got hurt"
+ * (incident). Each card is built to mockup spec (reporter_flow_v14):
+ *   - icon glyph row
+ *   - "Observation" / "Incident" kind eyebrow (uppercase, tone-coloured)
+ *   - bold tagline ("Could go wrong" / "Did go wrong")
+ *   - italic description with the differentiating verb
+ *   - examples row (lowercase, comma-separated cues)
  *
- * Palette: Slate 600 for observations, Amber 700 for incidents — the hard
- * rule is no green / red anywhere, so the mockup's green/crimson are
- * mapped onto our tokens.
+ * The flat horizontal-row style this replaced was visually thin — first
+ * pilot tests showed reporters confused which card meant what. The card
+ * spec from the mockup gives both cards much more weight and visible
+ * differentiation.
  *
- * Shield-shaped KeyRound icon top-right is the manager-login entry point.
+ * Palette: Slate 900/600 for observations, Amber 900/700 for incidents
+ * — the hard "no green/no red" rule.
+ *
+ * Brand-bar, back-link and 7-dot progress all come from
+ * <ReporterScreenHeader>. This screen is step 1/7.
  */
 
 type TriageCardProps = {
   href: string
   kind: "observation" | "incident"
-  title: string
-  subtitle: string
+  kindLabel: string
+  tagline: string
+  descriptionPrefix: string
+  descriptionEmphasis: string
+  descriptionSuffix: string
+  examples: string
   icon: typeof Eye
 }
 
-function TriageCard({ href, kind, title, subtitle, icon: Icon }: TriageCardProps) {
-  const bgTint = kind === "observation" ? "bg-slate-100" : "bg-amber-100"
-  const fg = kind === "observation" ? "text-slate-700" : "text-amber-700"
-  const ring =
+function TriageCard({
+  href,
+  kind,
+  kindLabel,
+  tagline,
+  descriptionPrefix,
+  descriptionEmphasis,
+  descriptionSuffix,
+  examples,
+  icon: Icon,
+}: TriageCardProps) {
+  const kindColor =
+    kind === "observation" ? "text-slate-600" : "text-amber-700"
+  const taglineColor =
+    kind === "observation" ? "text-slate-900" : "text-amber-900"
+  const iconColor =
+    kind === "observation" ? "text-slate-700" : "text-amber-700"
+  const focusRing =
     kind === "observation"
       ? "focus:ring-slate-500/40"
       : "focus:ring-amber-500/40"
@@ -39,22 +66,33 @@ function TriageCard({ href, kind, title, subtitle, icon: Icon }: TriageCardProps
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 focus:outline-none focus:ring-4 ${ring}`}
+      className={`group relative block rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 focus:outline-none focus:ring-4 ${focusRing}`}
     >
-      <span
-        className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full ${bgTint} ${fg}`}
-        aria-hidden
-      >
-        <Icon className="h-7 w-7" strokeWidth={1.8} />
-      </span>
-      <div className="flex-1">
-        <p className="font-display text-[18px] font-bold leading-6 text-slate-900">
-          {title}
-        </p>
-        <p className="mt-1 text-[13px] leading-5 text-slate-600">{subtitle}</p>
+      <div className={`mb-2.5 ${iconColor}`} aria-hidden>
+        <Icon className="h-8 w-8" strokeWidth={1.5} />
       </div>
+      <p
+        className={`mb-1.5 text-[11px] font-bold uppercase tracking-wider ${kindColor}`}
+      >
+        {kindLabel}
+      </p>
+      <h3
+        className={`font-display text-[16px] font-medium leading-snug ${taglineColor}`}
+      >
+        {tagline}
+      </h3>
+      <p className="mt-1.5 text-[13px] leading-snug text-slate-600">
+        {descriptionPrefix}
+        <em className="font-medium not-italic text-slate-800">
+          {descriptionEmphasis}
+        </em>
+        {descriptionSuffix}
+      </p>
+      <p className="mt-2.5 text-[12.5px] italic text-slate-500">
+        {examples}
+      </p>
       <ArrowRight
-        className="h-5 w-5 flex-shrink-0 text-slate-400 transition group-hover:text-slate-700"
+        className="absolute right-4 top-4 h-4 w-4 text-slate-300 transition group-hover:text-slate-600"
         strokeWidth={1.8}
         aria-hidden
       />
@@ -80,52 +118,45 @@ export default function TriagePage({
     return <main className="min-h-screen bg-slate-50" aria-hidden />
   }
 
+  // Plain-English copy in 5 locales is held in lib/reporter-i18n.ts. The
+  // mockup-spec examples row + italic emphasis is composed here so it
+  // doesn't need new translation keys for the punctuation pieces.
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-8">
-      {/* Top bar: back on the left, manager-login key on the right */}
-      <div className="flex items-center justify-between">
-        <Link
-          href={`/r/${params.sap_code}`}
-          className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          {t(locale, "common.back")}
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-            {t(locale, "common.step.1of4")}
-          </span>
-          <Link
-            href={`/m/${params.sap_code}`}
-            aria-label="Manager login"
-            title="Manager login"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
-          >
-            <KeyRound className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          </Link>
-        </div>
-      </div>
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
+      <ReporterScreenHeader
+        sap_code={params.sap_code}
+        backHref={`/r/${params.sap_code}`}
+        step={1}
+      />
 
-      <h1 className="mt-6 font-display text-[28px] font-bold leading-9 text-slate-900">
+      <h1 className="mt-5 font-display text-[22px] font-bold leading-tight text-slate-900">
         {t(locale, "triage.title")}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
         {t(locale, "triage.lede")}
       </p>
 
-      <div className="mt-6 flex flex-col gap-3">
+      <div className="mt-5 flex flex-col gap-3">
         <TriageCard
           href={`/r/${params.sap_code}/category/observation`}
           kind="observation"
-          title={t(locale, "triage.observation.title")}
-          subtitle={t(locale, "triage.observation.subtitle")}
+          kindLabel={t(locale, "subcat.observation.kind")}
+          tagline={t(locale, "triage.observation.title")}
+          descriptionPrefix=""
+          descriptionEmphasis={t(locale, "triage.observation.title")}
+          descriptionSuffix={` — ${t(locale, "triage.observation.subtitle")}`}
+          examples="wet floor · frayed wire · blocked exit · near miss"
           icon={Eye}
         />
         <TriageCard
           href={`/r/${params.sap_code}/category/incident`}
           kind="incident"
-          title={t(locale, "triage.incident.title")}
-          subtitle={t(locale, "triage.incident.subtitle")}
+          kindLabel={t(locale, "subcat.incident.kind")}
+          tagline={t(locale, "triage.incident.title")}
+          descriptionPrefix=""
+          descriptionEmphasis={t(locale, "triage.incident.title")}
+          descriptionSuffix={` — ${t(locale, "triage.incident.subtitle")}`}
+          examples="someone hurt · fall · cut · equipment damage"
           icon={TriangleAlert}
         />
       </div>

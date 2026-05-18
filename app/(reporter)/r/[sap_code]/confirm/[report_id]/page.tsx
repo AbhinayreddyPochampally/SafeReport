@@ -43,9 +43,13 @@ export default function ConfirmPage({
   const prettyId = /^SR-\d{6,}$/.test(params.report_id) ? params.report_id : ""
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 py-16 text-center">
+    // Phone viewport per CLAUDE.md hard rule + the mockup-audit batch (f).
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center px-5 py-14 text-center">
+      {/* Slate-100 success bubble per the mockup-audit low-severity polish
+          note — was bg-teal-700/10 which read as a faint green tint, and
+          the no-green/no-red palette rule prefers a neutral slate well. */}
       <div
-        className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-700/10"
+        className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100"
         aria-hidden
       >
         <CheckCircle2

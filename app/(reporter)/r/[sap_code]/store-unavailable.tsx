@@ -18,7 +18,7 @@ import { t, useReporterLocale } from "@/lib/reporter-i18n"
 export function StoreUnavailable({ sap_code }: { sap_code: string }) {
   const locale = useReporterLocale()
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-5 px-6 py-16">
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-5 px-5 py-14">
       <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
         {t(locale, "unavailable.eyebrow")}
       </p>

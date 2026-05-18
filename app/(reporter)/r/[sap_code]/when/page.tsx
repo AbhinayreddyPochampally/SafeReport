@@ -1,9 +1,9 @@
 "use client"
 
-import { ArrowLeft, ArrowRight } from "lucide-react"
-import Link from "next/link"
+import { ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import { ReporterScreenHeader } from "@/components/reporter-chrome"
 import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   DateTimeWheel,
@@ -84,26 +84,19 @@ export default function WhenPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 py-8">
-      <div className="flex items-center justify-between text-slate-700">
-        <Link
-          href={`/r/${params.sap_code}/category`}
-          className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          {t(locale, "common.back")}
-        </Link>
-        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-          {t(locale, "common.step.3of4")}
-        </span>
-      </div>
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
+      <ReporterScreenHeader
+        sap_code={params.sap_code}
+        backHref={`/r/${params.sap_code}/category`}
+        step={3}
+      />
 
       {categoryLabel && (
-        <p className="mt-6 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+        <p className="mt-5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           {categoryLabel}
         </p>
       )}
-      <h1 className="mt-1 font-display text-[28px] font-bold leading-9 text-slate-900">
+      <h1 className="mt-1 font-display text-[22px] font-bold leading-tight text-slate-900">
         {t(locale, "when.title")}
       </h1>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
