@@ -134,11 +134,14 @@ export function ReporterIntro(_props: Props = {}) {
           <p className="sr-sub">Any language. Add a photo if you can.</p>
         </div>
 
-        {/* Scene 3 — HOW IT HELPS. Closes the loop: who acts on the
-            report, what the reporter gets out of it, and the privacy
-            promise (the anonymity guarantee is the biggest barrier
-            to first-time reports in pilot interviews — naming it
-            here is load-bearing, not throwaway). */}
+        {/* Scene 3 — HOW IT HELPS. Closes the loop on the outcome,
+            not the chain of actors (the previous draft led with
+            "Head Office fixes it fast" — but the reporter doesn't
+            care which step of the manager → HO chain does the fix,
+            they care that the unsafe thing they spotted is dealt
+            with). The anonymity line stays because that's the
+            biggest barrier to first-time reports in pilot
+            interviews — naming it here is load-bearing. */}
         <div className="sr-scene sr-scene-3">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -150,7 +153,7 @@ export function ReporterIntro(_props: Props = {}) {
               draggable={false}
             />
           </div>
-          <h2 className="sr-caption">Head Office fixes it fast.</h2>
+          <h2 className="sr-caption">It gets fixed, fast.</h2>
           <p className="sr-sub">Your store stays safer. You stay anonymous.</p>
         </div>
 
@@ -163,12 +166,13 @@ export function ReporterIntro(_props: Props = {}) {
             <AppIcon size={88} aria-hidden />
           </div>
           <h1 className="sr-title">SafeReport</h1>
-          {/* Tagline is now the one-line summary of the loop the
-              three scenes just told: report unsafe spots → Head Office
-              acts → you stay anonymous. Mirrors the verbs from the
-              scenes so the end card reads as a recap, not new copy. */}
+          {/* Tagline is the one-line summary of the loop the three
+              scenes just told. Mirrors the scene verbs (spot → tap →
+              fixed) and stays outcome-first, not actor-first — "They
+              get fixed" reads as a promise to the reporter, "Head
+              Office fixes them" reads as bureaucratic transmission. */}
           <p className="sr-tagline">
-            Report unsafe spots. Head Office fixes them. You stay anonymous.
+            Report unsafe spots. They get fixed. You stay anonymous.
           </p>
           <div className="sr-features">
             <div className="sr-feat sr-feat-1">
@@ -208,19 +212,30 @@ export function ReporterIntro(_props: Props = {}) {
             </div>
             <div className="sr-feat sr-feat-3">
               <span className="sr-feat-tile">
+                {/* CheckCircle replaces the bolt (Zap) icon. The bolt
+                    read as "transmission / sent" — mid-flow, not the
+                    close. A check-in-circle reads as "resolved /
+                    fixed", which is the outcome the reporter actually
+                    cares about and matches Scene 3's caption ("It
+                    gets fixed, fast.") The check stroke draws itself
+                    in via stroke-dashoffset so the resolution lands
+                    visually as well as semantically — the icon
+                    *finishes* itself the moment the reporter looks
+                    at it. */}
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.9"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   aria-hidden
                 >
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  <circle cx="12" cy="12" r="10" />
+                  <path className="sr-feat-check" d="m8 12 3 3 5-6" />
                 </svg>
               </span>
-              <span className="sr-feat-label">Sent to Head Office</span>
+              <span className="sr-feat-label">Fixed fast</span>
             </div>
           </div>
           <button type="button" className="sr-cta" onClick={dismiss}>
@@ -481,6 +496,18 @@ const styles = /* css */ `
   @keyframes sr-breathe { 0%,100% { transform: scale(1); }
                           50%     { transform: scale(1.02); } }
 
+  /* Check stroke draw-in for the end-card "Fixed fast" feature.
+     The path m8 12 3 3 5-6 is roughly 12 units long. Setting
+     stroke-dasharray to 14 (comfortably larger than the path) and
+     starting at dashoffset=14 means the stroke is invisible at
+     rest; the keyframe animates dashoffset back to 0 to draw the
+     check in. */
+  .sr-feat-check {
+    stroke-dasharray: 14;
+    stroke-dashoffset: 14;
+  }
+  @keyframes sr-drawCheck { to { stroke-dashoffset: 0; } }
+
   /* === Timeline ===
 
      Scenes are now strictly SEQUENTIAL, not crossfaded. The previous
@@ -541,6 +568,10 @@ const styles = /* css */ `
   .sr-feat-1                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.25s both; }
   .sr-feat-2                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.40s both; }
   .sr-feat-3                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.55s both; }
+  /* Check stroke draws in just as the third feature finishes its
+     scale-pop. 11.10s = 10.55s pop start + ~0.55s for the scale
+     gesture to settle, then 0.55s to trace the check itself. */
+  .sr-feat-check               { animation: sr-drawCheck 0.55s cubic-bezier(0.2,0,0.2,1) 11.10s forwards; }
   .sr-cta                      { animation: sr-fadeUp 0.55s cubic-bezier(0.2,0,0,1) 10.65s both,
                                             sr-breathe 2.6s ease-in-out 11.35s infinite; }
 
@@ -554,5 +585,9 @@ const styles = /* css */ `
       opacity: 1 !important;
       transform: none !important;
     }
+    /* Without this, disabling the draw-in animation leaves the
+       check at its base stroke-dashoffset: 14 (invisible). Reset
+       to 0 so the check is fully visible at rest. */
+    .sr-feat-check { stroke-dashoffset: 0 !important; }
   }
 `
