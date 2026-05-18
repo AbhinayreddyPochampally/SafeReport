@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, ShieldCheck, Store } from "lucide-react"
+import { Check, KeyRound, ShieldCheck, Store } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -15,28 +15,27 @@ import {
 } from "@/lib/reporter-i18n"
 
 /**
- * Language picker — client component, rendered by the server-component
- * page wrapper which fetches the store row and passes it down.
+ * Reporter landing — single combined screen at /r/[sap_code].
  *
- * Layout (May 2026 rev after the user flagged divergences):
- *  1. Brand-bar at the top (APP icon + Back link)
- *  2. Store card (brand eyebrow + name + city/state + SAP code) — same
- *     content as the welcome landing's store card so the reporter sees
- *     where they're reporting before they pick a script.
- *  3. Compact "Choose your language" heading (English-only — the user
- *     explicitly called the four-script subtitle stack noise; the tiles
- *     below carry their own native-script labels, which is the
- *     recognition signal).
- *  4. Locale tiles — native-script label on top, English-script name
- *     underneath, large tap target.
+ * Previously this surface had two pages: a welcome with "Get started" CTA,
+ * and a separate /language picker. They were merged into one page after
+ * user feedback ("we do not need separate welcome page as there is intro;
+ * so combine language and store card"). The flow now is:
  *
- * The cinematic <ReporterIntro> overlay is mounted at the bottom of this
- * component (with `sap_code` so its dismiss handler knows the return
- * route). The overlay is `position: fixed; inset: 0; z-index: 50` so it
- * paints over the entire picker on first visit; once the reporter taps
- * "Get started" the overlay unmounts and they're sitting on the picker
- * already (no second navigation). For returning reporters who have
- * `sr_intro_seen=1` it renders null and the picker shows immediately.
+ *   1. Reporter scans the QR → lands on /r/[sap_code]
+ *   2. Cinematic <ReporterIntro> overlay paints on first visit
+ *   3. "Get started" in the intro dismisses; reporter sees this page —
+ *      brand bar + store card + language tiles
+ *   4. Tap a language tile → writeLocale + route to /category (Triage)
+ *
+ * Returning visitors with `sr_intro_seen=1` skip the overlay; the page
+ * renders directly with their current locale highlighted. Tapping the
+ * same tile is idempotent — re-saves the locale and advances.
+ *
+ * The store card is intentionally English-only — brand name, store name,
+ * city + state, SAP code are universal identifiers. Localising them would
+ * fight transliteration norms (an Allen Solly store stays "Allen Solly"
+ * in any script).
  */
 
 type StoreCard = {
@@ -47,7 +46,7 @@ type StoreCard = {
   state: string
 }
 
-export function LanguagePicker({ store }: { store: StoreCard }) {
+export function ReporterLanding({ store }: { store: StoreCard }) {
   const router = useRouter()
   const [current, setCurrent] = useState<Locale>("en")
 
@@ -58,20 +57,18 @@ export function LanguagePicker({ store }: { store: StoreCard }) {
   function pick(loc: Locale) {
     writeLocale(loc)
     setCurrent(loc)
-    // Brief pause so the checkmark visibly lands before we navigate away
-    // to the welcome page (where the reporter taps "Get started" into
-    // the Triage flow).
+    // Brief pause so the checkmark visibly lands before we navigate into
+    // the Triage flow. Tapping the current tile is idempotent — same
+    // locale gets re-saved, same navigation.
     window.setTimeout(() => {
-      router.push(`/r/${store.sap_code}`)
+      router.push(`/r/${store.sap_code}/category`)
     }, 220)
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
-      {/* Brand-bar — APP icon left, Back link right. Back goes to the
-          welcome landing for reporters who arrived here via the "Change
-          language" affordance; first-time visitors never reach Back
-          because the intro overlay paints on top until dismissed. */}
+      {/* Brand bar — APP icon left, manager-login key right. No back link
+          (this is the root reporter screen — there's nowhere to go back to). */}
       <header className="flex items-center justify-between">
         <span
           aria-label="SafeReport"
@@ -80,18 +77,18 @@ export function LanguagePicker({ store }: { store: StoreCard }) {
           <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
         </span>
         <Link
-          href={`/r/${store.sap_code}`}
-          aria-label="Back"
-          className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+          href={`/m/${store.sap_code}`}
+          aria-label="Manager login"
+          title="Manager login"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-500 hover:text-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
         >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Back
+          <KeyRound className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         </Link>
       </header>
 
-      {/* Store card — same shape and content as the welcome landing.
-          Names + brand + city + SAP code are universal so it stays
-          unlocalised. */}
+      {/* Store card — English-only. Brand name + store name + city/state
+          + SAP code are universal identifiers; localising them would
+          fight transliteration norms. */}
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex items-center gap-2 text-slate-600">
           <Store className="h-5 w-5" strokeWidth={1.8} aria-hidden />
@@ -108,9 +105,9 @@ export function LanguagePicker({ store }: { store: StoreCard }) {
         </p>
       </section>
 
-      {/* Heading — English-only. The four-script subtitle stack that
-          lived here was pulled per user feedback ("language tiles are
-          pretty explanatory"). */}
+      {/* Language picker heading — English-only. The four-script
+          subtitle stack that lived here was pulled per user feedback
+          ("language tiles are pretty explanatory"). */}
       <h2 className="mt-6 font-display text-[18px] font-semibold leading-tight tracking-tight text-slate-900">
         Choose your language
       </h2>
@@ -173,16 +170,13 @@ export function LanguagePicker({ store }: { store: StoreCard }) {
         })}
       </div>
 
-      <p className="mx-auto mt-6 max-w-[280px] text-center text-[12px] text-slate-500">
-        You can change this anytime.
+      <p className="mx-auto mt-6 text-center text-[11px] uppercase tracking-wide text-slate-400">
+        Anonymous to your store manager
       </p>
 
-      {/* Cinematic first-visit intro. Mounted here so it paints over
-          the Language page (the literal first interactive page in the
-          Intro → Language → flow order). On dismiss the overlay just
-          hides — the reporter is already on the picker, no nav needed.
-          For returning reporters who have sr_intro_seen=1 this renders
-          null. */}
+      {/* Cinematic first-visit intro overlay. Paints over this entire
+          page until the reporter taps "Get started". Returning visitors
+          (sr_intro_seen=1) see the picker immediately. */}
       <ReporterIntro sap_code={store.sap_code} />
     </main>
   )

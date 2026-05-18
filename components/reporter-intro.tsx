@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react"
 
 /**
- * Cinematic first-visit intro overlay — mounted on /r/[sap_code]/language
- * (the literal first interactive page in the Intro → Language → flow
- * order). Paints over the language picker until dismissed.
+ * Cinematic first-visit intro overlay — mounted on /r/[sap_code] (the
+ * combined reporter landing: store card + language picker). Paints over
+ * the picker until dismissed.
  *
  * Plays a 3-scene story (NOTICE → SPEAK → PROTECT) and then resolves into
  * the app's persistent brand mark at the top of the screen. The shield from
