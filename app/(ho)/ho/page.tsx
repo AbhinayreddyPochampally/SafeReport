@@ -1503,37 +1503,51 @@ function ActionHero({
             />
           )}
         </div>
-        {topItem && (
-          <Link
-            href={`/ho/reports/${topItem.id}?from=overview`}
-            prefetch={false}
-            className="mt-3.5 inline-flex items-center gap-3 max-w-[720px] rounded-lg border border-slate-200/70 bg-white/70 hover:bg-white px-3 py-2.5 transition-colors"
-          >
-            <CategoryAcr category={topItem.category} />
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1.5 text-[12.5px] text-slate-900 font-medium truncate">
-                <span className="font-mono text-[11px] text-slate-500 font-normal shrink-0">
-                  {topItem.id}
+        {topItem &&
+          (() => {
+            // Mig 007: resolve the category union at the call site. The row
+            // surfaces in the Action Hero whenever it's the oldest awaiting-
+            // HO row, regardless of classification state. Display priority:
+            // sealed category → AI suggested_category → "Pending" pill +
+            // generic headline copy.
+            const topDisplayCategory =
+              topItem.category ?? topItem.suggested_category ?? null
+            const topHeadline =
+              topItem.headline ??
+              (topDisplayCategory ? labelFor(topDisplayCategory) : "Awaiting HO classification")
+            return (
+              <Link
+                href={`/ho/reports/${topItem.id}?from=overview`}
+                prefetch={false}
+                className="mt-3.5 inline-flex items-center gap-3 max-w-[720px] rounded-lg border border-slate-200/70 bg-white/70 hover:bg-white px-3 py-2.5 transition-colors"
+              >
+                <CategoryAcrOrPending
+                  category={topItem.category}
+                  suggestedCategory={topItem.suggested_category ?? null}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-[12.5px] text-slate-900 font-medium truncate">
+                    <span className="font-mono text-[11px] text-slate-500 font-normal shrink-0">
+                      {topItem.id}
+                    </span>
+                    <span aria-hidden className="text-slate-400">
+                      ·
+                    </span>
+                    <span className="truncate">{topHeadline}</span>
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] text-slate-500 truncate">
+                    <span className="font-mono">{topItem.store_code}</span> ·{" "}
+                    {topItem.store_name}
+                  </p>
+                </div>
+                <span
+                  className={`text-[12px] font-semibold tabular-nums whitespace-nowrap ${accentText}`}
+                >
+                  {formatWaitingShort(hoursSinceIso(topItem.reported_at))} waiting
                 </span>
-                <span aria-hidden className="text-slate-400">
-                  ·
-                </span>
-                <span className="truncate">
-                  {topItem.headline ?? labelFor(topItem.category)}
-                </span>
-              </p>
-              <p className="mt-0.5 text-[11.5px] text-slate-500 truncate">
-                <span className="font-mono">{topItem.store_code}</span> ·{" "}
-                {topItem.store_name}
-              </p>
-            </div>
-            <span
-              className={`text-[12px] font-semibold tabular-nums whitespace-nowrap ${accentText}`}
-            >
-              {formatWaitingShort(hoursSinceIso(topItem.reported_at))} waiting
-            </span>
-          </Link>
-        )}
+              </Link>
+            )
+          })()}
       </div>
       <div className="flex items-center px-5 py-5">
         <Link
@@ -1586,6 +1600,52 @@ function CategoryAcr({ category }: { category: ReportCategory }) {
       title={def?.label ?? category}
     >
       {acr}
+    </span>
+  )
+}
+
+/**
+ * Action Hero / Today-strip pill renderer for rows whose `category` may
+ * still be null (mig 007 — AI classification is pending or absent). The
+ * call site is responsible for resolving the union — we either render
+ * a real CategoryAcr (when there's a known or AI-suggested category) or
+ * a dedicated "Pending" pill (when neither is set, which only happens
+ * for photo-only / text-only reports the classifier skipped). The
+ * `isPending` flag drives a small "AI" badge so HO can spot un-sealed
+ * rows at a glance.
+ */
+function CategoryAcrOrPending({
+  category,
+  suggestedCategory,
+}: {
+  category: ReportCategory | null
+  suggestedCategory: ReportCategory | null
+}) {
+  const displayCategory = category ?? suggestedCategory
+  const isPending = !category && !!suggestedCategory
+  if (!displayCategory) {
+    // No sealed category and no AI suggestion. Photo-only / text-only
+    // report waiting on HO to pick from scratch.
+    return (
+      <span
+        className="inline-flex h-[22px] items-center justify-center px-1.5 rounded font-mono text-[10px] font-semibold border bg-slate-50 text-slate-500 border-slate-200 border-dashed"
+        title="Awaiting HO classification"
+      >
+        —
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <CategoryAcr category={displayCategory} />
+      {isPending ? (
+        <span
+          className="inline-flex h-[22px] items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 text-[9px] font-bold uppercase tracking-wide text-indigo-700"
+          title="AI suggested — needs HO confirmation"
+        >
+          AI
+        </span>
+      ) : null}
     </span>
   )
 }
