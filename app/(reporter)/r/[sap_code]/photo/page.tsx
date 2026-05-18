@@ -110,8 +110,11 @@ export default function PhotoPage({
       <h1 className="mt-1 font-display text-[28px] font-bold leading-9 text-slate-900">
         Add a photo
       </h1>
+      {/* Mockup-verbatim sub copy per reporter_flow_v14 — replaces the
+          drift "understand what you saw" with the mockup's "understand
+          the issue". */}
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        A clear picture helps the safety team understand what you saw.
+        A clear picture helps the safety team understand the issue.
       </p>
 
       <section className="mt-6">

@@ -210,7 +210,9 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "form.phone_label": "Phone number",
     "form.phone_placeholder": "+91 98xxx xxxxx",
     "form.continue": "Continue",
-    "form.anonymous_note": "Anonymous to store manager",
+    // Verbatim hard rule per CLAUDE.md — do not paraphrase. The previous
+    // "Anonymous to store manager" wording was flagged by the mockup audit.
+    "form.anonymous_note": "Your name is visible only to Head Office.",
     "form.reporting_as": "Reporting as",
     "form.switch": "Not you? Switch",
     "validate.name_required": "Please enter your full name.",
@@ -279,8 +281,10 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "evidence.missing.voicetext":
       "Add a voice note or type at least 20 characters.",
 
-    "review.title": "One last check.",
-    "review.lede": "If anything's off, tap the edit link next to it.",
+    // Mockup heading per reporter_flow_v14 — replaces "One last check.";
+    // see the divergence audit. Keep it as a question, not a statement.
+    "review.title": "Ready to submit?",
+    "review.lede": "Review and edit anything before sending.",
     "review.row.category": "Category",
     "review.row.when": "When",
     "review.row.added": "What you added",
@@ -395,7 +399,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "form.phone_label": "ಫೋನ್ ಸಂಖ್ಯೆ",
     "form.phone_placeholder": "+91 98xxx xxxxx",
     "form.continue": "ಮುಂದುವರಿಸಿ",
-    "form.anonymous_note": "ಅಂಗಡಿ ವ್ಯವಸ್ಥಾಪಕರಿಗೆ ಅಜ್ಞಾತ",
+    "form.anonymous_note":
+      "ನಿಮ್ಮ ಹೆಸರು ಕೇವಲ ಮುಖ್ಯ ಕಚೇರಿಗೆ ಮಾತ್ರ ಗೋಚರಿಸುತ್ತದೆ.",
     "form.reporting_as": "ಇವರಾಗಿ ವರದಿ ಮಾಡುತ್ತಿದ್ದಾರೆ",
     "form.switch": "ನೀವು ಅಲ್ಲವೇ? ಬದಲಾಯಿಸಿ",
     "validate.name_required": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರನ್ನು ನಮೂದಿಸಿ.",
@@ -456,8 +461,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "evidence.missing.voicetext":
       "ಧ್ವನಿ ಸಂದೇಶ ಸೇರಿಸಿ ಅಥವಾ ಕನಿಷ್ಠ 20 ಅಕ್ಷರಗಳನ್ನು ಬರೆಯಿರಿ.",
 
-    "review.title": "ಕೊನೆಯ ಬಾರಿ ಪರಿಶೀಲಿಸಿ.",
-    "review.lede": "ಏನಾದರೂ ತಪ್ಪಿದ್ದರೆ, ಪಕ್ಕದಲ್ಲಿರುವ ಬದಲಾಯಿಸಿ ಲಿಂಕ್ ಒತ್ತಿ.",
+    "review.title": "ಸಲ್ಲಿಸಲು ಸಿದ್ಧವೇ?",
+    "review.lede": "ಕಳುಹಿಸುವ ಮೊದಲು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಯಾವುದನ್ನಾದರೂ ಬದಲಾಯಿಸಿ.",
     "review.row.category": "ವರ್ಗ",
     "review.row.when": "ಯಾವಾಗ",
     "review.row.added": "ನೀವು ಸೇರಿಸಿದ್ದು",
@@ -571,7 +576,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "form.phone_label": "फ़ोन नंबर",
     "form.phone_placeholder": "+91 98xxx xxxxx",
     "form.continue": "आगे बढ़ें",
-    "form.anonymous_note": "स्टोर मैनेजर के लिए गुमनाम",
+    "form.anonymous_note":
+      "आपका नाम केवल हेड ऑफिस को दिखेगा।",
     "form.reporting_as": "रिपोर्ट इस रूप में",
     "form.switch": "आप नहीं? बदलें",
     "validate.name_required": "कृपया अपना पूरा नाम दर्ज करें।",
@@ -632,8 +638,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "evidence.missing.voicetext":
       "वॉइस नोट जोड़ें या कम से कम 20 अक्षर लिखें।",
 
-    "review.title": "एक आख़िरी जाँच।",
-    "review.lede": "अगर कुछ ग़लत है, उसके बगल में दिए बदलें लिंक पर टैप करें।",
+    "review.title": "जमा करने के लिए तैयार हैं?",
+    "review.lede": "भेजने से पहले समीक्षा करें और कुछ भी बदलें।",
     "review.row.category": "श्रेणी",
     "review.row.when": "कब",
     "review.row.added": "आपने जोड़ा",
@@ -744,7 +750,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "form.phone_label": "ఫోన్ నంబర్",
     "form.phone_placeholder": "+91 98xxx xxxxx",
     "form.continue": "కొనసాగించండి",
-    "form.anonymous_note": "స్టోర్ మేనేజర్‌కు అజ్ఞాతం",
+    "form.anonymous_note":
+      "మీ పేరు హెడ్ ఆఫీసుకు మాత్రమే కనిపిస్తుంది.",
     "form.reporting_as": "ఇలా నివేదిస్తున్నారు",
     "form.switch": "మీరు కాదా? మార్చండి",
     "validate.name_required": "దయచేసి మీ పూర్తి పేరును ఇవ్వండి.",
@@ -805,8 +812,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "evidence.missing.voicetext":
       "వాయిస్ నోట్ జోడించండి లేదా కనీసం 20 అక్షరాలు టైప్ చేయండి.",
 
-    "review.title": "ఆఖరి తనిఖీ.",
-    "review.lede": "ఏదైనా తప్పు ఉంటే, దాని పక్కన ఉన్న మార్చండి లింక్‌పై ట్యాప్ చేయండి.",
+    "review.title": "సమర్పించడానికి సిద్ధంగా ఉన్నారా?",
+    "review.lede": "పంపే ముందు సమీక్షించండి మరియు ఏదైనా మార్చండి.",
     "review.row.category": "వర్గం",
     "review.row.when": "ఎప్పుడు",
     "review.row.added": "మీరు జోడించినవి",

@@ -35,12 +35,10 @@ const TARGET_MIME_TYPES = [
   "audio/ogg;codecs=opus",
 ]
 
-type Props = {
-  value: Blob | null
-  onChange: (blob: Blob | null) => void
-}
-
-type Status =
+/** Recording state callable up to the parent so a screen heading or
+ *  sub copy can react ("Recording — tap to stop." during capture). The
+ *  Describe page wires this into its sub-copy switch. */
+export type VoiceRecorderStatus =
   | "idle"
   | "requesting"
   | "counting" // 1s lead-in so the reporter can collect themselves
@@ -48,11 +46,29 @@ type Status =
   | "ready"
   | "playing"
 
+type Props = {
+  value: Blob | null
+  onChange: (blob: Blob | null) => void
+  /** Optional. Fires whenever the internal status transitions so callers
+   *  can render reactive copy (e.g. Describe screen's "Recording — tap to
+   *  stop." sub). */
+  onStatusChange?: (status: VoiceRecorderStatus) => void
+}
+
+type Status = VoiceRecorderStatus
+
 const PREROLL_MS = 1000
 
-export function VoiceRecorder({ value, onChange }: Props) {
+export function VoiceRecorder({ value, onChange, onStatusChange }: Props) {
   const locale = useReporterLocale()
   const [status, setStatus] = useState<Status>(value ? "ready" : "idle")
+
+  // Mirror status up to the parent when it changes. useEffect avoids
+  // calling the callback during render and handles the value-on-mount
+  // case (mounting with a pre-existing blob → status starts at "ready").
+  useEffect(() => {
+    onStatusChange?.(status)
+  }, [status, onStatusChange])
   const [elapsed, setElapsed] = useState(0) // seconds
   const [bars, setBars] = useState<number[]>(() => new Array(BAR_COUNT).fill(3))
   const [error, setError] = useState<string | null>(null)

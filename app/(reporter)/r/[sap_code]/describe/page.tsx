@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Mic } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { VoiceRecorder } from "@/components/voice-recorder"
+import { VoiceRecorder, type VoiceRecorderStatus } from "@/components/voice-recorder"
 import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
@@ -49,6 +49,10 @@ export default function DescribePage({
   const [mode, setMode] = useState<"voice" | "text">("voice")
   const [audio, setAudio] = useState<Blob | null>(null)
   const [text, setText] = useState("")
+  // Tracks the VoiceRecorder's internal status so the sub-copy below the
+  // heading can switch to "Recording — tap to stop." while the reporter
+  // is actively capturing — per reporter_flow_v14 line 1805.
+  const [recStatus, setRecStatus] = useState<VoiceRecorderStatus>("idle")
 
   useEffect(() => {
     // Phase 10: profile is collected at /identity AFTER describe. So we no
@@ -143,17 +147,29 @@ export default function DescribePage({
       <h1 className="mt-1 font-display text-[28px] font-bold leading-9 text-slate-900">
         {mode === "voice" ? "Tell us what happened" : "Type a description"}
       </h1>
+      {/* Sub copy has three states in voice mode (idle / counting / recording)
+          plus the text-mode variant. The "Recording — tap to stop." line is
+          the mockup spec for the active-capture state — without it the
+          screen gives no copy-level signal that the mic is hot. */}
       <p className="mt-1 text-[13px] leading-5 text-slate-600">
-        {mode === "voice"
-          ? "Speak in any language — we'll translate it for the safety team."
-          : "In any language. We'll translate it for the safety team."}
+        {mode === "text"
+          ? "In any language. We'll translate it for the safety team."
+          : recStatus === "recording"
+            ? "Recording — tap to stop."
+            : recStatus === "counting"
+              ? "Get ready — recording starts in a moment."
+              : "Speak in any language — we'll translate it for the safety team."}
       </p>
 
       {mode === "voice" ? (
         <>
           {/* Stone-100 plate as documented in docs/VISUAL_LANGUAGE.md (bg-warm) */}
           <section className="mt-6 rounded-2xl border border-stone-200 bg-stone-100 p-6">
-            <VoiceRecorder value={audio} onChange={setAudio} />
+            <VoiceRecorder
+              value={audio}
+              onChange={setAudio}
+              onStatusChange={setRecStatus}
+            />
           </section>
           <button
             type="button"
