@@ -478,12 +478,12 @@ const styles = /* css */ `
      stabilises (0.35-0.55 s in) and exit with the scene as a unit. */
 
   /* Scene 1: in @ 0.25s, out @ 2.40s → total visible ~2.7s
-     IMPORTANT: the in/out pair uses fill-mode `both` for sr-sceneIn
-     and `forwards` for sr-sceneOut. With both-and-both, the
+     IMPORTANT: the in/out pair uses fill-mode 'both' for sr-sceneIn
+     and 'forwards' for sr-sceneOut. With both-and-both, the
      later-listed animation (sr-sceneOut) wins the cascade BEFORE
      its delay starts and applies its FROM keyframe (opacity 1) —
      which is exactly wrong for scenes 2 + 3 that aren't supposed to
-     be visible yet at t=0. `forwards` only applies the TO keyframe
+     be visible yet at t=0. forwards only applies the TO keyframe
      after the animation ends; pre-start, sr-sceneIn's FROM keyframe
      (opacity 0) is the only thing applied. This bug stacked all
      three scenes at opacity 1 on the live page on first load. */
