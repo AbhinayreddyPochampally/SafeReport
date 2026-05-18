@@ -3,8 +3,8 @@ import { ArrowRight, KeyRound, Languages, ShieldCheck, Store } from "lucide-reac
 import Link from "next/link"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { StoreUnavailable } from "./store-unavailable"
-import { ReporterIntro } from "@/components/reporter-intro"
 import { VisitTracker } from "@/components/visit-tracker"
+import { WelcomeLocaleGate } from "./welcome-locale-gate"
 
 export const dynamic = "force-dynamic"
 
@@ -73,16 +73,12 @@ export default async function ReporterLandingPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-9">
-      {/* Cinematic first-visit intro. Self-detects first visit via
-          localStorage and overlays the rest of the page until dismissed.
-          "Get started" routes to /r/[sap_code]/language so the reporter
-          picks their script before any other reporter screen renders
-          (canonical Intro → Language → flow order). Returning reporters
-          who already have a locale set see nothing — the landing below
-          shows immediately. Migration: returning reporters with
-          sr_intro_seen=1 but no sr_locale are redirected to /language
-          on mount instead of seeing the intro again. */}
-      <ReporterIntro sap_code={store.sap_code} />
+      {/* Client gate — redirects to /language when the reporter doesn't
+          have a locale picked yet. That makes Language the literal first
+          interactive page (with the cinematic intro painting on top of
+          it). Returning reporters with a locale already saved bypass
+          this and the welcome page below renders normally. */}
+      <WelcomeLocaleGate sap_code={store.sap_code} />
 
       {/* Brand bar — APP icon (rounded indigo tile with white shield) on the
           left, discreet manager-login key on the right. The wordmark is
