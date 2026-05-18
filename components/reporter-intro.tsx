@@ -470,56 +470,66 @@ const styles = /* css */ `
 
   /* === Timeline ===
 
-     Each scene fades in for 0.55 s with a slight rise, holds, then
-     fades out over 0.55 s with a slight lift. The fade-out window
-     overlaps the next scene's fade-in by ~0.25 s so the visual feels
-     like a smooth wash from one to the next, no dead frame between
-     scenes. Captions / subs / pills come in after the scene body
-     stabilises (0.35-0.55 s in) and exit with the scene as a unit. */
+     Scenes are now strictly SEQUENTIAL, not crossfaded. The previous
+     0.30s overlap window worked fine with the SVG-primitives version
+     where each scene's icon was small and tile-bgged — but with full
+     pencil-art illustrations, two scenes at 50% opacity during the
+     overlap reads as "muddy stack of images", not "smooth wash". So
+     each scene fully exits (opacity 0) before the next enters. The
+     0.1-0.2s blank breath between scenes reads as a deliberate beat
+     against the warm cream background, more cinematic than a
+     conflicted dissolve.
 
-  /* Scene 1: in @ 0.25s, out @ 2.40s → total visible ~2.7s
-     IMPORTANT: the in/out pair uses fill-mode 'both' for sr-sceneIn
-     and 'forwards' for sr-sceneOut. With both-and-both, the
-     later-listed animation (sr-sceneOut) wins the cascade BEFORE
-     its delay starts and applies its FROM keyframe (opacity 1) —
-     which is exactly wrong for scenes 2 + 3 that aren't supposed to
-     be visible yet at t=0. forwards only applies the TO keyframe
-     after the animation ends; pre-start, sr-sceneIn's FROM keyframe
-     (opacity 0) is the only thing applied. This bug stacked all
-     three scenes at opacity 1 on the live page on first load. */
+     Per-scene structure: enter 0.55s with a slight rise → hold for
+     ~1.5s → exit 0.55s with a slight lift. Captions / subs / pills
+     cascade in after the scene body stabilises and exit with the
+     scene as a unit (caption/sub are inside the .sr-scene-N parent,
+     so the parent's opacity controls visibility).
+
+     fill-mode notes: sr-sceneIn uses 'both' so scenes 2 and 3 stay
+     at opacity 0 pre-start. sr-sceneOut uses 'forwards' so it
+     applies the TO keyframe (opacity 0) after ending but contributes
+     nothing pre-start. With both-and-both, the later-listed animation
+     wins pre-start and would apply sr-sceneOut's FROM (opacity 1) —
+     which would stack all three scenes at opacity 1 on first load. */
+
+  /* Scene 1: in @ 0.25s, out @ 2.30s, exit complete @ 2.85s */
   .sr-scene-1                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 0.25s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 2.40s forwards; }
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 2.30s forwards; }
   .sr-scene-1 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 0.55s both; }
   .sr-scene-1 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 0.80s both; }
 
-  /* Scene 2: in @ 2.65s (overlapping Scene 1 exit by 0.30s) */
-  .sr-scene-2                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 2.65s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 5.55s forwards; }
-  .sr-scene-2 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 2.95s both; }
-  .sr-lang-en                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.20s both; }
-  .sr-lang-kn                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.35s both; }
-  .sr-lang-hi                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.50s both; }
-  .sr-lang-ta                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.65s both; }
-  .sr-lang-te                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.80s both; }
-  .sr-scene-2 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 4.05s both; }
+  /* Scene 2: in @ 3.00s (after Scene 1 exit @ 2.85s + 0.15s breath),
+     out @ 5.85s. Holds longer than scenes 1 + 3 to give the language
+     pill cascade room to land. */
+  .sr-scene-2                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 3.00s both,
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 5.85s forwards; }
+  .sr-scene-2 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 3.30s both; }
+  .sr-lang-en                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.55s both; }
+  .sr-lang-kn                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.70s both; }
+  .sr-lang-hi                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.85s both; }
+  .sr-lang-ta                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 4.00s both; }
+  .sr-lang-te                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 4.15s both; }
+  .sr-scene-2 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 4.40s both; }
 
-  /* Scene 3: in @ 5.80s (overlapping Scene 2 exit by 0.30s) */
-  .sr-scene-3                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 5.80s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 8.10s forwards; }
-  .sr-scene-3 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 6.10s both; }
-  .sr-scene-3 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 6.35s both; }
+  /* Scene 3: in @ 6.55s (after Scene 2 exit @ 6.40s + 0.15s breath),
+     out @ 8.55s. */
+  .sr-scene-3                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 6.55s both,
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 8.55s forwards; }
+  .sr-scene-3 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 6.85s both; }
+  .sr-scene-3 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 7.10s both; }
 
-  /* Final reveal: starts @ 8.35s, fully resolved by ~9.7s */
-  .sr-final                    { animation: sr-fadeIn 0.5s ease-out 8.35s both; }
-  .sr-final-icon               { animation: sr-iconPop 0.7s cubic-bezier(0.4,0,0.2,1.05) 8.55s both; }
-  .sr-title                    { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 8.95s both; }
-  .sr-tagline                  { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 9.15s both; }
-  .sr-features                 { animation: sr-fadeIn 0.4s ease-out 9.30s both; }
-  .sr-feat-1                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 9.40s both; }
-  .sr-feat-2                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 9.55s both; }
-  .sr-feat-3                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 9.70s both; }
-  .sr-cta                      { animation: sr-fadeUp 0.55s cubic-bezier(0.2,0,0,1) 9.80s both,
-                                            sr-breathe 2.6s ease-in-out 10.5s infinite; }
+  /* Final reveal: starts @ 9.20s (after Scene 3 exit @ 9.10s + breath) */
+  .sr-final                    { animation: sr-fadeIn 0.5s ease-out 9.20s both; }
+  .sr-final-icon               { animation: sr-iconPop 0.7s cubic-bezier(0.4,0,0.2,1.05) 9.40s both; }
+  .sr-title                    { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 9.80s both; }
+  .sr-tagline                  { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 10.00s both; }
+  .sr-features                 { animation: sr-fadeIn 0.4s ease-out 10.15s both; }
+  .sr-feat-1                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.25s both; }
+  .sr-feat-2                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.40s both; }
+  .sr-feat-3                   { animation: sr-featPop 0.5s cubic-bezier(0.4,0,0.2,1.05) 10.55s both; }
+  .sr-cta                      { animation: sr-fadeUp 0.55s cubic-bezier(0.2,0,0,1) 10.65s both,
+                                            sr-breathe 2.6s ease-in-out 11.35s infinite; }
 
   /* prefers-reduced-motion — skip the scenes entirely, show the final
      reveal statically. The user has signalled they don't want the
