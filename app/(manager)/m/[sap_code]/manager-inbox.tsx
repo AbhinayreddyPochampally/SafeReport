@@ -20,7 +20,6 @@ import {
   ensurePushSubscription,
   clearPushSubscription,
 } from "@/lib/push-client"
-import { EmbeddedReportPanel } from "./embedded-report-panel"
 
 /**
  * Manager inbox — responsive shell.
@@ -52,10 +51,10 @@ import { EmbeddedReportPanel } from "./embedded-report-panel"
  */
 
 const POLL_MS = 30_000
-const LG_QUERY = "(min-width: 1024px)"
-const SELECTED_PARAM = "selected"
-
-const SR_ID = /^SR-\d{6,}$/
+// LG_QUERY, SELECTED_PARAM, and SR_ID were used by the lg+ two-pane
+// layout's inline-preview machinery (matchMedia gate + URL sync). The
+// two-pane was pulled in the May 2026 audit batch; these constants
+// were dropped alongside it.
 
 type Store = {
   sap_code: string
@@ -82,44 +81,44 @@ type InboxReport = {
   transcript_failed: boolean
 }
 
-type FilterKey = "needs_action" | "in_progress" | "awaiting_ho" | "closed"
+// Mockup manager_flow_v3 pill set: All / New + Returned / Acknowledged /
+// Awaiting HO / Closed. "All" matches every status the inbox tracks;
+// "New + Returned" remains the default-selected filter (the manager's
+// action queue) — bumping that label fixes the audit divergence that
+// flagged the old "Needs action" / "In progress" pair as non-mockup.
+type FilterKey =
+  | "all"
+  | "needs_action"
+  | "in_progress"
+  | "awaiting_ho"
+  | "closed"
 
 type Filter = {
   key: FilterKey
   label: string
-  /** Shorter label used when horizontal space is tight (lg < width < sm). */
-  shortLabel: string
   statuses: string[]
 }
 
 const FILTERS: readonly Filter[] = [
   {
+    key: "all",
+    label: "All",
+    statuses: ["new", "returned", "in_progress", "awaiting_ho", "closed"],
+  },
+  {
     key: "needs_action",
-    label: "Needs action",
-    shortLabel: "Needs action",
+    label: "New + Returned",
     statuses: ["new", "returned"],
   },
-  {
-    key: "in_progress",
-    label: "In progress",
-    shortLabel: "In progress",
-    statuses: ["in_progress"],
-  },
-  {
-    key: "awaiting_ho",
-    label: "Awaiting HO",
-    shortLabel: "Awaiting",
-    statuses: ["awaiting_ho"],
-  },
-  {
-    key: "closed",
-    label: "Closed",
-    shortLabel: "Closed",
-    statuses: ["closed"],
-  },
+  { key: "in_progress", label: "Acknowledged", statuses: ["in_progress"] },
+  { key: "awaiting_ho", label: "Awaiting HO", statuses: ["awaiting_ho"] },
+  { key: "closed", label: "Closed", statuses: ["closed"] },
 ] as const
 
-const ALL_STATUSES = FILTERS.flatMap((f) => f.statuses)
+// Deduplicated set of every distinct status across all filters (the "All"
+// pill matches all of them, but each non-All filter shares statuses with
+// it — Set strips the duplicates so the inbox API doesn't see "new" twice).
+const ALL_STATUSES = Array.from(new Set(FILTERS.flatMap((f) => f.statuses)))
 
 type Toast = {
   kind: "resolution_sent"
@@ -137,7 +136,13 @@ export function ManagerInbox({ store }: { store: Store }) {
   const [signingOut, setSigningOut] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
-  const [isDesktop, setIsDesktop] = useState(false)
+  // Phone-only manager surface (CLAUDE.md hard rule). The previous lg+
+  // two-pane master/detail and its desktop-only keyboard navigation,
+  // selectedId URL sync, and inline EmbeddedReportPanel have all been
+  // pulled — row clicks always navigate to the standalone detail page.
+  // isDesktop is fixed false so the legacy code paths gated on it
+  // remain dormant without me having to delete every reference.
+  const isDesktop = false
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const filter = useMemo(
@@ -145,42 +150,11 @@ export function ManagerInbox({ store }: { store: Store }) {
     [filterKey],
   )
 
-  // --- Viewport: are we on a desktop-sized screen? -------------------------
-  // We use this to decide whether row clicks open inline (right pane) or
-  // navigate to the standalone detail page. Reactive via matchMedia so
-  // resizing or rotating immediately updates behavior.
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia(LG_QUERY)
-    const apply = () => setIsDesktop(mq.matches)
-    apply()
-    mq.addEventListener("change", apply)
-    return () => mq.removeEventListener("change", apply)
-  }, [])
-
-  // --- Read `selected` from URL on mount so deep links work ----------------
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const sp = new URLSearchParams(window.location.search)
-    const sel = sp.get(SELECTED_PARAM)
-    if (sel && SR_ID.test(sel)) {
-      setSelectedId(sel)
-    }
-  }, [])
-
-  // --- Push selection back into URL so it survives reload/share ------------
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const url = new URL(window.location.href)
-    if (selectedId) {
-      url.searchParams.set(SELECTED_PARAM, selectedId)
-    } else {
-      url.searchParams.delete(SELECTED_PARAM)
-    }
-    // replaceState (not pushState) so back-button still goes to the
-    // previous page rather than between row selections.
-    window.history.replaceState(null, "", url.toString())
-  }, [selectedId])
+  // Inline-preview matchMedia tracker + selectedId URL sync were removed
+  // alongside the lg+ two-pane in the May 2026 phone-only rev. The
+  // selectedId state remains so the row card retains its aria-current
+  // hook, but it never gets set to anything (the row's onClick handler
+  // returns early when isDesktop is false).
 
   // --- One-shot success toast from the resolve flow ------------------------
   useEffect(() => {
@@ -321,6 +295,7 @@ export function ManagerInbox({ store }: { store: Store }) {
   // --- Derived: filtered list + counts -------------------------------------
   const counts = useMemo(() => {
     const out: Record<FilterKey, number> = {
+      all: 0,
       needs_action: 0,
       in_progress: 0,
       awaiting_ho: 0,
@@ -432,9 +407,11 @@ export function ManagerInbox({ store }: { store: Store }) {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      {/* Top bar — full-width on desktop, phone-shaped on mobile. */}
+      {/* Top bar — phone-only column per the May 2026 audit. Previously
+          full-width with a desktop two-pane below; now consistent with
+          the reporter surface (max-w-sm). */}
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-3 px-4 py-3 md:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-sm items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
               {store.brand} · {store.city}
@@ -446,29 +423,7 @@ export function ManagerInbox({ store }: { store: Store }) {
               {store.sap_code}
             </p>
           </div>
-          {/* Right-hand controls: keyboard-shortcut hint sits to the left
-            * of Sign out on desktop only. Was previously at the bottom of
-            * the list pane below the auto-refresh footer, which scrolled
-            * off-screen as the inbox grew. Top-right is the corner the
-            * eye already lands on (Sign out is here), so the keys are
-            * always visible the moment the manager opens the inbox. */}
           <div className="flex shrink-0 items-center gap-2">
-            {isDesktop && (
-              <div
-                aria-label="Keyboard shortcuts"
-                className="hidden lg:flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[10.5px] text-slate-500"
-              >
-                <KeyHint>J</KeyHint>
-                <KeyHint>K</KeyHint>
-                <span className="text-slate-500">navigate</span>
-                <span aria-hidden className="text-slate-300">·</span>
-                <KeyHint>F</KeyHint>
-                <span className="text-slate-500">open</span>
-                <span aria-hidden className="text-slate-300">·</span>
-                <KeyHint>Esc</KeyHint>
-                <span className="text-slate-500">close</span>
-              </div>
-            )}
             <button
               type="button"
               onClick={signOut}
@@ -482,10 +437,10 @@ export function ManagerInbox({ store }: { store: Store }) {
         </div>
       </header>
 
-      {/* Toast (resolution-sent) sits below the header so it's not hidden
-        * by the desktop two-pane layout's scrolling content. */}
+      {/* Toast (resolution-sent) sits below the header. Phone-shaped to
+          match the rest of the surface post-May-2026 audit. */}
       {toast && (
-        <div className="mx-auto w-full max-w-7xl px-4 pt-3 md:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-sm px-4 pt-3">
           <div
             role="status"
             aria-live="polite"
@@ -517,11 +472,12 @@ export function ManagerInbox({ store }: { store: Store }) {
         </div>
       )}
 
-      {/* Two-pane on desktop. On mobile, only the list pane renders;
-        * the embedded panel never shows below lg. */}
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-0 px-4 py-4 md:px-6 lg:flex-row lg:items-start lg:gap-6 lg:px-8 lg:py-6">
-        {/* ---------------- LIST PANE ---------------- */}
-        <aside className="w-full lg:w-[420px] lg:shrink-0">
+      {/* Phone-only list column. The previous lg+ two-pane master/detail
+          (with inline EmbeddedReportPanel) was pulled in the May 2026
+          mockup-audit batch — manager surface is phone-only per
+          CLAUDE.md, and the two-pane layout doesn't square with that. */}
+      <div className="mx-auto flex w-full max-w-sm flex-col gap-0 px-4 py-4">
+        <aside className="w-full">
           {/* Manager onboarding overlay — install (Android Chrome native /
             * iOS Safari manual) then allow-notifications (only inside
             * installed PWA). Self-detects state via localStorage + matchMedia.
@@ -530,11 +486,15 @@ export function ManagerInbox({ store }: { store: Store }) {
             * card. Renders null once both gates are decided. */}
           <ManagerOnboarding />
 
-          {/* Filter pills — 2-col grid on phone, single row on sm+. No
-            * horizontal scroll, so "Closed" never gets clipped. */}
+          {/* Filter pills — mockup manager_flow_v3 style: horizontally
+              scrollable row with shrink-0 pills. Five pills (All /
+              New + Returned / Acknowledged / Awaiting HO / Closed)
+              don't fit a 2-col grid cleanly on a 360px phone, so we
+              accept horizontal scroll. Each pill carries a count badge. */}
           <nav
-            className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            className="mt-4 -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1.5"
             aria-label="Filter reports by status"
+            style={{ scrollbarWidth: "none" }}
           >
             {FILTERS.map((f) => {
               const selected = f.key === filter.key
@@ -544,19 +504,19 @@ export function ManagerInbox({ store }: { store: Store }) {
                   key={f.key}
                   type="button"
                   onClick={() => setFilterKey(f.key)}
-                  className={`flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-medium transition ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition ${
                     selected
-                      ? "border-indigo-700 bg-indigo-700 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-indigo-500"
+                      ? "border-indigo-700 bg-indigo-50 text-indigo-700"
+                      : "border-transparent bg-slate-100 text-slate-700 hover:border-indigo-300"
                   } focus:outline-none focus:ring-4 focus:ring-indigo-500/40`}
                   aria-pressed={selected}
                 >
-                  <span className="truncate">{f.label}</span>
+                  <span>{f.label}</span>
                   <span
-                    className={`inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px] font-bold tabular-nums ${
+                    className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10.5px] font-bold tabular-nums ${
                       selected
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-100 text-slate-600"
+                        ? "bg-indigo-700 text-white"
+                        : "bg-white text-slate-600"
                     }`}
                     aria-hidden
                   >
@@ -628,17 +588,6 @@ export function ManagerInbox({ store }: { store: Store }) {
             * the inbox got long. See the <KeyHint> row next to Sign out. */}
         </aside>
 
-        {/* ---------------- DETAIL PANE (desktop only) ---------------- */}
-        <section
-          className="hidden min-h-[600px] flex-1 rounded-3xl border border-slate-200 bg-white lg:block"
-          aria-label="Selected report"
-        >
-          <EmbeddedReportPanel
-            store={store}
-            selectedId={selectedId}
-            onStatusChange={() => void fetchReports()}
-          />
-        </section>
       </div>
     </main>
   )
@@ -841,13 +790,11 @@ function EmptyState({ filterLabel }: { filterLabel: string }) {
   )
 }
 
-function KeyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-slate-200 bg-white px-1 font-mono text-[9px] font-semibold text-slate-500">
-      {children}
-    </kbd>
-  )
-}
+// <KeyHint> existed for the desktop two-pane's keyboard-shortcut hint
+// (J/K/F/Esc). Removed alongside the lg+ pane in the May 2026 audit
+// batch. The keyboard navigation useEffect upstream is gated on
+// isDesktop=false so it never binds — kept around as dead-code for one
+// cycle in case the two-pane ever returns.
 
 function relativeTime(ms: number): string {
   const diff = Math.max(0, Date.now() - ms)

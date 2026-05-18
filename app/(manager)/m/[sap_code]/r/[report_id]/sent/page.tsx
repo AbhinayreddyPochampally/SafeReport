@@ -44,7 +44,7 @@ export default async function ManagerPostSubmitPage({
   if (error || !data) notFound()
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col px-6 pb-8 pt-7">
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 pb-7 pt-6">
       {/* APP icon top-left — persistent identity */}
       <header className="flex items-center justify-between">
         <span

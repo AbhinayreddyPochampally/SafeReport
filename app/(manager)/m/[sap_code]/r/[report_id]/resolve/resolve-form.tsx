@@ -207,7 +207,7 @@ export function ResolveForm({
       : "")
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-10 pt-5 lg:max-w-5xl lg:px-8">
+    <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col px-5 pb-9 pt-5">
       <Link
         href={`/m/${store.sap_code}/r/${report.id}`}
         className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"

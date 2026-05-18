@@ -158,14 +158,17 @@ export function ReportDetail({
   }
 
   // Layout: full page vs. embedded pane.
-  // - Page mode (mobile + standalone desktop): max-w-xl phone shape on
-  //   mobile, max-w-3xl on lg+ so the desktop screen isn't wasted, with
-  //   a fixed bottom action bar. Padding bottom leaves room for that bar.
-  // - Embedded mode (inside inbox two-pane): no outer chrome, no fixed
-  //   bar, no min-h-screen — the parent's pane owns the height.
+  // - Page mode: phone-only max-w-sm per CLAUDE.md hard rule (was a
+  //   max-w-xl-grows-to-max-w-3xl-on-lg responsive shape until the May
+  //   2026 audit).
+  // - Embedded mode: kept as-is for back-compat. The lg+ two-pane inbox
+  //   that mounted EmbeddedReportPanel was pulled in the same audit, so
+  //   nothing in the live app reaches this branch — but the AudioPlayer
+  //   etc. shouldn't change their visual rendering just because mount
+  //   context flipped.
   const rootClasses = isEmbedded
     ? "flex flex-col px-5 pb-6 pt-5"
-    : "mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-32 pt-5 lg:max-w-3xl lg:px-8"
+    : "mx-auto flex min-h-screen w-full max-w-sm flex-col px-5 pb-32 pt-5"
 
   return (
     <main className={rootClasses}>
@@ -353,7 +356,7 @@ export function ReportDetail({
             : "fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-sm"
         }
       >
-        <div className={isEmbedded ? "" : "mx-auto max-w-xl lg:max-w-3xl"}>
+        <div className={isEmbedded ? "" : "mx-auto max-w-sm"}>
           {report.status === "new" && (
             <>
               <button
@@ -476,12 +479,17 @@ function AudioPlayer({ url }: { url: string }) {
   const pct = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+    // Stone-100 audio plate per manager_flow_v3 — replaces the prior
+    // bg-white + slate border. The warm "stone" well differentiates the
+    // voice-note container from the rest of the white-cards surface, and
+    // matches the same Stone-100 plate the reporter Describe screen sits
+    // on. Audit batch (g).
+    <div className="flex items-center gap-3 rounded-[14px] border border-stone-200 bg-stone-100 p-3.5">
       <button
         type="button"
         onClick={toggle}
         aria-label={playing ? "Pause voice note" : "Play voice note"}
-        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-indigo-700 text-white transition hover:bg-indigo-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
       >
         {playing ? (
           <Pause className="h-5 w-5" strokeWidth={2} />
@@ -499,10 +507,17 @@ function AudioPlayer({ url }: { url: string }) {
             {formatDuration(current)} / {formatDuration(duration)}
           </span>
         </div>
-        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        {/* Scrubber — slate-300 track, indigo-700 fill, with a small
+            indigo-700 thumb at the play head (mockup-spec touch). */}
+        <div className="relative mt-1.5 h-1 w-full overflow-visible rounded-full bg-slate-300">
           <div
-            className="h-full bg-indigo-700 transition-[width] duration-150"
+            className="h-full rounded-full bg-indigo-700 transition-[width] duration-150"
             style={{ width: `${pct}%` }}
+          />
+          <span
+            aria-hidden
+            className="absolute top-1/2 h-3 w-3 -translate-y-1/2 -translate-x-1/2 rounded-full bg-indigo-700"
+            style={{ left: `${pct}%` }}
           />
         </div>
         {error && (

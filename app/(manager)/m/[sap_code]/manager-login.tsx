@@ -104,7 +104,7 @@ export function ManagerLogin({ store }: { store: Store }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-8 md:max-w-md md:py-12">
+    <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col px-5 py-7">
       <Link
         href={`/r/${store.sap_code}`}
         className="inline-flex w-fit items-center gap-1 text-[13px] font-medium text-slate-700 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
