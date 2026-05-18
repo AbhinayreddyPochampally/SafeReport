@@ -1,9 +1,10 @@
 "use client"
 
-import { Check, KeyRound, ShieldCheck, Store } from "lucide-react"
+import { Check, KeyRound, Store } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { AppIcon } from "@/components/app-icon"
 import { ReporterIntro } from "@/components/reporter-intro"
 import {
   LOCALES,
@@ -67,15 +68,14 @@ export function ReporterLanding({ store }: { store: StoreCard }) {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
-      {/* Brand bar — APP icon left, manager-login key right. No back link
-          (this is the root reporter screen — there's nowhere to go back to). */}
+      {/* Brand bar — designed APP icon left, manager-login key right. No
+          back link (this is the root reporter screen — there's nowhere to
+          go back to). */}
       <header className="flex items-center justify-between">
-        <span
-          aria-label="SafeReport"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-indigo-700 text-white shadow-[0_2px_6px_rgba(67,56,202,0.25)]"
-        >
-          <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </span>
+        <AppIcon
+          size={40}
+          className="rounded-[10px] shadow-[0_2px_6px_rgba(10,31,70,0.18)]"
+        />
         <Link
           href={`/m/${store.sap_code}`}
           aria-label="Manager login"

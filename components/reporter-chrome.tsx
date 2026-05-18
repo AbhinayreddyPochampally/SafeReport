@@ -1,7 +1,8 @@
 "use client"
 
-import { ArrowLeft, KeyRound, ShieldCheck } from "lucide-react"
+import { ArrowLeft, KeyRound } from "lucide-react"
 import Link from "next/link"
+import { AppIcon } from "@/components/app-icon"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
@@ -57,16 +58,15 @@ export function ReporterScreenHeader({ sap_code, step = null, backHref }: Props)
 
   return (
     <>
-      {/* Brand bar — APP icon left, manager-login right. Persistent across
-          every reporter screen so the user always has a thumb-reachable
-          escape hatch to the manager surface if they scanned by mistake. */}
+      {/* Brand bar — designed APP icon left, manager-login right.
+          Persistent across every reporter screen so the user always has
+          a thumb-reachable escape hatch to the manager surface if they
+          scanned by mistake. */}
       <header className="flex items-center justify-between">
-        <span
-          aria-label="SafeReport"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-indigo-700 text-white shadow-[0_2px_6px_rgba(67,56,202,0.25)]"
-        >
-          <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </span>
+        <AppIcon
+          size={40}
+          className="rounded-[10px] shadow-[0_2px_6px_rgba(10,31,70,0.18)]"
+        />
         <Link
           href={`/m/${sap_code}`}
           aria-label="Manager login"

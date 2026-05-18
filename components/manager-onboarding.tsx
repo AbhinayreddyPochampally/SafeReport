@@ -10,9 +10,9 @@ import {
   MessageSquare,
   RotateCcw,
   Share2,
-  ShieldCheck,
 } from "lucide-react"
 import { useEffect, useState } from "react"
+import { AppIcon } from "@/components/app-icon"
 
 /**
  * Manager onboarding overlay — install + allow-notifications gates.
@@ -386,14 +386,13 @@ function Overlay({
       aria-modal="true"
       className="fixed inset-0 z-50 flex flex-col bg-slate-50 px-6 pb-6 pt-8"
     >
-      {/* APP icon at top-left — persistent identity across the manager flow */}
+      {/* Designed APP icon at top-left — persistent identity across the
+          manager flow. */}
       <div className="flex items-center justify-between">
-        <span
-          aria-label="SafeReport"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-indigo-700 text-white shadow-[0_2px_6px_rgba(67,56,202,0.25)]"
-        >
-          <ShieldCheck className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </span>
+        <AppIcon
+          size={40}
+          className="rounded-[10px] shadow-[0_2px_6px_rgba(10,31,70,0.18)]"
+        />
         <button
           type="button"
           onClick={onSkip}

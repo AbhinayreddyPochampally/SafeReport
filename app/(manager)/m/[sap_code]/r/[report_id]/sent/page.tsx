@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation"
 import { ArrowLeft, Send } from "lucide-react"
 import Link from "next/link"
+import { AppIcon } from "@/components/app-icon"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getManagerSession } from "@/lib/manager-auth"
 
@@ -45,26 +46,12 @@ export default async function ManagerPostSubmitPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 pb-7 pt-6">
-      {/* APP icon top-left — persistent identity */}
+      {/* Designed APP icon top-left — persistent identity */}
       <header className="flex items-center justify-between">
-        <span
-          aria-label="SafeReport"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-indigo-700 text-white shadow-[0_2px_6px_rgba(67,56,202,0.25)]"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-6 w-6"
-            aria-hidden
-          >
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            <polyline points="9 12 11 14 15 10" />
-          </svg>
-        </span>
+        <AppIcon
+          size={40}
+          className="rounded-[10px] shadow-[0_2px_6px_rgba(10,31,70,0.18)]"
+        />
       </header>
 
       <div className="mx-auto flex max-w-sm flex-1 flex-col items-center justify-center text-center">
