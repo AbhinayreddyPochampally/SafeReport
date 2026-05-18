@@ -1,8 +1,19 @@
 "use client"
 
-import { ArrowRight, Languages, Mic } from "lucide-react"
+import {
+  ArrowRight,
+  ChevronRight,
+  Globe,
+  Lock,
+  MessageSquareText,
+  MessagesSquare,
+  Mic,
+  Pencil,
+  ShieldCheck,
+} from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import type { ReactNode } from "react"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
 import { VoiceRecorder, type VoiceRecorderStatus } from "@/components/voice-recorder"
 import { CATEGORIES, labelFor } from "@/lib/categories"
@@ -15,26 +26,113 @@ import {
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
- * Screen 7 (Phase 3 facelift) — Describe.
+ * Screen 5 — Describe (voice or text).
  *
- * Voice is the primary affordance per docs/DESIGN.md. Text fallback is
- * available for reporters who can't speak right now (silent stockroom,
- * shy, hearing-impaired etc.). ONE OF the two is mandatory — voice OR
- * text — but not both required. Voice if recorded counts; otherwise text
- * must hit the 20-char minimum.
+ * May 2026 mockup facelift: the previous rev showed an 8-language chip
+ * plate + a stone-coloured recorder card. The new mockup leans on three
+ * affordances:
+ *   - "Any language is okay"           — globe glyph
+ *   - "You can mix languages"          — chat-bubbles glyph
+ *   - "No need for perfect English"    — shield-check glyph
+ * plus a faded multi-script watermark sitting behind the whole screen,
+ * a helper bar listing example languages, and a dedicated "Prefer typing?"
+ * row instead of the small underlined link. The mic recorder itself
+ * (VoiceRecorder) is reused as-is — it owns the idle / counting /
+ * recording / ready / playing state machine. We only restyle the chrome.
  *
- * UI mode:
- *  - 'voice' (default) — big mic recorder + small "Can't speak right
- *    now? Type a description instead" link
- *  - 'text' — large textarea + small "Back to voice" link
- *
- * Per CLAUDE.md the mandatory either-or rule is the Phase 3 design
- * change. Previous /evidence screen treated both as optional with photo
- * required.
+ * Either-or rule (voice OR text) preserved from the previous rev; photo
+ * stays required and is captured on the prior /photo screen.
  */
 
 const TEXT_MIN = 20
 const TEXT_MAX = 500
+
+/**
+ * Decorative full-screen watermark of Indian-language scripts. Pure
+ * presentation; sits behind everything else at low opacity. Anchors the
+ * "speak in any language" promise visually before the reporter has read
+ * a single word of copy.
+ */
+function ScriptWatermark() {
+  type Tok = { c: string; x: number; y: number; s: number; o: number; f?: string }
+  const tokens: Tok[] = [
+    { c: "A", x: 80, y: 70, s: 36, o: 0.18 },
+    { c: "अ", x: 200, y: 80, s: 36, o: 0.18, f: "'Noto Sans Devanagari'" },
+    { c: "क", x: 285, y: 76, s: 36, o: 0.18, f: "'Noto Sans Devanagari'" },
+    { c: "मराठी", x: 300, y: 130, s: 18, o: 0.2, f: "'Noto Sans Devanagari'" },
+    { c: "ద", x: 235, y: 145, s: 28, o: 0.16, f: "'Noto Sans Telugu'" },
+    { c: "తెలుగు", x: 215, y: 175, s: 16, o: 0.2, f: "'Noto Sans Telugu'" },
+    { c: "ಕ", x: 70, y: 180, s: 26, o: 0.18, f: "'Noto Sans Kannada'" },
+    { c: "ಕನ್ನಡ", x: 110, y: 235, s: 18, o: 0.2, f: "'Noto Sans Kannada'" },
+    { c: "தமிழ்", x: 240, y: 220, s: 18, o: 0.2, f: "'Noto Sans Tamil'" },
+    { c: "ಶ್", x: 40, y: 270, s: 30, o: 0.18, f: "'Noto Sans Kannada'" },
+    { c: "क", x: 245, y: 280, s: 28, o: 0.16, f: "'Noto Sans Devanagari'" },
+    { c: "ગુજરાતી", x: 270, y: 305, s: 18, o: 0.2, f: "'Noto Sans Gujarati'" },
+    { c: "क", x: 22, y: 540, s: 30, o: 0.14, f: "'Noto Sans Devanagari'" },
+    { c: "ગુ", x: 320, y: 740, s: 26, o: 0.18, f: "'Noto Sans Gujarati'" },
+    { c: "మ", x: 345, y: 575, s: 22, o: 0.18, f: "'Noto Sans Telugu'" },
+    { c: "త", x: 38, y: 622, s: 24, o: 0.14, f: "'Noto Sans Telugu'" },
+    { c: "తెలుగు", x: 30, y: 760, s: 16, o: 0.2, f: "'Noto Sans Telugu'" },
+    { c: "বাংলা", x: 285, y: 815, s: 18, o: 0.2, f: "'Noto Sans Bengali'" },
+    { c: "“", x: 270, y: 200, s: 44, o: 0.22 },
+    { c: "”", x: 90, y: 720, s: 44, o: 0.18 },
+    { c: "“", x: 350, y: 690, s: 32, o: 0.18 },
+    { c: "”", x: 18, y: 850, s: 32, o: 0.18 },
+  ]
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+    >
+      <svg
+        viewBox="0 0 400 900"
+        preserveAspectRatio="xMidYMid slice"
+        className="h-full w-full"
+      >
+        {tokens.map((tok, i) => (
+          <text
+            key={i}
+            x={tok.x}
+            y={tok.y}
+            fontSize={tok.s}
+            fill="#312E81"
+            opacity={tok.o}
+            style={{
+              fontFamily: tok.f
+                ? `${tok.f}, 'DM Sans', sans-serif`
+                : "'DM Sans', sans-serif",
+              fontWeight: 600,
+            }}
+          >
+            {tok.c}
+          </text>
+        ))}
+        <g opacity="0.16" transform="translate(48 150)">
+          <path
+            d="M0 8 a8 8 0 0 1 8 -8 h28 a8 8 0 0 1 8 8 v18 a8 8 0 0 1 -8 8 h-21 l-10 8 v-8 h-5 a8 8 0 0 1 -8 -8 z"
+            fill="#312E81"
+          />
+          <circle cx="14" cy="17" r="1.5" fill="#FFFFFF" />
+          <circle cx="22" cy="17" r="1.5" fill="#FFFFFF" />
+          <circle cx="30" cy="17" r="1.5" fill="#FFFFFF" />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+function Affordance({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-2 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50">
+        {icon}
+      </span>
+      <span className="text-[11.5px] font-medium leading-tight text-slate-700">
+        {label}
+      </span>
+    </div>
+  )
+}
 
 export default function DescribePage({
   params,
@@ -49,14 +147,9 @@ export default function DescribePage({
   const [mode, setMode] = useState<"voice" | "text">("voice")
   const [audio, setAudio] = useState<Blob | null>(null)
   const [text, setText] = useState("")
-  // Tracks the VoiceRecorder's internal status so the sub-copy below the
-  // heading can switch to "Recording — tap to stop." while the reporter
-  // is actively capturing — per reporter_flow_v14 line 1805.
   const [recStatus, setRecStatus] = useState<VoiceRecorderStatus>("idle")
 
   useEffect(() => {
-    // Phase 10: profile is collected at /identity AFTER describe. So we no
-    // longer guard on profile here.
     const draft = readDraft()
     if (!draft || draft.sap_code !== params.sap_code) {
       router.replace(`/r/${params.sap_code}/category`)
@@ -70,7 +163,6 @@ export default function DescribePage({
       router.replace(`/r/${params.sap_code}/when`)
       return
     }
-    // Guard against landing here without a photo — photo is the prior step.
     const blobs = getDraftBlobs(draft.draftId)
     if (!blobs.photo) {
       router.replace(`/r/${params.sap_code}/photo`)
@@ -85,7 +177,10 @@ export default function DescribePage({
     if (blobs.audio) {
       setAudio(blobs.audio)
       setMode("voice")
-    } else if (typeof draft.description_text === "string" && draft.description_text.length > 0) {
+    } else if (
+      typeof draft.description_text === "string" &&
+      draft.description_text.length > 0
+    ) {
       setText(draft.description_text)
       setMode("text")
     }
@@ -99,7 +194,8 @@ export default function DescribePage({
   }, [audio])
 
   const textTrimmed = text.trim()
-  const textValid = textTrimmed.length >= TEXT_MIN && textTrimmed.length <= TEXT_MAX
+  const textValid =
+    textTrimmed.length >= TEXT_MIN && textTrimmed.length <= TEXT_MAX
   const canContinue = Boolean(audio) || textValid
 
   const categoryLabel = useMemo(() => {
@@ -121,7 +217,9 @@ export default function DescribePage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
+    <main className="relative mx-auto flex min-h-screen max-w-sm flex-col overflow-hidden bg-slate-50 px-5 py-7">
+      <ScriptWatermark />
+
       <ReporterScreenHeader
         sap_code={params.sap_code}
         backHref={`/r/${params.sap_code}/photo`}
@@ -130,166 +228,118 @@ export default function DescribePage({
 
       {categoryLabel && (
         <p
-          className={`mt-5 text-[11px] font-bold uppercase tracking-wide ${
+          className={`mt-6 text-[11px] font-bold uppercase tracking-wide ${
             tone === "slate" ? "text-slate-600" : "text-amber-700"
           }`}
         >
           {categoryLabel}
         </p>
       )}
-      <h1 className="mt-1 font-display text-[22px] font-bold leading-tight text-slate-900">
+      <h1 className="mt-1 font-display text-[26px] font-bold leading-tight text-slate-900">
         {mode === "voice" ? "Tell us what happened" : "Type a description"}
       </h1>
-      {/* Sub copy has three states in voice mode (idle / counting / recording)
-          plus the text-mode variant. The "Recording — tap to stop." line is
-          the mockup spec for the active-capture state — without it the
-          screen gives no copy-level signal that the mic is hot. */}
-      <p className="mt-1 text-[13px] leading-5 text-slate-600">
+      <p className="mt-2 text-[13.5px] leading-5 text-slate-600">
         {mode === "text"
           ? "In any language. We'll translate it for the safety team."
           : recStatus === "recording"
             ? "Recording — tap to stop."
             : recStatus === "counting"
               ? "Get ready — recording starts in a moment."
-              : "Speak in any language — we'll translate it for the safety team."}
+              : "Speak in any language. We'll translate it for the safety team."}
       </p>
 
       {mode === "voice" ? (
         <>
-          {/* Voice plate. Wrapped in a relative container so the
-              background-infographic SVG (concentric sound-wave arcs +
-              mic glyph) can layer behind the recorder card without
-              affecting layout. The infographic reads as "listening"
-              and stops the screen feeling sterile — earlier rev had
-              the recorder floating in empty white space, which user
-              feedback flagged.
-
-              The plate now reserves a fixed inner column (max-w-full
-              + overflow-hidden on the bar row inside VoiceRecorder)
-              so the waveform can't overspill on narrow phones — the
-              prior 40-bar count pushed past the card boundary at
-              375 px viewports. */}
-          <div className="relative mt-6">
-            {/* Decorative background — concentric arcs suggesting
-                sound waves, plus a faint mic glyph anchoring the
-                plate. Absolutely positioned + pointer-events-none so
-                it never interferes with the recorder controls. */}
-            <svg
-              className="pointer-events-none absolute inset-x-0 -top-2 mx-auto h-[210px] w-[280px] opacity-[0.07]"
-              viewBox="0 0 280 210"
-              fill="none"
-              aria-hidden
-            >
-              <circle cx="140" cy="100" r="36" stroke="#0A1F46" strokeWidth="2" />
-              <circle cx="140" cy="100" r="60" stroke="#0A1F46" strokeWidth="1.5" />
-              <circle cx="140" cy="100" r="86" stroke="#0A1F46" strokeWidth="1" />
-              <circle cx="140" cy="100" r="112" stroke="#0A1F46" strokeWidth="0.75" />
-              {/* Mic body — tucked into the centre circle */}
-              <rect x="133" y="84" width="14" height="22" rx="7" fill="#0A1F46" />
-              <path
-                d="M124 100 v4 a16 16 0 0 0 32 0 v-4"
-                stroke="#0A1F46"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
+          <section className="relative mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white/85 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm">
+            <div className="grid grid-cols-3 divide-x divide-slate-200 px-2 py-5">
+              <Affordance
+                icon={
+                  <Globe
+                    className="h-5 w-5 text-indigo-700"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                }
+                label="Any language is okay"
               />
-              <line x1="140" y1="120" x2="140" y2="128" stroke="#0A1F46" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+              <Affordance
+                icon={
+                  <MessagesSquare
+                    className="h-5 w-5 text-indigo-700"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                }
+                label="You can mix languages"
+              />
+              <Affordance
+                icon={
+                  <ShieldCheck
+                    className="h-5 w-5 text-indigo-700"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                }
+                label="No need for perfect English"
+              />
+            </div>
 
-            <section className="relative rounded-2xl border border-stone-200 bg-stone-100 p-6">
-              {/* Welcome panel — invites the reporter to speak in
-                  whatever language is easiest for them. Crucially,
-                  this is NOT anchored to the UI locale they picked
-                  on the landing: a reporter who chose "English" as
-                  the interface language might still want to record
-                  the actual voice note in Marathi or Gujarati or
-                  any of the other Indian-floor languages the
-                  transcription pipeline handles.
-
-                  The chip row shows native-script labels in a mix
-                  beyond our 5-locale UI picker (Marathi, Bengali,
-                  Gujarati added) so reporters can recognise their
-                  language even if it isn't in the UI list. "Any
-                  language" is the literal promise. */}
-              <div className="mb-5 rounded-xl border border-stone-300/60 bg-white/70 p-3">
-                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-800">
-                  <Languages className="h-3.5 w-3.5 text-indigo-700" strokeWidth={2} aria-hidden />
-                  <span>Speak in any language</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Kannada', 'DM Sans', sans-serif" }}
-                  >
-                    ಕನ್ನಡ
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Devanagari', 'DM Sans', sans-serif" }}
-                  >
-                    हिन्दी
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Devanagari', 'DM Sans', sans-serif" }}
-                  >
-                    मराठी
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Tamil', 'DM Sans', sans-serif" }}
-                  >
-                    தமிழ்
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Telugu', 'DM Sans', sans-serif" }}
-                  >
-                    తెలుగు
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Bengali', 'DM Sans', sans-serif" }}
-                  >
-                    বাংলা
-                  </span>
-                  <span
-                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-                    style={{ fontFamily: "'Noto Sans Gujarati', 'DM Sans', sans-serif" }}
-                  >
-                    ગુજરાતી
-                  </span>
-                  <span className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                    English
-                  </span>
-                  <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                    + more
-                  </span>
-                </div>
-                <p className="mt-2 text-[11px] leading-snug text-slate-500">
-                  Whatever feels natural — we&apos;ll translate it for the safety team.
-                </p>
-              </div>
-
+            <div className="mx-4 mb-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-2">
               <VoiceRecorder
                 value={audio}
                 onChange={setAudio}
                 onStatusChange={setRecStatus}
               />
-            </section>
-          </div>
+            </div>
+
+            <div className="mx-4 mb-4 flex items-start gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
+              <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-indigo-50">
+                <MessageSquareText
+                  className="h-3.5 w-3.5 text-indigo-700"
+                  strokeWidth={1.8}
+                  aria-hidden
+                />
+              </span>
+              <p className="text-[12px] leading-snug text-slate-600">
+                For example, you can speak in{" "}
+                <b className="font-semibold text-slate-800">
+                  Hindi, Marathi, Kannada, Telugu, Tamil, English
+                </b>{" "}
+                — or switch between them.
+              </p>
+            </div>
+          </section>
+
           <button
             type="button"
             onClick={() => setMode("text")}
-            className="mt-4 self-center text-center text-[13px] text-slate-600 underline-offset-2 hover:text-indigo-700 hover:underline"
+            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/80 px-4 py-3.5 text-left transition hover:border-indigo-300 hover:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
           >
-            Can&apos;t speak right now?{" "}
-            <span className="font-medium text-indigo-700">Type a description instead</span>
+            <span className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-indigo-50">
+                <Pencil
+                  className="h-3.5 w-3.5 text-indigo-700"
+                  strokeWidth={1.8}
+                  aria-hidden
+                />
+              </span>
+              <span className="text-[13px]">
+                <span className="text-slate-700">Prefer typing? </span>
+                <span className="font-semibold text-indigo-700">
+                  Type a description instead
+                </span>
+              </span>
+            </span>
+            <ChevronRight
+              className="h-4 w-4 flex-none text-slate-400"
+              strokeWidth={2}
+              aria-hidden
+            />
           </button>
         </>
       ) : (
         <>
-          <section className="mt-6">
+          <section className="mt-5 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm">
             <label htmlFor="sr-description" className="sr-only">
               Description
             </label>
@@ -315,7 +365,7 @@ export default function DescribePage({
           <button
             type="button"
             onClick={() => setMode("voice")}
-            className="mt-4 inline-flex items-center justify-center gap-1.5 self-center text-center text-[13px] text-slate-600 underline-offset-2 hover:text-indigo-700 hover:underline"
+            className="mt-3 inline-flex items-center justify-center gap-1.5 self-center rounded-md px-3 py-1.5 text-[13px] text-slate-600 transition hover:text-indigo-700"
           >
             <Mic className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
             Back to voice
@@ -338,7 +388,8 @@ export default function DescribePage({
             Record a voice note or type a description to continue.
           </p>
         )}
-        <p className="mt-3 text-center text-[11px] uppercase tracking-wide text-slate-400">
+        <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[10.5px] font-medium uppercase tracking-wide text-slate-400">
+          <Lock className="h-3 w-3" strokeWidth={2} aria-hidden />
           {t(locale, "common.anonymous_footer")}
         </p>
       </div>
