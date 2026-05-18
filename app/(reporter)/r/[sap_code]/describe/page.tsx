@@ -12,11 +12,10 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
 import { VoiceRecorder, type VoiceRecorderStatus } from "@/components/voice-recorder"
-import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
   readDraft,
@@ -197,8 +196,6 @@ export default function DescribePage({
   const router = useRouter()
   const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
-  const [tone, setTone] = useState<"slate" | "amber">("slate")
-  const [categoryKey, setCategoryKey] = useState("")
   const [mode, setMode] = useState<"voice" | "text">("voice")
   const [audio, setAudio] = useState<Blob | null>(null)
   const [text, setText] = useState("")
@@ -207,28 +204,18 @@ export default function DescribePage({
   useEffect(() => {
     const draft = readDraft()
     if (!draft || draft.sap_code !== params.sap_code) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!draft.category) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!draft.event_at) {
-      router.replace(`/r/${params.sap_code}/when`)
+      router.replace(`/r/${params.sap_code}/photo`)
       return
     }
     const blobs = getDraftBlobs(draft.draftId)
     if (!blobs.photo) {
+      // Photo is the strict prerequisite. event_at lives on the /when
+      // screen AFTER this one in the re-ordered flow, so we don't
+      // guard on it here.
       router.replace(`/r/${params.sap_code}/photo`)
       return
     }
 
-    const cat = CATEGORIES.find((c) => c.key === draft.category)
-    if (cat) {
-      setTone(cat.kind === "observation" ? "slate" : "amber")
-      setCategoryKey(cat.key)
-    }
     if (blobs.audio) {
       setAudio(blobs.audio)
       setMode("voice")
@@ -253,18 +240,14 @@ export default function DescribePage({
     textTrimmed.length >= TEXT_MIN && textTrimmed.length <= TEXT_MAX
   const canContinue = Boolean(audio) || textValid
 
-  const categoryLabel = useMemo(() => {
-    const cat = CATEGORIES.find((c) => c.key === categoryKey)
-    return cat ? labelFor(cat, locale) : ""
-  }, [categoryKey, locale])
-
   function onContinue() {
     if (!canContinue) return
     writeDraft({
       sap_code: params.sap_code,
       description_text: textValid ? textTrimmed : undefined,
     })
-    router.push(`/r/${params.sap_code}/identity`)
+    // Mig 007 follow-up: /when now lives after /describe.
+    router.push(`/r/${params.sap_code}/when`)
   }
 
   if (!checked) {
@@ -278,19 +261,10 @@ export default function DescribePage({
       <ReporterScreenHeader
         sap_code={params.sap_code}
         backHref={`/r/${params.sap_code}/photo`}
-        step={5}
+        step={2}
       />
 
-      {categoryLabel && (
-        <p
-          className={`mt-6 text-[11px] font-bold uppercase tracking-wide ${
-            tone === "slate" ? "text-slate-600" : "text-amber-700"
-          }`}
-        >
-          {categoryLabel}
-        </p>
-      )}
-      <h1 className="mt-1 font-display text-[26px] font-bold leading-tight text-slate-900">
+      <h1 className="mt-6 font-display text-[26px] font-bold leading-tight text-slate-900">
         {mode === "voice" ? "Tell us what happened" : "Type a description"}
       </h1>
       <p className="mt-2 text-[13.5px] leading-5 text-slate-600">

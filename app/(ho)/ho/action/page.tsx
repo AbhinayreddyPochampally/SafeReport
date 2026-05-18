@@ -37,8 +37,9 @@ type StoreLite = {
 type ReportRow = {
   id: string
   store_code: string
-  type: "observation" | "incident"
-  category: string
+  // Mig 007: nullable until HO confirms.
+  type: "observation" | "incident" | null
+  category: string | null
   status: "new" | "in_progress" | "awaiting_ho" | "returned" | "closed" | "voided"
   description: string | null
   transcript: string | null

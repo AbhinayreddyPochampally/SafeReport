@@ -471,6 +471,28 @@ export async function POST(req: NextRequest) {
     translationSkipped,
   })
 
+  // Mig 007: kick off AI category classification fire-and-forget. The
+  // /api/classify route is idempotent (it skips if suggested_category
+  // is already set), so it's safe to retry-trigger via this path. We
+  // only run it when we have an English transcript — photo-only and
+  // text-only reports (no voice) are not auto-classified in the pilot;
+  // HO picks via dropdown for those.
+  if (englishText.trim().length > 0) {
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+      new URL(req.url).origin
+    void fetch(`${origin}/api/classify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_id: reportId }),
+    }).catch((err) => {
+      console.warn("[transcribe] classify kickoff failed", {
+        reportId,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }
+
   return NextResponse.json({
     transcript: englishText,
     transcript_source: stageA.text,

@@ -31,7 +31,12 @@ export type QueueRow = {
   store_code: string
   store_name: string
   brand: string
-  category: ReportCategory
+  /** Mig 007: NULL while HO hasn't confirmed; the AI's pending pick (if
+   * any) lives in `suggested_category` and the row falls back to it for
+   * display purposes — with a small "AI" badge so HO can spot the
+   * un-sealed rows at a glance. */
+  category: ReportCategory | null
+  suggested_category?: ReportCategory | null
   status: QueueStatus
   reported_at: string
   manager_name: string | null
@@ -159,12 +164,22 @@ function QueueRowItem({
   variant: Variant
   dotClass: string
 }) {
-  const cat = CATEGORIES.find((c) => c.key === row.category)
+  // Mig 007: fall back to AI's pending pick when HO hasn't confirmed.
+  // `isPending` drives a small AI badge so HO can scan for the
+  // unconfirmed ones at a glance.
+  const displayKey = (row.category ?? row.suggested_category) ?? null
+  const cat = displayKey
+    ? CATEGORIES.find((c) => c.key === displayKey)
+    : undefined
+  const isPending = !row.category && !!row.suggested_category
+  const isUnknown = !displayKey
   const isIncident = cat?.kind === "incident"
-  const catBadgeClass = isIncident
-    ? "bg-amber-50 text-amber-800 border-amber-200"
-    : "bg-slate-100 text-slate-700 border-slate-200"
-  const abbrev = cat?.acronym ?? row.category.slice(0, 3).toUpperCase()
+  const catBadgeClass = isUnknown
+    ? "bg-slate-50 text-slate-500 border-slate-200 border-dashed"
+    : isIncident
+      ? "bg-amber-50 text-amber-800 border-amber-200"
+      : "bg-slate-100 text-slate-700 border-slate-200"
+  const abbrev = cat?.acronym ?? (displayKey ? displayKey.slice(0, 3).toUpperCase() : "—")
   const hours = hoursSince(row.reported_at)
   const isBreached = variant === "approval" && hours >= SLA_HOURS
 
@@ -190,7 +205,13 @@ function QueueRowItem({
         {/* Category abbreviation badge */}
         <span
           className={`inline-flex h-9 w-11 items-center justify-center rounded-md border text-[11px] font-bold tracking-wide ${catBadgeClass}`}
-          title={cat?.label ?? row.category}
+          title={
+            isUnknown
+              ? "Awaiting AI / HO classification"
+              : isPending
+                ? `AI suggestion (pending HO confirm): ${cat?.label ?? displayKey}`
+                : cat?.label ?? displayKey ?? ""
+          }
         >
           {abbrev}
         </span>
@@ -202,8 +223,19 @@ function QueueRowItem({
               {row.id}
             </span>
             <span className="text-[13.5px] text-slate-900 font-medium truncate">
-              {row.headline?.trim() || cat?.label || row.category}
+              {row.headline?.trim() ||
+                cat?.label ||
+                displayKey ||
+                "Awaiting classification"}
             </span>
+            {isPending ? (
+              <span
+                className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700"
+                title="AI suggested — needs HO confirmation"
+              >
+                AI
+              </span>
+            ) : null}
             {variant === "pipeline" && <StatusPill status={row.status} />}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-slate-500 truncate">

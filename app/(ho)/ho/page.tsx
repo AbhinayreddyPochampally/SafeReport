@@ -214,7 +214,7 @@ async function fetchLandingDataImpl() {
     admin
       .from("reports")
       .select(
-        "id, store_code, category, status, reported_at, transcript, description, stores!inner(name, brand, manager_name)",
+        "id, store_code, category, suggested_category, status, reported_at, transcript, description, stores!inner(name, brand, manager_name)",
       )
       .in("status", ["new", "in_progress", "awaiting_ho", "returned"])
       .order("reported_at", { ascending: true })
@@ -252,7 +252,11 @@ async function fetchLandingDataImpl() {
   type RawReport = {
     id: string
     store_code: string
-    category: ReportCategory
+    // Mig 007: nullable until HO confirms. Velocity / today / coverage
+    // / trend computations ignore null-category rows; category-mix
+    // excludes them too. Only meaningful loss is during the transient
+    // window between AI suggest and HO confirm.
+    category: ReportCategory | null
     status: string
     reported_at: string
     acknowledged_at: string | null
@@ -333,6 +337,11 @@ async function fetchLandingDataImpl() {
   for (const r of past14d) {
     const ts = Date.parse(r.reported_at)
     if (!Number.isFinite(ts) || ts < dayStartMs) continue
+    // Mig 007: skip reports whose category hasn't been confirmed yet —
+    // the Today strip dot relies on a category to colour itself, and
+    // the strip is meant for at-a-glance triage signal. Pending rows
+    // show up in the Approval/Pipeline queues below instead.
+    if (!r.category) continue
     const def = CATEGORIES.find((c) => c.key === r.category)
     todayEvents.push({
       id: r.id,
@@ -367,6 +376,9 @@ async function fetchLandingDataImpl() {
   for (const r of past14d) {
     const ts = Date.parse(r.reported_at)
     if (!Number.isFinite(ts)) continue
+    // Mig 007: skip null-category rows from the mix. They land in the
+    // mix once HO confirms.
+    if (!r.category) continue
     const target = ts >= weekStartMs ? thisCounts : prevCounts
     target.set(r.category, (target.get(r.category) ?? 0) + 1)
   }
@@ -418,11 +430,14 @@ async function fetchLandingDataImpl() {
   }
   dailyMedians.sort((a, b) => a.date.localeCompare(b.date))
 
-  // -- Open queues (unchanged from prior rev) --
+  // -- Open queues (mig 007: nullable category + AI suggested_category
+  // pass-through so the queue rows can show "AI: <pick>" while HO
+  // hasn't confirmed yet). --
   const openRaw = (openRowsResp.data ?? []) as unknown as Array<{
     id: string
     store_code: string
-    category: ReportCategory
+    category: ReportCategory | null
+    suggested_category: ReportCategory | null
     status: QueueStatus
     reported_at: string
     transcript: string | null
@@ -439,6 +454,7 @@ async function fetchLandingDataImpl() {
       store_name: r.stores?.name ?? "—",
       brand: r.stores?.brand ?? "—",
       category: r.category,
+      suggested_category: r.suggested_category,
       status: r.status,
       reported_at: r.reported_at,
       manager_name: r.stores?.manager_name ?? null,

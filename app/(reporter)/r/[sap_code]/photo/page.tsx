@@ -2,27 +2,35 @@
 
 import { ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { PhotoCapture } from "@/components/photo-capture"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
-import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   getDraftBlobs,
   readDraft,
   setDraftPhoto,
+  writeDraft,
 } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
- * Screen 6 (Phase 3 facelift) — Photo.
+ * Screen 1 (post-landing) — Photo.
  *
  * One screen, one purpose: capture a photo of the incident or observation.
  * Photo is required to continue. Voice + text live on the next screen
- * (/describe).
+ * (/describe). Time-of-event moves to /when after /describe.
  *
  * The old single /evidence screen combined photo + voice + text into one
  * dense view that overwhelmed first-time reporters. Splitting it gives
  * each input its own breathing room.
+ *
+ * Migration 007:
+ *  - No category set yet — the reporter never picks one. The accent
+ *    tone is slate by default (no observation/incident split is known
+ *    until HO confirms the AI category later).
+ *  - /when was re-ordered to after /describe so the reporter narrates
+ *    the incident first, then recalls the time. /photo no longer
+ *    guards on event_at — it's the entry screen after the landing.
  */
 export default function PhotoPage({
   params,
@@ -32,32 +40,23 @@ export default function PhotoPage({
   const router = useRouter()
   const locale = useReporterLocale()
   const [checked, setChecked] = useState(false)
-  const [tone, setTone] = useState<"slate" | "amber">("slate")
-  const [categoryKey, setCategoryKey] = useState("")
   const [photo, setPhoto] = useState<Blob | null>(null)
 
   useEffect(() => {
-    // Phase 10: profile no longer gating; collected at /identity.
+    // /photo is the entry step after the landing. We initialise a
+    // fresh draft if one isn't already in this tab's sessionStorage
+    // (a reporter who lands here directly via a bookmark gets a clean
+    // draft rather than a redirect loop).
     const draft = readDraft()
-    if (!draft || draft.sap_code !== params.sap_code) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
+    if (draft && draft.sap_code === params.sap_code) {
+      const blobs = getDraftBlobs(draft.draftId)
+      if (blobs.photo) setPhoto(blobs.photo)
+    } else {
+      // Seed a draft so /photo onChange has somewhere to stash the
+      // photo blob. writeDraft accepts a sap_code-only patch and
+      // returns the new draft.
+      writeDraft({ sap_code: params.sap_code })
     }
-    if (!draft.category) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!draft.event_at) {
-      router.replace(`/r/${params.sap_code}/when`)
-      return
-    }
-    const cat = CATEGORIES.find((c) => c.key === draft.category)
-    if (cat) {
-      setTone(cat.kind === "observation" ? "slate" : "amber")
-      setCategoryKey(cat.key)
-    }
-    const blobs = getDraftBlobs(draft.draftId)
-    if (blobs.photo) setPhoto(blobs.photo)
     setChecked(true)
   }, [params.sap_code, router])
 
@@ -68,11 +67,6 @@ export default function PhotoPage({
   }, [photo])
 
   const canContinue = Boolean(photo)
-
-  const categoryLabel = useMemo(() => {
-    const cat = CATEGORIES.find((c) => c.key === categoryKey)
-    return cat ? labelFor(cat, locale) : ""
-  }, [categoryKey, locale])
 
   function onContinue() {
     if (!canContinue) return
@@ -87,20 +81,11 @@ export default function PhotoPage({
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
       <ReporterScreenHeader
         sap_code={params.sap_code}
-        backHref={`/r/${params.sap_code}/when`}
-        step={4}
+        backHref={`/r/${params.sap_code}`}
+        step={1}
       />
 
-      {categoryLabel && (
-        <p
-          className={`mt-5 text-[11px] font-bold uppercase tracking-wide ${
-            tone === "slate" ? "text-slate-600" : "text-amber-700"
-          }`}
-        >
-          {categoryLabel}
-        </p>
-      )}
-      <h1 className="mt-1 font-display text-[22px] font-bold leading-tight text-slate-900">
+      <h1 className="mt-5 font-display text-[22px] font-bold leading-tight text-slate-900">
         Add a photo
       </h1>
       {/* Mockup-verbatim sub copy per reporter_flow_v14 — replaces the
@@ -111,7 +96,7 @@ export default function PhotoPage({
       </p>
 
       <section className="mt-6">
-        <PhotoCapture value={photo} onChange={setPhoto} tone={tone} />
+        <PhotoCapture value={photo} onChange={setPhoto} tone="slate" />
       </section>
 
       <p className="mt-3 text-[12px] text-slate-500">

@@ -25,14 +25,15 @@ import { t, useReporterLocale } from "@/lib/reporter-i18n"
  *       ~375px. The wrapper from this module sets max-w-sm so the layout
  *       feels right at QR-poster scan width.
  *
- * Step numbering (1-7) maps to:
- *   1 — Triage           ("What are you reporting?")
- *   2 — Sub-category     ("What did you see?")
+ * Step numbering (1-5) maps to (mig 007 — AI now picks the category, so
+ * the prior Triage + Sub-category screens are gone and the flow is two
+ * steps shorter; also /when was re-ordered to AFTER /describe so the
+ * reporter narrates the incident first and recalls the time after):
+ *   1 — Photo            ("Add a photo")
+ *   2 — Describe         ("Tell us what happened")
  *   3 — When             ("When did this happen?")
- *   4 — Photo            ("Add a photo")
- *   5 — Describe         ("Tell us what happened")
- *   6 — Identity         ("Your name and number")
- *   7 — Review           ("Ready to submit?")
+ *   4 — Identity         ("Your name and number")
+ *   5 — Review           ("Ready to submit?")
  *
  * Welcome, Language, and Confirm don't show progress dots in the mockup —
  * pass `step={null}` (or omit) to hide the dots row.
@@ -42,12 +43,12 @@ import { t, useReporterLocale } from "@/lib/reporter-i18n"
  * Confirm where there's no meaningful back).
  */
 
-const TOTAL_STEPS = 7
+const TOTAL_STEPS = 5
 
 type Props = {
   sap_code: string
-  /** 1..7 = highlight the corresponding dot. null/undefined = no dots row. */
-  step?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | null
+  /** 1..5 = highlight the corresponding dot. null/undefined = no dots row. */
+  step?: 1 | 2 | 3 | 4 | 5 | null
   /** Back-button href. null = suppress the back row entirely. */
   backHref?: string | null
 }

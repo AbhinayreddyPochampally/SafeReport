@@ -10,7 +10,12 @@
 
 export type SubmitInput = {
   sap_code: string
-  category: string
+  /**
+   * Mig 007: reporter no longer picks a category. The AI classifier writes
+   * `suggested_category` post-submission and HO confirms on the
+   * report-detail page. The field is intentionally absent here — the API
+   * route accepts an insert with no category at all.
+   */
   event_at: string // ISO 8601
   reporter_name: string
   reporter_phone: string
@@ -40,7 +45,6 @@ function pickExt(mime: string, fallback: string): string {
 export async function submitReport(input: SubmitInput): Promise<SubmitResult> {
   const form = new FormData()
   form.append("sap_code", input.sap_code)
-  form.append("category", input.category)
   form.append("event_at", input.event_at)
   form.append("reporter_name", input.reporter_name)
   form.append("reporter_phone", input.reporter_phone)

@@ -124,6 +124,7 @@ export type StringKey =
   | "review.title"
   | "review.lede"
   | "review.row.category"
+  | "review.category_ai_note"
   | "review.row.when"
   | "review.row.added"
   | "review.row.you"
@@ -289,6 +290,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "review.title": "Ready to submit?",
     "review.lede": "Review and edit anything before sending.",
     "review.row.category": "Category",
+    "review.category_ai_note":
+      "Head Office will set the category after reviewing what you sent. You don't need to choose one.",
     "review.row.when": "When",
     "review.row.added": "What you added",
     "review.row.you": "You",
@@ -467,6 +470,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "review.title": "ಸಲ್ಲಿಸಲು ಸಿದ್ಧವೇ?",
     "review.lede": "ಕಳುಹಿಸುವ ಮೊದಲು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಯಾವುದನ್ನಾದರೂ ಬದಲಾಯಿಸಿ.",
     "review.row.category": "ವರ್ಗ",
+    "review.category_ai_note":
+      "ನೀವು ಕಳುಹಿಸಿದ್ದನ್ನು ಪರಿಶೀಲಿಸಿದ ನಂತರ ಮುಖ್ಯ ಕಚೇರಿ ವರ್ಗವನ್ನು ನಿಗದಿಗೊಳಿಸುತ್ತದೆ. ನೀವು ಆಯ್ಕೆ ಮಾಡುವ ಅಗತ್ಯವಿಲ್ಲ.",
     "review.row.when": "ಯಾವಾಗ",
     "review.row.added": "ನೀವು ಸೇರಿಸಿದ್ದು",
     "review.row.you": "ನೀವು",
@@ -644,6 +649,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "review.title": "जमा करने के लिए तैयार हैं?",
     "review.lede": "भेजने से पहले समीक्षा करें और कुछ भी बदलें।",
     "review.row.category": "श्रेणी",
+    "review.category_ai_note":
+      "आपने जो भेजा है उसे देखने के बाद हेड ऑफिस श्रेणी तय करेगा। आपको चुनने की ज़रूरत नहीं है।",
     "review.row.when": "कब",
     "review.row.added": "आपने जोड़ा",
     "review.row.you": "आप",
@@ -818,6 +825,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "review.title": "సమర్పించడానికి సిద్ధంగా ఉన్నారా?",
     "review.lede": "పంపే ముందు సమీక్షించండి మరియు ఏదైనా మార్చండి.",
     "review.row.category": "వర్గం",
+    "review.category_ai_note":
+      "మీరు పంపినదాన్ని సమీక్షించిన తర్వాత హెడ్ ఆఫీస్ వర్గాన్ని నిర్ణయిస్తుంది. మీరు ఎంచుకోవలసిన అవసరం లేదు.",
     "review.row.when": "ఎప్పుడు",
     "review.row.added": "మీరు జోడించినవి",
     "review.row.you": "మీరు",
@@ -998,6 +1007,8 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "review.title": "சமர்ப்பிக்கத் தயாரா?",
     "review.lede": "அனுப்பும் முன் மறுபரிசீலனை செய்து எதையும் திருத்தவும்.",
     "review.row.category": "வகை",
+    "review.category_ai_note":
+      "நீங்கள் அனுப்பியதை மறுபரிசீலனை செய்த பிறகு தலைமை அலுவலகம் வகையைத் தீர்மானிக்கும். நீங்கள் தேர்ந்தெடுக்க வேண்டிய அவசியமில்லை.",
     "review.row.when": "எப்போது",
     "review.row.added": "நீங்கள் சேர்த்தவை",
     "review.row.you": "நீங்கள்",

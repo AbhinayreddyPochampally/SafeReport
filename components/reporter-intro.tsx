@@ -65,6 +65,17 @@ export function ReporterIntro(_props: Props = {}) {
     } catch {
       // ignore — fall through to plain hide
     }
+    // Signal the landing underneath so it can transition its content
+    // (store card + lede + CTA) in smoothly rather than snapping into
+    // view the instant the overlay leaves. The landing listens for this
+    // event only on first-visit paint; returning reporters never see
+    // the intro and the listener never fires.
+    try {
+      window.dispatchEvent(new CustomEvent("sr:intro-dismissed"))
+    } catch {
+      // CustomEvent unavailable on truly ancient runtimes — landing
+      // falls back to its non-animated initial state.
+    }
     setVisible(false)
   }
 

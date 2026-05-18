@@ -7,7 +7,6 @@ import { getManagerSession } from "@/lib/manager-auth"
  *
  * Multipart body:
  *   sap_code           (text)
- *   category           (text — one of the 8 enums)
  *   event_at           (ISO 8601)
  *   reporter_name      (text)
  *   reporter_phone     (text)
@@ -17,29 +16,21 @@ import { getManagerSession } from "@/lib/manager-auth"
  *
  * On success: { id: "SR-000057", status: "new" }
  *
+ * Migration 007 (May 2026): the reporter no longer picks a category — the
+ * triage + sub-category screens were removed. The AI classifier (text-only
+ * gpt-4o-mini) runs after voice transcription completes and writes a
+ * suggested_category back to the row. HO confirms or corrects on the
+ * report-detail page. Photo-only / text-only reports (no voice) skip AI
+ * classification in this pilot iteration; HO picks the category manually
+ * via the dropdown.
+ *
  * Uses the service-role Supabase client (RLS bypass) to upload blobs to
- * Storage and insert the row — anon can't do either directly. Whisper
- * transcription is intentionally deferred to Phase E (fire-and-forget
- * from a separate endpoint).
+ * Storage and insert the row — anon can't do either directly. Transcription
+ * is fired and forgotten from this route; the classify step chains off
+ * the transcribe success path.
  */
 
 export const runtime = "nodejs"
-
-const OBSERVATION_KEYS = new Set<string>([
-  "near_miss",
-  "unsafe_act",
-  "unsafe_condition",
-])
-const ALL_CATEGORIES = new Set<string>([
-  "near_miss",
-  "unsafe_act",
-  "unsafe_condition",
-  "first_aid_case",
-  "medical_treatment_case",
-  "restricted_work_case",
-  "lost_time_injury",
-  "fatality",
-])
 
 const MAX_BLOB_BYTES = 10 * 1024 * 1024 // 10 MB
 const TEXT_MIN = 20
@@ -90,7 +81,6 @@ export async function POST(req: Request) {
 
   // --- extract + validate text fields ------------------------------------
   const sap_code = String(form.get("sap_code") ?? "").trim()
-  const category = String(form.get("category") ?? "").trim()
   const event_at_raw = String(form.get("event_at") ?? "").trim()
   const reporter_name = String(form.get("reporter_name") ?? "").trim()
   const reporter_phone = String(form.get("reporter_phone") ?? "").trim()
@@ -99,7 +89,6 @@ export async function POST(req: Request) {
     typeof description_raw === "string" ? description_raw.trim() : ""
 
   if (!sap_code) return fail("Missing sap_code.")
-  if (!ALL_CATEGORIES.has(category)) return fail("Invalid category.")
   if (reporter_name.length < 2) return fail("Reporter name is too short.")
   if (!PHONE_RE.test(reporter_phone)) return fail("Reporter phone is invalid.")
 
@@ -158,9 +147,8 @@ export async function POST(req: Request) {
     return fail("Store is not available for new reports.", 404)
   }
 
-  const type: "observation" | "incident" = OBSERVATION_KEYS.has(category)
-    ? "observation"
-    : "incident"
+  // Mig 007: type + category are derived at HO confirm-time from the AI's
+  // suggested_category (or HO's manual pick). Insert leaves both NULL.
 
   // --- upload photo -------------------------------------------------------
   const stamp = Date.now()
@@ -219,10 +207,12 @@ export async function POST(req: Request) {
   }
 
   // --- insert reports row -------------------------------------------------
+  // Mig 007: category + type are both NULL on insert. They get filled in
+  // when HO confirms the AI's classification (or picks a category manually
+  // for photo-only / text-only reports). See /api/ho-actions for the
+  // confirmation flow and lib/category-derive.ts for type derivation.
   const insert: Record<string, unknown> = {
     store_code: sap_code,
-    type,
-    category,
     reporter_name,
     reporter_phone,
     photo_url,
@@ -282,8 +272,8 @@ export async function POST(req: Request) {
       event: "new_report",
       report_id: inserted.id,
       sap_code,
-      category,
-      type,
+      // Mig 007: category / type are NULL at insert time. The dispatcher
+      // falls back to generic copy when these are missing.
     }),
   }).catch((err) => {
     console.warn("[api/reports] notification kickoff failed", {

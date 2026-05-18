@@ -3,14 +3,38 @@ import { NextRequest, NextResponse } from "next/server"
 import { revalidateTag } from "next/cache"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getHoSession } from "@/lib/ho-auth"
+import {
+  isSeverityFloor,
+  typeForCategory,
+} from "@/lib/category-derive"
+import type { ReportCategory } from "@/lib/reporter-state"
 
 /**
  * POST /api/ho-actions — HO decides on a report.
  *
- * Body shape: { report_id, action, comment? }
- *   action = "approve"  → report.status awaiting_ho  → closed
- *   action = "return"   → report.status awaiting_ho  → returned   (comment 10–300 required)
- *   action = "void"     → report.status *any*        → voided     (comment 20+ required, irreversible)
+ * Body shape: { report_id, action, comment?, category?, category_via? }
+ *   action = "approve"           → report.status awaiting_ho → closed
+ *   action = "return"            → report.status awaiting_ho → returned   (comment 10–300 required)
+ *   action = "void"              → report.status *any*       → voided     (comment 20+ required, irreversible)
+ *   action = "confirm_category"  → no status change; sets reports.category + .type + .category_source
+ *
+ * Mig 007 (AI classification, May 2026):
+ *   - Reports arrive with category=NULL, type=NULL. The AI classifier
+ *     (gpt-4o-mini, text-in) writes suggested_category + confidence
+ *     post-submission. HO confirms or overrides on the report-detail
+ *     page.
+ *   - The "approve" action requires that the report's category is set
+ *     by the time HO closes it. If the category is still null at
+ *     approve-time, the body MUST include category + category_via; we
+ *     set both atomically with the status flip. (Convenience for the
+ *     "confirm + approve" single-submit UX path.)
+ *   - Severity floor: if the final category is `lost_time_injury` or
+ *     `fatality`, category_via MUST be `"corrected"` — i.e. it came
+ *     from the explicit dropdown. The single-button "confirm AI's
+ *     pick" path (category_via='confirmed') is rejected for those two
+ *     categories. The asymmetry argument: under-counting a fatality
+ *     has legal / insurance consequences much larger than the cost of
+ *     a single extra dropdown click. See lib/category-derive.ts.
  *
  * For approve/return we ALSO resolve the latest resolution on the report and
  * stamp `ho_actions.resolution_id` so the audit trail pins the decision to the
@@ -28,16 +52,49 @@ import { getHoSession } from "@/lib/ho-auth"
 
 const REPORT_ID = /^SR-\d{6,}$/
 
-type ActionType = "approve" | "return" | "void"
+type ActionType = "approve" | "return" | "void" | "confirm_category"
+
+type CategoryVia = "confirmed" | "corrected"
 
 type Body = {
   report_id?: unknown
   action?: unknown
   comment?: unknown
+  category?: unknown
+  category_via?: unknown
 }
 
+const ALL_CATEGORIES = new Set<string>([
+  "near_miss",
+  "unsafe_act",
+  "unsafe_condition",
+  "first_aid_case",
+  "medical_treatment_case",
+  "restricted_work_case",
+  "lost_time_injury",
+  "fatality",
+])
+
 function parseAction(x: unknown): ActionType | null {
-  if (x === "approve" || x === "return" || x === "void") return x
+  if (
+    x === "approve" ||
+    x === "return" ||
+    x === "void" ||
+    x === "confirm_category"
+  ) {
+    return x
+  }
+  return null
+}
+
+function parseCategory(x: unknown): ReportCategory | null {
+  if (typeof x !== "string") return null
+  if (!ALL_CATEGORIES.has(x)) return null
+  return x as ReportCategory
+}
+
+function parseVia(x: unknown): CategoryVia | null {
+  if (x === "confirmed" || x === "corrected") return x
   return null
 }
 
@@ -53,13 +110,15 @@ export async function POST(req: NextRequest) {
   const action = parseAction(raw.action)
   const commentRaw =
     typeof raw.comment === "string" ? raw.comment.trim() : ""
+  const bodyCategory = parseCategory(raw.category)
+  const bodyVia = parseVia(raw.category_via)
 
   if (!REPORT_ID.test(report_id)) {
     return NextResponse.json({ error: "Invalid report id." }, { status: 400 })
   }
   if (!action) {
     return NextResponse.json(
-      { error: "action must be one of: approve, return, void." },
+      { error: "action must be one of: approve, return, void, confirm_category." },
       { status: 400 },
     )
   }
@@ -68,6 +127,7 @@ export async function POST(req: NextRequest) {
   //  - return: 10–300 chars, required
   //  - void:   20+ chars, required (no upper bound — audit reason is free-form)
   //  - approve: optional; if present, treated as an internal note
+  //  - confirm_category: no comment expected; ignored if provided
   if (action === "return") {
     if (commentRaw.length < 10 || commentRaw.length > 300) {
       return NextResponse.json(
@@ -85,6 +145,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // For category-bearing actions, validate the category fields up front.
+  if (action === "confirm_category") {
+    if (!bodyCategory) {
+      return NextResponse.json(
+        { error: "category is required for confirm_category." },
+        { status: 400 },
+      )
+    }
+    if (!bodyVia) {
+      return NextResponse.json(
+        { error: "category_via must be 'confirmed' or 'corrected'." },
+        { status: 400 },
+      )
+    }
+    // Severity floor: LTI / Fatality cannot use the single-button
+    // confirm path. Must come from the dropdown (`corrected`).
+    if (isSeverityFloor(bodyCategory) && bodyVia !== "corrected") {
+      return NextResponse.json(
+        {
+          error:
+            "High-severity categories (Fatality, Lost Time Injury) must be set via the dropdown.",
+        },
+        { status: 400 },
+      )
+    }
+  }
+
   const session = await getHoSession()
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 })
@@ -92,13 +179,19 @@ export async function POST(req: NextRequest) {
 
   const admin = createSupabaseAdminClient()
 
-  // Look up current status + latest resolution (if any). Latest-by-attempt is
-  // what HO reviews; the ho_action row is stamped against that resolution.
+  // Look up current state. We need category alongside status for the
+  // approve guard ("can't close without a category").
   const { data: report, error: repErr } = await admin
     .from("reports")
-    .select("id, status")
+    .select("id, status, category, category_source, suggested_category")
     .eq("id", report_id)
-    .maybeSingle<{ id: string; status: string }>()
+    .maybeSingle<{
+      id: string
+      status: string
+      category: string | null
+      category_source: string | null
+      suggested_category: string | null
+    }>()
 
   if (repErr) {
     console.error("[api/ho-actions] report lookup failed", {
@@ -111,6 +204,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Report not found." }, { status: 404 })
   }
 
+  // ----- Branch: confirm_category --------------------------------------
+  // Stamps category + type + category_source on the row WITHOUT touching
+  // the lifecycle status. Allowed at any non-terminal state.
+  if (action === "confirm_category") {
+    if (report.status === "voided") {
+      return NextResponse.json(
+        { error: "Cannot set category on a voided report." },
+        { status: 409 },
+      )
+    }
+    // bodyCategory + bodyVia were validated above.
+    const finalCategory = bodyCategory!
+    const finalVia = bodyVia!
+    const reportType = typeForCategory(finalCategory)
+    const sourceColumn =
+      finalVia === "confirmed" ? "ho-confirmed" : "ho-corrected"
+
+    const { error: catErr } = await admin
+      .from("reports")
+      .update({
+        category: finalCategory,
+        type: reportType,
+        category_source: sourceColumn,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", report_id)
+
+    if (catErr) {
+      console.error("[api/ho-actions] category update failed", {
+        report_id,
+        catErr,
+      })
+      return NextResponse.json({ error: "Update failed." }, { status: 500 })
+    }
+
+    revalidateTag("ho-overview-data")
+    revalidateTag("ho-sidebar-counts")
+    revalidateTag("ho-analytics")
+
+    return NextResponse.json({
+      ok: true,
+      report_id,
+      action,
+      category: finalCategory,
+      type: reportType,
+      category_source: sourceColumn,
+    })
+  }
+
+  // ----- Branch: approve / return / void -------------------------------
   // Status-transition guards. We treat a no-op attempt as an error (not
   // idempotent-ish) because this surface is user-driven and a confused state
   // should bubble up to the UI rather than silently succeed.
@@ -137,6 +280,40 @@ export async function POST(req: NextRequest) {
     // state per DESIGN.md (HO can void even after closing, for audit cleanup).
   }
 
+  // Mig 007: approve requires a category. If the row's category is still
+  // null, HO must have included it in this submit (the "confirm + approve
+  // in one click" path on the report-detail UI). Severity floor applies.
+  let approveCategoryPatch: {
+    category: ReportCategory
+    type: ReturnType<typeof typeForCategory>
+    category_source: "ho-confirmed" | "ho-corrected"
+  } | null = null
+  if (action === "approve" && !report.category) {
+    if (!bodyCategory || !bodyVia) {
+      return NextResponse.json(
+        {
+          error:
+            "Category must be confirmed before approving. Pick from the dropdown or click Confirm AI suggestion.",
+        },
+        { status: 400 },
+      )
+    }
+    if (isSeverityFloor(bodyCategory) && bodyVia !== "corrected") {
+      return NextResponse.json(
+        {
+          error:
+            "High-severity categories (Fatality, Lost Time Injury) must be set via the dropdown.",
+        },
+        { status: 400 },
+      )
+    }
+    approveCategoryPatch = {
+      category: bodyCategory,
+      type: typeForCategory(bodyCategory),
+      category_source: bodyVia === "confirmed" ? "ho-confirmed" : "ho-corrected",
+    }
+  }
+
   // Latest resolution — nullable for void on a NEW/IN_PROGRESS report.
   const { data: latestRes } = await admin
     .from("resolutions")
@@ -154,10 +331,22 @@ export async function POST(req: NextRequest) {
         : "voided"
 
   // 1) Flip the report status (guarded by `eq('status', old_status)` to defeat races).
+  //    On the "approve + bundle category" path, we patch category/type/source
+  //    in the same UPDATE so the audit semantics stay clean ("the same row
+  //    transition that closed the report also sealed the category").
   const oldStatus = report.status
+  const statusPatch: Record<string, unknown> = {
+    status: nextStatus,
+    updated_at: new Date().toISOString(),
+  }
+  if (approveCategoryPatch) {
+    statusPatch.category = approveCategoryPatch.category
+    statusPatch.type = approveCategoryPatch.type
+    statusPatch.category_source = approveCategoryPatch.category_source
+  }
   const { error: updErr } = await admin
     .from("reports")
-    .update({ status: nextStatus, updated_at: new Date().toISOString() })
+    .update(statusPatch)
     .eq("id", report_id)
     .eq("status", oldStatus)
   if (updErr) {

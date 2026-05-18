@@ -110,7 +110,7 @@ export default async function AllReportsPage({
   let query = admin
     .from("reports")
     .select(
-      "id, store_code, category, status, reported_at, transcript, description, stores!inner(name, brand)",
+      "id, store_code, category, suggested_category, status, reported_at, transcript, description, stores!inner(name, brand)",
       { count: "exact" },
     )
     .in("status", statusesFor(statusFilter))
@@ -163,7 +163,11 @@ export default async function AllReportsPage({
       store_code: r.store_code as string,
       store_name: s?.name ?? "—",
       brand: s?.brand ?? "—",
-      category: r.category as ReportCategory,
+      // Mig 007: nullable until HO confirms. The Reports table falls
+      // back to suggested_category for display when category is null.
+      category: r.category as ReportCategory | null,
+      suggested_category: (r as { suggested_category?: ReportCategory | null })
+        .suggested_category ?? null,
       status: r.status as ReportStatus,
       reported_at: r.reported_at as string,
       headline,

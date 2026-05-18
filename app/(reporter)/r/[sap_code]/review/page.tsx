@@ -1,11 +1,10 @@
 "use client"
 
-import { CheckCircle2, Mic, Pencil } from "lucide-react"
+import { CheckCircle2, Mic, Pencil, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
-import { CATEGORIES, labelFor } from "@/lib/categories"
 import {
   clearDraft,
   getDraftBlobs,
@@ -72,15 +71,7 @@ export default function ReviewPage({
     }
     const d = readDraft()
     if (!d || d.sap_code !== params.sap_code) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!d.category) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!d.event_at) {
-      router.replace(`/r/${params.sap_code}/when`)
+      router.replace(`/r/${params.sap_code}/photo`)
       return
     }
 
@@ -95,6 +86,11 @@ export default function ReviewPage({
     if (!blobs.audio && !d.description_text) {
       // Voice OR text required (Phase 3). Send to /describe.
       router.replace(`/r/${params.sap_code}/describe`)
+      return
+    }
+    if (!d.event_at) {
+      // Mig 007 follow-up: /when is now after /describe.
+      router.replace(`/r/${params.sap_code}/when`)
       return
     }
 
@@ -115,21 +111,13 @@ export default function ReviewPage({
     }
   }, [photoUrl, audioUrl])
 
-  const category = useMemo(
-    () => CATEGORIES.find((c) => c.key === draft?.category) ?? null,
-    [draft],
-  )
-  const tone: "slate" | "amber" =
-    category?.kind === "incident" ? "amber" : "slate"
-
   async function onSubmit() {
-    if (!draft || !profile || !photo || !draft.category || !draft.event_at) return
+    if (!draft || !profile || !photo || !draft.event_at) return
     setSubmitting(true)
     setError(null)
     try {
       const result = await submitReport({
         sap_code: draft.sap_code,
-        category: draft.category,
         event_at: draft.event_at,
         reporter_name: profile.name,
         reporter_phone: profile.phone,
@@ -148,11 +136,10 @@ export default function ReviewPage({
     }
   }
 
-  if (!checked || !draft || !profile || !category) {
+  if (!checked || !draft || !profile) {
     return <main className="min-h-screen bg-slate-50" aria-hidden />
   }
 
-  const CategoryIcon = category.icon
   const audioDurationLabel = audio ? approxAudioLabel(audio) : null
 
   return (
@@ -160,7 +147,7 @@ export default function ReviewPage({
       <ReporterScreenHeader
         sap_code={params.sap_code}
         backHref={`/r/${params.sap_code}/identity`}
-        step={7}
+        step={5}
       />
 
       <h1 className="mt-5 font-display text-[22px] font-bold leading-tight text-slate-900">
@@ -191,29 +178,27 @@ export default function ReviewPage({
           </Link>
         </div>
 
-        {/* Category */}
-        <Row
-          label={t(locale, "review.row.category")}
-          editLabel={t(locale, "common.edit")}
-          editHref={`/r/${params.sap_code}/category`}
-          body={
-            <span
-              className={`inline-flex items-center gap-2 text-[14px] font-medium ${
-                tone === "slate" ? "text-slate-700" : "text-amber-700"
-              }`}
-            >
-              <CategoryIcon
-                className="h-4 w-4"
-                strokeWidth={1.8}
-                aria-hidden
-              />
-              {labelFor(category, locale)}
-              {category.acronym ? (
-                <span className="text-slate-400">· {category.acronym}</span>
-              ) : null}
-            </span>
-          }
-        />
+        {/* Category — Mig 007: reporter doesn't pick. The AI classifier
+            runs after submission and HO confirms on review. Microcopy
+            here sets that expectation so reporters who used the previous
+            flow don't wonder where the triage screen went. */}
+        <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">
+          <span className="mt-0.5 inline-flex h-7 w-7 flex-none items-center justify-center rounded-full bg-indigo-50">
+            <Sparkles
+              className="h-3.5 w-3.5 text-indigo-700"
+              strokeWidth={1.8}
+              aria-hidden
+            />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              {t(locale, "review.row.category")}
+            </p>
+            <p className="text-[13px] leading-5 text-slate-700">
+              {t(locale, "review.category_ai_note")}
+            </p>
+          </div>
+        </div>
 
         <Row
           label={t(locale, "review.row.when")}

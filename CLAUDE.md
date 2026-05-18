@@ -59,13 +59,14 @@ something the doc doesn't describe, write the doc *first*.
 ```
 app/
   (reporter)/r/[sap_code]/
-    page.tsx              # screen 1 — landing (name + phone + locale toggle)
-    category/page.tsx     # screen 2 — observation/incident triage
-    category/[kind]/page.tsx  # screen 3 — sub-category grid
-    when/page.tsx         # screen 4 — APPLE WHEEL PICKER (see §Wheel picker spec)
-    evidence/page.tsx     # screen 5 — photo (required) + voice/text
-    review/page.tsx       # screen 6 — review + submit
+    page.tsx              # landing — intro cinematic + store card + "Is this your store?" confirm
+    photo/page.tsx        # step 1 — photo (required)
+    describe/page.tsx     # step 2 — voice OR text
+    when/page.tsx         # step 3 — APPLE WHEEL PICKER (see §Wheel picker spec)
+    identity/page.tsx     # step 4 — name + phone
+    review/page.tsx       # step 5 — review + submit
     confirm/[report_id]/page.tsx   # confirmation
+    # /category and /category/[kind] are redirect stubs — see §AI category classification
 
   (manager)/m/[sap_code]/
     page.tsx              # email+phone login OR inbox (depending on cookie)
@@ -453,6 +454,80 @@ icons) and `public/apple-touch-icon.png` (180×180; iOS reads this from
 `python3 scripts/gen_icons.py` — DejaVu Sans Bold for the SR monogram,
 since IBM Plex isn't on the build env and the launcher tile doesn't
 inherit the runtime font.
+
+---
+
+## AI category classification (mig 007)
+
+The reporter no longer picks a category. After every submission with a voice
+note, `/api/classify` (text-only `gpt-4o-mini`) reads the English transcript
+produced by `/api/transcribe` Stage B and writes a `suggested_category` +
+`confidence` (0..100) back to the row. HO confirms or overrides on the
+report-detail page; the row's `category` column stays NULL until HO seals it.
+
+### Pilot scope
+
+- **Voice-only.** The classifier consumes the English transcript only — no
+  image input. Reports without a voice note (photo-only or text-only) skip
+  AI classification; HO picks the category manually via the dropdown.
+- **Live, not batched.** Fired fire-and-forget from `/api/transcribe` on
+  Stage B success. Idempotent — re-triggering on a row whose
+  `suggested_category` is already set returns 200 with `skipped: true`.
+- **No retroactive backfill.** The 8 categories are unchanged.
+
+### Schema (mig 007)
+
+Three new columns on `reports`:
+
+- `suggested_category` (`report_category`, nullable) — AI's pick
+- `confidence` (`smallint` 0..100, nullable) — AI confidence
+- `category_source` — enum `'ai' | 'ho-confirmed' | 'ho-corrected'`
+
+`reports.category` and `reports.type` are now nullable. They stay NULL on
+insert and get filled by HO via `/api/ho-actions` (either via the new
+`confirm_category` action or as a side-effect of approve when the row
+is still un-sealed).
+
+### HO confirmation flow
+
+On `/ho/reports/[report_id]`, when the row is still un-sealed (`category_source`
+is null or `'ai'`), a "Category — needs your confirmation" block renders:
+
+- AI's suggestion + confidence
+- "Confirm AI suggestion" single-button (turquoise) → writes
+  `category_source='ho-confirmed'`
+- Dropdown of all 8 categories → writes `category_source='ho-corrected'`
+  (or `'ho-confirmed'` if the user happened to land on the AI's pick)
+
+Approve & close on `awaiting_ho` is **gated** on a confirmed category —
+disabled with an amber explanatory strip until HO seals it.
+
+### Severity floor — hard rule
+
+When the AI's pick is `lost_time_injury` or `fatality`, the single-button
+"Confirm AI suggestion" is **disabled**. An inline note explains:
+"High-severity category — confirm via the dropdown so the audit trail
+records an explicit click." The dropdown is the only path for those two.
+
+The rule is enforced server-side too: `/api/ho-actions` rejects any
+`confirm_category` (or bundled `approve`) where the final category is
+LTI / Fatality and `category_via !== 'corrected'`. The asymmetry
+argument: under-counting a fatality has Factories Act / DGFASLI /
+insurance consequences much larger than the cost of a single extra
+dropdown click.
+
+Rationale and the full numbers live in `SafeReport_AI_Classification.md`.
+
+### Downstream surface contract
+
+Every HO queue / table that renders a category falls back to
+`suggested_category` for display when `category` is null, and surfaces a
+small "AI" pill so HO can spot the un-sealed rows at a glance. Overview
+velocity / coverage / category-mix rollups skip null-category rows.
+
+Manager surface is unaffected — the manager never sees the category
+block (no actions to take), and read-only category renders fall back
+the same way.
 
 ---
 

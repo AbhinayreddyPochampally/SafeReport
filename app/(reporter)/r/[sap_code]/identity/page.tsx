@@ -38,14 +38,12 @@ export default function IdentityPage({
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    // Make sure prior steps were completed; otherwise route back.
+    // Make sure prior steps were completed; otherwise route back. Mig 007:
+    // category is no longer a reporter input, so it isn't gated here.
+    // Flow ordering: photo → describe → when → THIS (identity) → review.
     const draft = readDraft()
     if (!draft || draft.sap_code !== params.sap_code) {
-      router.replace(`/r/${params.sap_code}/category`)
-      return
-    }
-    if (!draft.category) {
-      router.replace(`/r/${params.sap_code}/category`)
+      router.replace(`/r/${params.sap_code}/photo`)
       return
     }
     if (!draft.event_at) {
@@ -85,8 +83,8 @@ export default function IdentityPage({
     <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
       <ReporterScreenHeader
         sap_code={params.sap_code}
-        backHref={`/r/${params.sap_code}/describe`}
-        step={6}
+        backHref={`/r/${params.sap_code}/when`}
+        step={4}
       />
 
       <h1 className="mt-5 font-display text-[22px] font-bold leading-tight text-slate-900">

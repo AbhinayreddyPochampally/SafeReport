@@ -50,8 +50,9 @@ export type ActionListItem = {
   store_code: string
   store_name: string
   brand: string
-  type: "observation" | "incident"
-  category: string
+  // Mig 007: nullable until HO confirms.
+  type: "observation" | "incident" | null
+  category: string | null
   status: "new" | "in_progress" | "awaiting_ho" | "returned" | "closed" | "voided"
   reported_at: string
   acknowledged_at: string | null
@@ -87,8 +88,9 @@ export type ActionDetail = {
     city: string
     state: string
   }
-  type: "observation" | "incident"
-  category: string
+  // Mig 007: nullable until HO confirms.
+  type: "observation" | "incident" | null
+  category: string | null
   status: ActionListItem["status"]
   description: string | null
   transcript: string | null
@@ -718,7 +720,7 @@ function DetailPane({
                 : "bg-slate-100 text-slate-700 border-slate-200"
             }`}
           >
-            {cat?.label ?? detail.category}
+            {cat?.label ?? detail.category ?? "Category pending"}
           </span>
           <span className="text-[12.5px] text-slate-600">
             {detail.store.sap_code} · {detail.store.name} · {detail.store.city}
@@ -1103,7 +1105,11 @@ function ReasonModal({
 
 /* ----------------------------- Helpers ------------------------------------ */
 
-function categoryLabel(key: string): string {
+function categoryLabel(key: string | null | undefined): string {
+  // Mig 007: a report can sit in the Action queue with a NULL category
+  // (AI hasn't classified yet, or HO hasn't confirmed). Show a stable
+  // "Pending" label rather than the raw word "null".
+  if (!key) return "Pending classification"
   return CATEGORIES.find((c) => c.key === key)?.label ?? key
 }
 

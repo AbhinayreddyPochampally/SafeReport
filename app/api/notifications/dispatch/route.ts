@@ -108,11 +108,24 @@ export async function POST(req: NextRequest) {
       // so the manager can triage urgency at the lock-screen glance.
       // Fatality is special-cased — its category label IS "Someone died"
       // and the title format becomes "Incident reported — Someone died".
-      const cat = label(body.category)
-      const titleVerb =
-        body.type === "incident" ? "Incident reported" : "Safety observation"
+      //
+      // Mig 007: at insert time the reporter no longer picks a category,
+      // so body.category / body.type are usually missing on this hop.
+      // The title falls back to the generic "New safety report" until
+      // HO confirms the AI classification — at which point a separate
+      // path (TBD) could re-notify with the resolved label. Pilot
+      // accepts the generic title for now.
+      let title: string
+      if (body.type === "incident" || body.type === "observation") {
+        const cat = label(body.category)
+        const titleVerb =
+          body.type === "incident" ? "Incident reported" : "Safety observation"
+        title = `${titleVerb} — ${cat}`
+      } else {
+        title = "New safety report"
+      }
       const payload = {
-        title: `${titleVerb} — ${cat}`,
+        title,
         body: "just now",
         url: `/m/${sapCode}/r/${body.report_id}`,
         tag: `report-${body.report_id}`,

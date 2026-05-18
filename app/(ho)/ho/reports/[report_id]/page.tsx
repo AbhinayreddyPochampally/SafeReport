@@ -28,8 +28,18 @@ type Store = {
 type Report = {
   id: string
   store_code: string
-  type: "observation" | "incident"
-  category: string
+  // Mig 007: type + category are nullable until HO confirms the AI
+  // category on this page. The detail UI surfaces the pending state.
+  type: "observation" | "incident" | null
+  category: string | null
+  /** AI's pick — gpt-4o-mini text-in classifier. Null when no voice
+   * note was attached (photo-only / text-only reports) or when the
+   * classifier failed. */
+  suggested_category: string | null
+  /** AI confidence 0..100. Null whenever suggested_category is null. */
+  confidence: number | null
+  /** 'ai' before HO confirms; 'ho-confirmed' / 'ho-corrected' after. */
+  category_source: "ai" | "ho-confirmed" | "ho-corrected" | null
   status:
     | "new"
     | "in_progress"
@@ -93,7 +103,7 @@ export default async function HoReportDetailPage({
   const { data: reportRow, error: repErr } = await admin
     .from("reports")
     .select(
-      "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
+      "id, store_code, type, category, suggested_category, confidence, category_source, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
     )
     .eq("id", params.report_id)
     .maybeSingle()
@@ -126,7 +136,10 @@ export default async function HoReportDetailPage({
     id: reportRow.id as string,
     store_code: reportRow.store_code as string,
     type: reportRow.type as Report["type"],
-    category: reportRow.category as string,
+    category: reportRow.category as string | null,
+    suggested_category: reportRow.suggested_category as string | null,
+    confidence: reportRow.confidence as number | null,
+    category_source: reportRow.category_source as Report["category_source"],
     status: reportRow.status as Report["status"],
     description: reportRow.description as string | null,
     transcript: reportRow.transcript as string | null,

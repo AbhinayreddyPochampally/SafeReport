@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Ban,
   Check,
+  ChevronDown,
   Gauge,
   ImageOff,
   Image as ImageIcon,
@@ -15,6 +16,7 @@ import {
   Play,
   Phone,
   RotateCcw,
+  Sparkles,
   User,
   X,
 } from "lucide-react"
@@ -29,6 +31,8 @@ import {
   type FormEvent,
 } from "react"
 import { CATEGORIES } from "@/lib/categories"
+import { isSeverityFloor } from "@/lib/category-derive"
+import type { ReportCategory } from "@/lib/reporter-state"
 
 const FULL_VIEW_SHORTCUT_HINT =
   "J / K navigate · A approve · R return · V void · Esc back"
@@ -62,8 +66,12 @@ type Store = {
 type Report = {
   id: string
   store_code: string
-  type: "observation" | "incident"
-  category: string
+  // Mig 007: type + category are nullable until HO confirms.
+  type: "observation" | "incident" | null
+  category: string | null
+  suggested_category: string | null
+  confidence: number | null
+  category_source: "ai" | "ho-confirmed" | "ho-corrected" | null
   status:
     | "new"
     | "in_progress"
@@ -149,7 +157,17 @@ export function HoReportDetail({
   const [voidOpen, setVoidOpen] = useState(false)
 
   const cat = CATEGORIES.find((c) => c.key === report.category)
+  const suggestedCat = CATEGORIES.find(
+    (c) => c.key === report.suggested_category,
+  )
+  // Tone defaults to slate when there's no category yet (observation
+  // styling — the safer default until HO confirms incident).
   const tone: "slate" | "amber" = report.type === "incident" ? "amber" : "slate"
+  // The category section is interactive whenever HO hasn't sealed a
+  // category yet (category_source is null or 'ai'). Once it's
+  // ho-confirmed / ho-corrected the row reads as final.
+  const categoryNeedsHo =
+    !report.category || report.category_source === "ai"
 
   // Keyboard shortcuts on the full-page view.
   //   J / ArrowUp   → previous report in the sibling list (if ?sibs= present)
@@ -198,7 +216,11 @@ export function HoReportDetail({
         return
       }
 
-      if (key === "a" && report.status === "awaiting_ho") {
+      if (
+        key === "a" &&
+        report.status === "awaiting_ho" &&
+        !categoryNeedsHo
+      ) {
         e.preventDefault()
         void submitAction("approve")
       } else if (key === "r" && report.status === "awaiting_ho") {
@@ -230,6 +252,7 @@ export function HoReportDetail({
     siblingIds,
     currentSiblingIndex,
     searchParams,
+    categoryNeedsHo,
   ])
 
   async function submitAction(
@@ -309,20 +332,47 @@ export function HoReportDetail({
         </div>
         <h1
           className={`mt-2 font-display text-2xl font-bold leading-8 ${
-            tone === "slate" ? "text-slate-900" : "text-amber-900"
+            cat ? (tone === "slate" ? "text-slate-900" : "text-amber-900") : "text-slate-900"
           }`}
         >
-          {cat?.label ?? report.category}
-          {cat?.acronym ? (
-            <span className="ml-1 text-base font-semibold text-slate-400">
-              ({cat.acronym})
-            </span>
-          ) : null}
+          {cat ? (
+            <>
+              {cat.label}
+              {cat.acronym ? (
+                <span className="ml-1 text-base font-semibold text-slate-400">
+                  ({cat.acronym})
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-slate-700">Category pending review</span>
+          )}
         </h1>
         {cat?.blurb ? (
           <p className="mt-1 text-sm leading-5 text-slate-600">{cat.blurb}</p>
-        ) : null}
+        ) : (
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            Confirm the category below before approving the resolution.
+          </p>
+        )}
       </div>
+
+      {/* Category block — Mig 007. Shows whenever HO still owes a
+          confirmation. Once the category is sealed (ho-confirmed /
+          ho-corrected) it disappears and the page header carries the
+          final label. */}
+      {categoryNeedsHo ? (
+        <CategoryBlock
+          report={report}
+          suggestedCat={suggestedCat}
+          onUpdate={(patch) =>
+            setReport((prev) => ({
+              ...prev,
+              ...patch,
+            }))
+          }
+        />
+      ) : null}
 
       {/* Before / After comparison ---------------------------------------- */}
       {/* Two cards side-by-side on md+ screens, stacked on mobile. The left
@@ -515,11 +565,17 @@ export function HoReportDetail({
               </span>
               . Your decision is recorded in the audit trail.
             </p>
+            {categoryNeedsHo ? (
+              <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Confirm the category above before approving — every closed
+                report needs a final category for the audit trail.
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => submitAction("approve")}
-                disabled={busy !== null}
+                disabled={busy !== null || categoryNeedsHo}
                 className="inline-flex items-center gap-2 rounded-md bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium px-4 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {busy === "approve" ? (
@@ -1259,4 +1315,247 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(s / 60)
   const r = s % 60
   return `${m}:${r.toString().padStart(2, "0")}`
+}
+
+/* -------------------------- Category block (Mig 007) -------------------- */
+
+type CategoryDefT = (typeof CATEGORIES)[number]
+
+/**
+ * AI-category block. Shown whenever HO hasn't sealed a category yet.
+ *
+ * Three states:
+ *   1. AI suggestion present, NOT severity-floor (e.g. AI picked
+ *      first_aid_case at 82%):
+ *        - "Confirm category" single-button approve (turquoise) →
+ *          confirm_category with via='confirmed'
+ *        - Dropdown selector with all 8 options → confirm_category
+ *          with via='corrected' if user picks something different,
+ *          via='confirmed' if they pick the same one as AI
+ *
+ *   2. AI suggestion present, IS severity-floor (AI picked LTI or
+ *      Fatality):
+ *        - Single-button confirm is disabled with an inline
+ *          explanatory note ("High-severity category — confirm via
+ *          the dropdown so the audit trail records an explicit click")
+ *        - Dropdown is the only path. Selecting LTI / Fatality via the
+ *          dropdown is always categorised as 'corrected' regardless of
+ *          whether it matches AI, because the rule cares about the
+ *          UI path taken, not the agreement.
+ *
+ *   3. No AI suggestion (suggested_category is null — usually means
+ *      the report has no voice note or the classifier failed):
+ *        - No "Confirm" button, no AI line
+ *        - Dropdown is the only path; selecting any value is
+ *          'corrected' (there's no AI pick to confirm)
+ */
+function CategoryBlock({
+  report,
+  suggestedCat,
+  onUpdate,
+}: {
+  report: Report
+  suggestedCat: CategoryDefT | undefined
+  onUpdate: (patch: Partial<Report>) => void
+}) {
+  const [picked, setPicked] = useState<ReportCategory | "">(
+    (suggestedCat?.key as ReportCategory) ?? "",
+  )
+  const [busy, setBusy] = useState<null | "confirm" | "apply">(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const aiBlocked = suggestedCat ? isSeverityFloor(suggestedCat.key) : false
+  const pickIsFloor =
+    picked && isSeverityFloor(picked as ReportCategory)
+  const pickedIsSameAsAi = suggestedCat?.key === picked
+
+  async function send(category: ReportCategory, via: "confirmed" | "corrected") {
+    setBusy(via === "confirmed" ? "confirm" : "apply")
+    setErr(null)
+    try {
+      const res = await fetch("/api/ho-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_id: report.id,
+          action: "confirm_category",
+          category,
+          category_via: via,
+        }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        ok?: boolean
+        category?: ReportCategory
+        type?: "observation" | "incident"
+        category_source?: Report["category_source"]
+        error?: string
+      } | null
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error || `HTTP ${res.status}`)
+      }
+      onUpdate({
+        category: body.category ?? category,
+        type: body.type ?? null,
+        category_source: body.category_source ?? null,
+      })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't set the category.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  function onConfirmAi() {
+    if (!suggestedCat || aiBlocked) return
+    void send(suggestedCat.key, "confirmed")
+  }
+
+  function onApply() {
+    if (!picked) return
+    // Selecting via the dropdown is 'corrected' unless the user
+    // happened to land on the AI's pick — in which case we record it
+    // as 'confirmed' so the audit trail still says "HO agreed".
+    // EXCEPTION: severity-floor picks are always 'corrected' because
+    // the rule cares about the UI path, not agreement.
+    const via: "confirmed" | "corrected" =
+      pickedIsSameAsAi && !pickIsFloor ? "confirmed" : "corrected"
+    void send(picked as ReportCategory, via)
+  }
+
+  return (
+    <section
+      className="mt-5 overflow-hidden rounded-xl border border-indigo-200 bg-indigo-50/40"
+      aria-label="Confirm report category"
+    >
+      <header className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-4 py-2.5">
+        <Sparkles className="h-3.5 w-3.5 text-indigo-700" aria-hidden />
+        <h2 className="text-[11px] font-bold uppercase tracking-wide text-indigo-800">
+          Category — needs your confirmation
+        </h2>
+      </header>
+
+      <div className="space-y-3 px-4 py-3">
+        {/* AI suggestion line */}
+        {suggestedCat ? (
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-indigo-200">
+              <suggestedCat.icon
+                className="h-3.5 w-3.5 text-indigo-700"
+                strokeWidth={1.8}
+                aria-hidden
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                AI suggested
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-slate-900">
+                {suggestedCat.label}
+                {suggestedCat.acronym ? (
+                  <span className="ml-1 text-slate-500">
+                    ({suggestedCat.acronym})
+                  </span>
+                ) : null}
+                {report.confidence !== null ? (
+                  <span className="ml-2 text-xs font-normal text-slate-500">
+                    · {report.confidence}% confidence
+                  </span>
+                ) : null}
+              </p>
+              {suggestedCat.blurb ? (
+                <p className="mt-0.5 text-xs leading-5 text-slate-600">
+                  {suggestedCat.blurb}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-700">
+            No AI suggestion available for this report — pick the
+            category from the dropdown below.
+          </p>
+        )}
+
+        {/* Severity floor inline note (only when AI's pick is LTI /
+            Fatality — the case where the single-button confirm is
+            disabled). */}
+        {suggestedCat && aiBlocked ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            High-severity category — confirm via the dropdown so the audit
+            trail records an explicit click.
+          </p>
+        ) : null}
+
+        {/* Single-button confirm — only available when there's an AI
+            suggestion and the suggestion is not severity-floor. */}
+        {suggestedCat && !aiBlocked ? (
+          <button
+            type="button"
+            onClick={onConfirmAi}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-2 rounded-md bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium px-3.5 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            {busy === "confirm" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            Confirm AI suggestion
+          </button>
+        ) : null}
+
+        {/* Dropdown override. Always visible — the only path for
+            severity-floor cases or when there's no AI suggestion. */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Or pick a different category
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-stretch gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <select
+                value={picked}
+                onChange={(e) =>
+                  setPicked(e.target.value as ReportCategory | "")
+                }
+                disabled={busy !== null}
+                className="block w-full appearance-none rounded-md border border-slate-300 bg-white pl-3 pr-8 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-60"
+              >
+                <option value="">Select a category…</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                    {c.acronym ? ` (${c.acronym})` : ""}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+            </div>
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={busy !== null || !picked}
+              className="inline-flex items-center gap-2 rounded-md border border-indigo-700 bg-white hover:bg-indigo-50 text-indigo-700 font-medium px-3.5 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {busy === "apply" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              Set category
+            </button>
+          </div>
+        </div>
+
+        {err ? (
+          <p
+            role="alert"
+            className="rounded-md bg-orange-50 border border-orange-200 px-3 py-2 text-sm text-orange-700"
+          >
+            {err}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  )
 }

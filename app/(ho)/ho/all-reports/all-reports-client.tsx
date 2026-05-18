@@ -51,7 +51,10 @@ export type AllReportsRow = {
   store_code: string
   store_name: string
   brand: string
-  category: ReportCategory
+  // Mig 007: nullable until HO confirms. Table renderer falls back to
+  // suggested_category for display (with an "AI" pill).
+  category: ReportCategory | null
+  suggested_category?: ReportCategory | null
   status: ReportStatus
   reported_at: string
   headline: string | null
@@ -66,8 +69,8 @@ export type ReportDetail = {
     city: string
     state: string
   }
-  type: "observation" | "incident"
-  category: string
+  type: "observation" | "incident" | null
+  category: string | null
   status: ReportStatus
   description: string | null
   transcript: string | null
@@ -1152,11 +1155,17 @@ function ReportRowImpl({
   // a per-row closure) is what makes React.memo actually save renders here.
   onSelect: (id: string) => void
 }) {
-  const cat = CATEGORY_BY_KEY.get(row.category)
+  // Mig 007: fall back to AI's pending pick when HO hasn't sealed
+  // category. The "AI" pill renders next to the acronym.
+  const displayKey = (row.category ?? row.suggested_category) ?? null
+  const cat = displayKey ? CATEGORY_BY_KEY.get(displayKey) : undefined
+  const isPending = !row.category && !!row.suggested_category
   const isIncident = cat?.kind === "incident"
-  const catTone = isIncident
-    ? "bg-amber-50 text-amber-800 border-amber-200"
-    : "bg-slate-100 text-slate-700 border-slate-200"
+  const catTone = !displayKey
+    ? "bg-slate-50 text-slate-500 border-slate-200 border-dashed"
+    : isIncident
+      ? "bg-amber-50 text-amber-800 border-amber-200"
+      : "bg-slate-100 text-slate-700 border-slate-200"
 
   return (
     <tr
@@ -1178,10 +1187,24 @@ function ReportRowImpl({
       <td className="py-3">
         <span
           className={`inline-flex items-center justify-center w-9 h-7 rounded-md border text-[10.5px] font-bold ${catTone}`}
-          title={cat?.label ?? row.category}
+          title={
+            !displayKey
+              ? "Awaiting AI / HO classification"
+              : isPending
+                ? `AI suggestion (pending HO confirm): ${cat?.label ?? displayKey}`
+                : cat?.label ?? displayKey
+          }
         >
-          {cat?.acronym ?? row.category.slice(0, 3).toUpperCase()}
+          {cat?.acronym ?? (displayKey ? displayKey.slice(0, 3).toUpperCase() : "—")}
         </span>
+        {isPending ? (
+          <span
+            className="ml-1 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-indigo-700 align-middle"
+            title="AI suggested — needs HO confirmation"
+          >
+            AI
+          </span>
+        ) : null}
       </td>
       <td className="py-3">
         <div className="font-mono text-[12px] text-slate-600">
@@ -1229,7 +1252,9 @@ function CompactRowImpl({
   // Stable callback that receives the row id.
   onSelect: (id: string) => void
 }) {
-  const cat = CATEGORY_BY_KEY.get(row.category)
+  const displayKey = (row.category ?? row.suggested_category) ?? null
+  const cat = displayKey ? CATEGORY_BY_KEY.get(displayKey) : undefined
+  const isPending = !row.category && !!row.suggested_category
   const isIncident = cat?.kind === "incident"
   return (
     <button
@@ -1252,13 +1277,23 @@ function CompactRowImpl({
       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
         <span
           className={`inline-flex items-center justify-center px-1.5 h-4 rounded text-[9.5px] font-bold border ${
-            isIncident
-              ? "bg-amber-50 text-amber-800 border-amber-200"
-              : "bg-slate-100 text-slate-700 border-slate-200"
+            !displayKey
+              ? "bg-slate-50 text-slate-500 border-slate-200 border-dashed"
+              : isIncident
+                ? "bg-amber-50 text-amber-800 border-amber-200"
+                : "bg-slate-100 text-slate-700 border-slate-200"
           }`}
         >
-          {cat?.acronym ?? row.category.slice(0, 3).toUpperCase()}
+          {cat?.acronym ?? (displayKey ? displayKey.slice(0, 3).toUpperCase() : "—")}
         </span>
+        {isPending ? (
+          <span
+            className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1 h-4 text-[9px] font-bold uppercase tracking-wide text-indigo-700"
+            title="AI suggested — needs HO confirmation"
+          >
+            AI
+          </span>
+        ) : null}
         <span
           className={`inline-flex items-center rounded-full border px-1.5 h-4 text-[9.5px] font-bold uppercase tracking-wide ${STATUS_PILL_CLASSES[row.status]}`}
         >
@@ -1436,7 +1471,7 @@ function DetailPane({
                 : "bg-slate-100 text-slate-700 border-slate-200"
             }`}
           >
-            {cat?.label ?? detail.category}
+            {cat?.label ?? detail.category ?? "Category pending"}
           </span>
           <span className="text-[12.5px] text-slate-600">
             {detail.store.sap_code} · {detail.store.name} · {detail.store.city}

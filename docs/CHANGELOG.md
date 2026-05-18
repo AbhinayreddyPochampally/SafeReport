@@ -5,6 +5,147 @@ elsewhere. Newest on top.
 
 ---
 
+## 2026-05-19 · Mig 007 — AI category classification, reporter flow trimmed
+
+Single ship covering three coupled changes. Pilot goes live tomorrow.
+
+### Schema — migration 007
+
+`supabase/migrations/007_ai_classification.sql` (idempotent):
+
+- `reports.category` and `reports.type` → made nullable. Reports now arrive
+  with both fields NULL; they're filled in when HO confirms the category.
+- New columns on `reports`:
+  - `suggested_category` (`report_category`, nullable) — AI's pick
+  - `confidence` (`smallint` 0..100, nullable, CHECK enforced) — AI confidence
+  - `category_source` (new enum: `'ai' | 'ho-confirmed' | 'ho-corrected'`, nullable)
+- New indices: `idx_reports_suggested_category`, `idx_reports_category_source`.
+
+### Reporter flow — three screens removed, one moved
+
+Pre-mig-007:  landing(lang-picker) → category → category/[kind] → when →
+              photo → describe → identity → review
+
+Post-mig-007: landing(intro + store-confirm) → photo → describe → when →
+              identity → review
+
+Specifically:
+
+- The triage + sub-category screens are gone. The AI classifier writes
+  `suggested_category` post-submission and HO confirms on the report-detail
+  page. `app/(reporter)/r/[sap_code]/category/{page,[kind]/page}.tsx` are
+  thin redirect stubs to `/photo` so stale bookmarks don't 404.
+- The language picker on the landing is gone. UI defaults to English; the
+  voice-transcription pipeline still auto-detects whatever language the
+  reporter speaks. The `lib/reporter-i18n` module stays in place and
+  `useReporterLocale()` resolves to `"en"` everywhere — kept for a future
+  per-store default-locale flag without ripping out the machinery.
+- `/when` was re-ordered to land AFTER `/describe`. Rationale: the reporter
+  narrates the incident (photo + voice/text) while the moment is fresh,
+  then recalls the time. The previous ordering made them commit to a
+  timestamp before they had narrated what happened.
+- Landing reshape: brand bar + store card (now with explicit "Store code:
+  PNT-MUM-047" row) + "Is this your store?" confirm CTA. "Yes — start
+  reporting" proceeds to `/photo`; "No, this isn't my store" surfaces a
+  recovery hint without navigating away.
+- Reveal choreography: when the cinematic intro dismisses, it now fires a
+  `sr:intro-dismissed` CustomEvent. The landing listens and cascades its
+  brand bar / store card / lede / CTA in over ~0.95 s — the store card
+  uses a scale-from-0.96 + shadow-grow keyframe so it lands as the
+  cinematic's successor rather than a snap-on panel. Returning visitors
+  (`sr_intro_seen=1`) skip the cascade and the page renders instantly.
+
+### AI classifier — `lib/classify.ts` + `/api/classify`
+
+- Text-only `gpt-4o-mini` classifier. Inputs: the English transcript
+  produced by `/api/transcribe` Stage B. Outputs: `{ category, confidence
+  0..100 }` via OpenAI's `json_object` response format, with a defensive
+  in-house JSON parse for stray markdown fences.
+- Fired fire-and-forget from `/api/transcribe` on success. Idempotent
+  (skips when `suggested_category` is already set).
+- **Voice-only in this pilot iteration.** Reports without an English
+  transcript (photo-only or text-only) are NOT auto-classified — HO
+  picks the category manually via the dropdown on the report-detail
+  page. The Phase Azure rollout can revisit using a vision call or the
+  description text as fallback inputs.
+- **Live, not batched.** The original AI classification doc proposed the
+  OpenAI Batch API for the 50% discount; the pilot runs live so HO sees
+  the AI's pick within seconds.
+
+### HO confirmation flow — severity floor enforced
+
+- New section on `/ho/reports/[report_id]` — "Category — needs your
+  confirmation". Shows AI's pick + confidence, a single-button "Confirm
+  AI suggestion" (turquoise), and a dropdown of all 8 categories for
+  override.
+- **Severity floor:** when the AI's pick is `lost_time_injury` or
+  `fatality`, the single-button confirm is **disabled** with an inline
+  note ("High-severity category — confirm via the dropdown so the audit
+  trail records an explicit click"). The dropdown is the only path for
+  those two. Enforced both client-side (button disabled state) and
+  server-side (`/api/ho-actions` rejects `category_via='confirmed'`
+  when final category is LTI/Fatality).
+- The Approve & close action is now gated on a confirmed category. The
+  page header shows "Category pending review" until HO confirms; the
+  CTA disables and surfaces an explanatory amber strip.
+
+### `/api/ho-actions` extensions
+
+- New action `confirm_category`: pure category update with
+  `category_source` set to `ho-confirmed` (single-button) or
+  `ho-corrected` (dropdown override). No status transition.
+- `approve` now accepts optional `category` + `category_via` fields.
+  When `reports.category` is null at approve-time, both are required;
+  the status flip and the category seal happen in the same UPDATE so
+  the audit trail says "the same row transition that closed the report
+  sealed the category."
+
+### Downstream HO surfaces — graceful pending state
+
+Every queue and table that renders a category row now tolerates a null
+category. Display falls back to `suggested_category` (the AI's pending
+pick) with a small "AI" pill. When neither is set, the slot shows "—" /
+"Pending classification". Overview velocity / coverage / category-mix
+computations skip null-category rows from the rollups.
+
+### File touch list (substantive)
+
+```
+supabase/migrations/007_ai_classification.sql              new
+lib/classify.ts                                            new
+lib/category-derive.ts                                     new
+app/api/classify/route.ts                                  new
+app/api/transcribe/route.ts                                chain classify
+app/api/reports/route.ts                                   drop category req
+app/api/ho-actions/route.ts                                + confirm_category
+app/api/notifications/dispatch/route.ts                    null-tolerant title
+app/(reporter)/r/[sap_code]/reporter-landing.tsx           reshape + reveal
+app/(reporter)/r/[sap_code]/photo/page.tsx                 step 1, no gates
+app/(reporter)/r/[sap_code]/describe/page.tsx              step 2, next→/when
+app/(reporter)/r/[sap_code]/when/page.tsx                  step 3, after /describe
+app/(reporter)/r/[sap_code]/identity/page.tsx              step 4
+app/(reporter)/r/[sap_code]/review/page.tsx                drop category row
+app/(reporter)/r/[sap_code]/category/page.tsx              redirect stub
+app/(reporter)/r/[sap_code]/category/[kind]/page.tsx       redirect stub
+components/reporter-chrome.tsx                             TOTAL_STEPS=5
+components/reporter-intro.tsx                              dispatch dismiss event
+lib/reporter-i18n.ts                                       + review.category_ai_note
+lib/report-submit.ts                                       drop category field
+app/(ho)/ho/reports/[report_id]/page.tsx                   + 3 columns
+app/(ho)/ho/reports/[report_id]/report-detail.tsx          + CategoryBlock
+app/(ho)/ho/page.tsx                                       null-tolerant queues
+app/(ho)/ho/queue-list.tsx                                 AI pending pill
+app/(ho)/ho/all-reports/page.tsx                           + suggested_category
+app/(ho)/ho/all-reports/all-reports-client.tsx             AI pending pill
+app/(ho)/ho/action/page.tsx                                nullable category
+app/(ho)/ho/action/action-client.tsx                       nullable + label
+SafeReport_AI_Classification.md                            pilot decision note
+```
+
+— Mig 007, 19 May 2026
+
+---
+
 ## 2026-05-18 · Failed transcriptions no longer masquerade as "pending"
 
 A report whose voice note failed `/api/transcribe` (Stage A or Stage B) has
