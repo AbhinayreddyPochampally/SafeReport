@@ -1,7 +1,9 @@
 # SafeReport — Handoff
 
-Last updated: 2026-05-18 (Phase 10 shipped, audit complete, divergence batch (a)
-— structural flow-order fixes — shipped. Batches (b)–(g) still queued).
+Last updated: 2026-05-18 (Phase 10 shipped, audit complete, divergence
+batches (a) through (g) all shipped — full audit-divergence queue closed
+out in one session. Phase 9 push-cron and a DESIGN.md voice-primary note
+are the only remaining open items).
 
 This is the operational handoff. CLAUDE.md is the authoritative spec; this file
 captures the live state, what's already wrong against the mockup spec, and the
@@ -169,10 +171,10 @@ Triage decisions (locked 2026-05-18):
   - **Flow order** — Intro → Language → flow. Cinematic intro plays first
     in English; "Get started" routes the reporter to the Language picker;
     pick a locale; land on Welcome; tap Get started; into the Triage flow.
-  - **Locale set canonical** — en + kn + hi + ta + te. Tamil strings still
-    need drafting (not in `lib/reporter-i18n.ts.STRINGS` yet) — see batch
-    (d). Today's batch only added Tamil as a structural target, not a
-    rendered locale.
+  - **Locale set canonical** — en + kn + hi + ta + te. All five locales
+    are live as of commit `6477d59`. Tamil strings were drafted from the
+    English canon during that batch; a native-speaker review is still
+    recommended before the pilot expands to Tamil-speaking stores.
   - **First batch to ship** — (a) flow-order fixes. Done; see below.
 
 Batch (a) — flow order + missing screens — **shipped 2026-05-18**:
@@ -196,35 +198,92 @@ Batch (a) — flow order + missing screens — **shipped 2026-05-18**:
     managers now see the notif ask between Login and Inbox (the mockup
     `install_notification_design_v3.html` shape).
 
-Remaining batches:
-  - (b) triage card content rebuilt to mockup spec (kind eyebrow + tagline
-    + description + examples + 7-dot progress dots)
-  - (c) brand bar persistence on every reporter screen
-  - (d) locale set reconciliation: draft Tamil strings, complete any
-    partial Hindi/Telugu strings, extend `LOCALES` in `lib/reporter-i18n.ts`
-    to `["en","hi","kn","ta","te"]`, add Tamil to `LOCALE_LABELS` /
-    `LOCALE_ENGLISH_NAMES` / `LOCALE_BCP47` / the language picker
-    page. Tamil font is already wired in the intro overlay's
-    Scene 2 (`.sr-lang-ta { font-family: 'Noto Sans Tamil', ... }`)
-    and the language picker page has an inline `Noto Sans` fallback
-    style switch that needs a Tamil branch.
-  - (e) verbatim copy corrections per CLAUDE.md hard rules
-  - (f) phone-viewport enforcement on both reporter and manager surfaces
-  - (g) manager inbox single-column rewrite + filter-pill relabel + Stone-
-    100 audio plate on the detail page
+Batches (b)–(g) — shipped 2026-05-18 across commits `a598b5b` →
+`f11c7f2`. Summary by batch:
 
-Phase 9 (reporter push subscription + SLA nudge cron) is still open and
-unrelated to the divergence work — it needs a schema migration to add
-`push_subscriptions.report_id` and a cron job for the 24-hour-no-acknowledge
-nudge. The DESIGN.md update for "voice-primary with text fallback (mandatory
-either way)" is also still pending.
+- (e) Verbatim copy — `a598b5b`. `form.anonymous_note` flipped to
+  "Your name is visible only to Head Office." in all 4 (now 5) locales
+  per the CLAUDE.md hard verbatim rule. `review.title` flipped to
+  "Ready to submit?" per reporter_flow_v14 line 1963. Photo screen sub
+  drift "understand what you saw" → "understand the issue" (mockup
+  line 1696). VoiceRecorder gained `onStatusChange` + a
+  `VoiceRecorderStatus` type export; Describe screen sub copy now
+  switches to "Recording — tap to stop." while the mic is hot and
+  "Get ready — recording starts in a moment." during the 1-second
+  preroll (mockup line 1805).
 
-If the user asks for the PRD + System/Process docs in two versions (Railway
-current + Azure full plan) that the prior `AskUserQuestion` round was about to
-clarify, the question stub captured three decisions: output format (.docx vs
-.md vs both), cleanup aggressiveness (delete vs archive vs leave), and Azure
-depth (full migration with cost + cutover vs architecture-and-cost-only vs
-architecture-only). Those need answers before drafting begins.
+- (d) Locale expansion — `6477d59`. `LOCALES` is now
+  `["en","kn","hi","ta","te"]`. The full Tamil string block (~105
+  keys) was drafted from the English canon; `LOCALE_LABELS`,
+  `LOCALE_ENGLISH_NAMES`, `LOCALE_BCP47` extended; language picker
+  trilingual prompt grew Tamil and Telugu lines with per-line Noto
+  Sans fallback styling; per-card font-family switch grew a `ta`
+  branch.
+
+- (b)+(c)+(f) Reporter sweep — `356f500`. New shared
+  `<ReporterScreenHeader>` (`components/reporter-chrome.tsx`) renders
+  the brand bar (APP icon + manager-login key), back link, and 7-dot
+  progress on every reporter screen post-Welcome. Mapping: 1 Triage,
+  2 Subcat, 3 When, 4 Photo, 5 Describe, 6 Identity, 7 Review. Triage
+  cards rebuilt to mockup spec — kind eyebrow + tagline + description
+  with italic emphasis + examples row. Every reporter container
+  tightened to `max-w-sm` with `px-5 py-7` for ~375px phone viewport.
+  Hero headlines dropped from `text-[28px]` to `text-[22px]` to fit
+  the narrower column. Confirm-screen success bubble switched from
+  `bg-teal-700/10` to `bg-slate-100` (no-green palette rule + audit
+  polish note). Dead `app/(reporter)/r/[sap_code]/evidence/` legacy
+  route deleted (replaced by photo+describe in Phase 3, unlinked
+  since).
+
+- (f)+(g) Manager sweep — `f11c7f2`. Manager surface tightened to
+  `max-w-sm` everywhere (was `max-w-xl` with `lg:max-w-3xl` /
+  `lg:max-w-5xl` / `lg:max-w-md` responsive bumps that ran against
+  the CLAUDE.md phone-only hard rule). Manager-inbox lg+ two-pane
+  master/detail killed: `EmbeddedReportPanel` mount, `isDesktop`
+  matchMedia tracker, `selectedId` URL sync, and J/K/F/Esc keyboard
+  navigation all retired. `isDesktop` is fixed `false` so legacy code
+  paths gated on it stay dormant. Filter pills relabelled to mockup
+  manager_flow_v3 set: All / New + Returned / Acknowledged / Awaiting
+  HO / Closed; layout switched from a 2-col grid to a
+  horizontal-scroll row of `shrink-0` pills, indigo-50 fill +
+  indigo-700 border for the selected state. AudioPlayer container
+  repalleted to the mockup's Stone-100 audio plate (`bg-stone-100` +
+  `border-stone-200`); scrubber gained an indigo-700 thumb at the
+  play head; track tightened from `h-1.5` slate-100 to `h-1` slate-300.
+
+Production build (`next build`) was rerun after each batch and after
+the final manager sweep — all 42 routes compile clean, no warnings,
+no unused-imports.
+
+Still open:
+
+- **Phase 9 — reporter push subscription + SLA nudge cron.** Net-new
+  feature work, not audit-divergence. Needs a Supabase migration to
+  add `push_subscriptions.report_id` (so a reporter can opt in to push
+  for a specific report rather than across all their reports) and a
+  cron job for the 24-hour-no-acknowledge nudge. The cron host is
+  open — Railway Scheduler is the path of least resistance; Vercel
+  Cron is the alternative if HO ever ports to that stack.
+
+- **DESIGN.md update — "voice-primary with text fallback (mandatory
+  either way)."** Phase 3 made voice the primary affordance and added
+  text as a fallback with a 20-char minimum; DESIGN.md still
+  describes both as optional inputs alongside a required photo.
+  The describe/page.tsx code is the authoritative current source.
+
+- **Native-speaker Tamil review.** The Tamil strings drafted in batch
+  (d) are intelligible and use a formal workplace register, but
+  idiom + nuance need a native eye before the pilot expands to
+  Tamil-speaking stores. Same with Hindi/Telugu — they were drafted
+  in May 2026 without native review; if HO knows Tamil/Hindi/Telugu
+  staff, run all three through them in parallel.
+
+- **PRD + System/Process docs (Railway + Azure).** The unanswered
+  `AskUserQuestion` round captured three open decisions: output
+  format (.docx vs .md vs both), cleanup aggressiveness (delete vs
+  archive vs leave), and Azure depth (full migration with cost +
+  cutover vs architecture-and-cost-only vs architecture-only). Those
+  need answers before drafting begins.
 
 ## Mockup → code map
 
