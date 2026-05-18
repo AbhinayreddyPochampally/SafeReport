@@ -33,8 +33,9 @@ import {
 
 const NATIVE_PROMPTS: Record<Locale, string> = {
   en: "Choose your language",
-  hi: "अपनी भाषा चुनें",
   kn: "ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ",
+  hi: "अपनी भाषा चुनें",
+  ta: "உங்கள் மொழியைத் தேர்வு செய்யவும்",
   te: "మీ భాషను ఎంచుకోండి",
 }
 
@@ -82,13 +83,33 @@ export default function LanguagePage({
         <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-slate-900">
           {NATIVE_PROMPTS.en}
         </h1>
-        <p className="mt-2 font-display text-[15px] font-medium text-slate-600">
-          {NATIVE_PROMPTS.hi}
-        </p>
-        <p className="mt-1 font-display text-[15px] font-medium text-slate-600">
+        {/* Native-script prompts so a reporter who doesn't read English
+            can find their language on this screen. Order mirrors the
+            canonical LOCALES tuple (kn, hi, ta, te). Each line uses its
+            own Noto Sans family so devices without a system font for the
+            script still render correctly. */}
+        <p
+          className="mt-2 font-display text-[15px] font-medium text-slate-600"
+          style={{ fontFamily: "'Noto Sans Kannada', 'DM Sans', sans-serif" }}
+        >
           {NATIVE_PROMPTS.kn}
         </p>
-        <p className="mt-1 font-display text-[15px] font-medium text-slate-600">
+        <p
+          className="mt-1 font-display text-[15px] font-medium text-slate-600"
+          style={{ fontFamily: "'Noto Sans Devanagari', 'DM Sans', sans-serif" }}
+        >
+          {NATIVE_PROMPTS.hi}
+        </p>
+        <p
+          className="mt-1 font-display text-[15px] font-medium text-slate-600"
+          style={{ fontFamily: "'Noto Sans Tamil', 'DM Sans', sans-serif" }}
+        >
+          {NATIVE_PROMPTS.ta}
+        </p>
+        <p
+          className="mt-1 font-display text-[15px] font-medium text-slate-600"
+          style={{ fontFamily: "'Noto Sans Telugu', 'DM Sans', sans-serif" }}
+        >
           {NATIVE_PROMPTS.te}
         </p>
       </div>
@@ -116,7 +137,7 @@ export default function LanguagePage({
                       : "text-[20px] font-semibold leading-tight text-slate-900"
                   }
                   // Inline font-family swap so each locale renders in its native script
-                  // even if the global stylesheet hasn't matched all four.
+                  // even if the global stylesheet hasn't matched all five.
                   style={{
                     fontFamily:
                       loc === "kn"
@@ -125,7 +146,9 @@ export default function LanguagePage({
                           ? "'Noto Sans Telugu', 'DM Sans', sans-serif"
                           : loc === "hi"
                             ? "'Noto Sans Devanagari', 'DM Sans', sans-serif"
-                            : "inherit",
+                            : loc === "ta"
+                              ? "'Noto Sans Tamil', 'DM Sans', sans-serif"
+                              : "inherit",
                   }}
                 >
                   {LOCALE_LABELS[loc]}

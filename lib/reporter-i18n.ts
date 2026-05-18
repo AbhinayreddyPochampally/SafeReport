@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Reporter-flow localisation (English + Kannada + Hindi + Telugu).
+ * Reporter-flow localisation (English + Kannada + Hindi + Tamil + Telugu).
  *
  * Originally landing-only — the rest of the reporter flow rode on the icon
  * grammar plus Whisper-translated voice notes. Pilot stakeholders pushed back
@@ -10,28 +10,29 @@
  * reporter. This file is now the source of every reporter-facing string,
  * landing through confirm + the shared evidence components.
  *
- * Hindi + Telugu were added in May 2026 to cover the four-language footprint
- * the pilot manager wanted (English, Kannada, Hindi, Telugu). The footprint
- * intentionally stops at four — adding Marathi/Tamil etc. is straightforward
- * (drop entries into LOCALES + STRINGS) but each additional locale crowds the
- * landing-screen picker and the strings need a careful native-speaker review.
+ * Locale footprint grew in waves:
+ *   May 2026 — Hindi + Telugu added on top of the original en + kn pair
+ *   May 2026 — Tamil drafted (this file rev) to match the canonical
+ *              5-locale picker in reporter_flow_v14. Native review pending.
  *
  * To add another locale later: drop another entry into LOCALES + STRINGS,
  * and the LocalePicker will pick it up automatically. Order in LOCALES =
- * display order in the picker.
+ * display order in the picker (en, kn, hi, ta, te — matches the user-locked
+ * canonical order from the mockup audit triage).
  */
 
 import { useEffect, useState } from "react"
 
-export const LOCALES = ["en", "hi", "kn", "te"] as const
+export const LOCALES = ["en", "kn", "hi", "ta", "te"] as const
 export type Locale = (typeof LOCALES)[number]
 
 /** Short label for the LocalePicker — native script when available so the
  * reporter recognises their own language without reading English first. */
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: "English",
-  hi: "हिन्दी",
   kn: "ಕನ್ನಡ",
+  hi: "हिन्दी",
+  ta: "தமிழ்",
   te: "తెలుగు",
 }
 
@@ -39,8 +40,9 @@ export const LOCALE_LABELS: Record<Locale, string> = {
  * reporter who can't read their native script still finds their language). */
 export const LOCALE_ENGLISH_NAMES: Record<Locale, string> = {
   en: "English",
-  hi: "Hindi",
   kn: "Kannada",
+  hi: "Hindi",
+  ta: "Tamil",
   te: "Telugu",
 }
 
@@ -49,8 +51,9 @@ export const LOCALE_ENGLISH_NAMES: Record<Locale, string> = {
  * where the browser ships the locale data. */
 export const LOCALE_BCP47: Record<Locale, string> = {
   en: "en-IN",
-  hi: "hi-IN",
   kn: "kn-IN",
+  hi: "hi-IN",
+  ta: "ta-IN",
   te: "te-IN",
 }
 
@@ -914,6 +917,187 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
       "పనికి దూరం ఉండే రోజులకు దారితీస్తుంది.",
     "category.fatality.label": "మరణం",
     "category.fatality.blurb": "మరణానికి దారితీస్తుంది.",
+  },
+  // Tamil — drafted from the English canon during the May 2026 mockup-
+  // audit fixes. Strings are intelligible and use the formal register
+  // suited to a workplace-safety context, but a native-speaker review
+  // is recommended before the pilot expands to Tamil-speaking stores.
+  ta: {
+    "page.title": "பாதுகாப்பு பிரச்சினையை அறிக்கையிடவும்",
+    "page.lede":
+      "ஏதோ பாதுகாப்பற்றதைக் கண்டீர்களா அல்லது அருகில் ஒரு விபத்து ஏற்பட்டதா? உங்கள் சொந்தக் குரலில், உங்கள் சொந்த மொழியில் எங்களிடம் தெரிவியுங்கள். ஒரு நிமிடத்திற்கும் குறைவான நேரம் ஆகும்.",
+    "page.privacy_note":
+      "உங்கள் பெயர் தலைமை அலுவலகத்திற்கு மட்டுமே தெரியும், கடை மேலாளருக்கு ஒருபோதும் தெரியாது.",
+    "form.name_label": "உங்கள் பெயர்",
+    "form.name_placeholder": "முழுப் பெயர்",
+    "form.phone_label": "தொலைபேசி எண்",
+    "form.phone_placeholder": "+91 98xxx xxxxx",
+    "form.continue": "தொடரவும்",
+    "form.anonymous_note":
+      "உங்கள் பெயர் தலைமை அலுவலகத்திற்கு மட்டுமே தெரியும்.",
+    "form.reporting_as": "இவ்வாறு அறிக்கையிடுகிறீர்கள்",
+    "form.switch": "நீங்கள் இல்லையா? மாற்றவும்",
+    "validate.name_required": "தயவு செய்து உங்கள் முழுப் பெயரை உள்ளிடவும்.",
+    "validate.phone_invalid": "தயவு செய்து சரியான தொலைபேசி எண்ணை உள்ளிடவும்.",
+    "header.brand_tagline": "பணியிட பாதுகாப்பு அறிக்கையிடல்",
+    "landing.language": "மொழி",
+
+    "unavailable.eyebrow": "கடை கண்டுபிடிக்கப்படவில்லை",
+    "unavailable.title": "அந்தக் கடையை எங்களால் கண்டுபிடிக்க முடியவில்லை.",
+    "unavailable.body":
+      "இந்தக் குறியீடு SafeReport பதிவேட்டில் இல்லை, அல்லது கடை தற்போது செயல்படவில்லை. இது தவறு என நீங்கள் நினைத்தால், தயவு செய்து இந்தத் திரையை உங்கள் மேலாளருக்குக் காட்டுங்கள்.",
+    "unavailable.tip":
+      "குறிப்பு: உங்கள் கடையின் பின்-அலுவலக அறிவிப்புப் பலகையில் உள்ள QR சுவரொட்டியில் உங்கள் கடையின் சரியான இணைப்பு உள்ளது.",
+
+    "common.back": "பின்செல்",
+    "common.continue": "தொடரவும்",
+    "common.optional": "விருப்பத்திற்குரியது",
+    "common.edit": "திருத்தவும்",
+    "common.anonymous_footer": "கடை மேலாளருக்குப் பெயர் தெரியாது",
+    "common.step.1of4": "6-இல் படி 1",
+    "common.step.2of4": "6-இல் படி 2",
+    "common.step.3of4": "6-இல் படி 3",
+    "common.step.4of4": "6-இல் படி 4",
+    "common.step.review": "மறுபரிசீலனை",
+
+    "triage.title": "என்ன நடந்தது?",
+    "triage.lede": "சிறப்பாக விவரிக்கும் ஒன்றைத் தேர்ந்தெடுக்கவும்.",
+    "triage.observation.title": "ஏதோ பாதுகாப்பற்றதாகத் தோன்றியது",
+    "triage.observation.subtitle":
+      "யாருக்கும் காயம் ஏற்படுவதற்கு முன்பே நான் அதைக் கவனித்தேன்.",
+    "triage.incident.title": "யாருக்கோ காயம் ஏற்பட்டது",
+    "triage.incident.subtitle":
+      "ஒரு காயம் அல்லது தீவிரமான நிகழ்வு ஏற்பட்டது.",
+
+    "subcat.observation.kind": "கவனிப்பு",
+    "subcat.incident.kind": "சம்பவம்",
+    "subcat.observation.heading": "நீங்கள் என்ன கவனித்தீர்கள்?",
+    "subcat.incident.heading": "எந்த வகையான சம்பவம்?",
+    "subcat.lede": "மிக நெருக்கமாகப் பொருந்தும் ஒன்றைத் தட்டவும்.",
+
+    "when.title": "இது எப்போது நடந்தது?",
+    "when.lede": "ஒவ்வொரு நெடுவரிசையையும் சுருட்டி சரிசெய்யவும்.",
+    "when.selected": "தேர்ந்தெடுக்கப்பட்டது",
+
+    "evidence.title": "என்ன நடந்தது என்பதைக் காட்டுங்கள்.",
+    "evidence.lede":
+      "ஒரு புகைப்படத்துடன் ஒரு குரல்-குறிப்பு அல்லது குறுகிய விளக்கம்.",
+    "evidence.photo_label": "புகைப்படம்",
+    "evidence.voice_label": "குரல்-குறிப்பு",
+    "evidence.text_label": "அல்லது குறுகிய விளக்கத்தைத் தட்டச்சு செய்யவும்",
+    "evidence.text_placeholder": "நீங்கள் என்ன கண்டீர்கள் அல்லது என்ன நடந்தது?",
+    "evidence.text_min": "குறைந்தபட்சம் 20 எழுத்துகள்",
+    "evidence.text_helper":
+      "ஆடியோவைப் பதிவு செய்ய முடியாவிட்டால் இதைப் பயன்படுத்தவும்",
+    "evidence.missing.both":
+      "ஒரு புகைப்படம் எடுத்து, குரல்-குறிப்பு அல்லது குறுகிய விளக்கத்தை சேர்க்கவும்.",
+    "evidence.missing.photo": "புகைப்படம் தேவை.",
+    "evidence.missing.voicetext":
+      "குரல்-குறிப்பு சேர்க்கவும் அல்லது குறைந்தபட்சம் 20 எழுத்துகள் தட்டச்சு செய்யவும்.",
+
+    "review.title": "சமர்ப்பிக்கத் தயாரா?",
+    "review.lede": "அனுப்பும் முன் மறுபரிசீலனை செய்து எதையும் திருத்தவும்.",
+    "review.row.category": "வகை",
+    "review.row.when": "எப்போது",
+    "review.row.added": "நீங்கள் சேர்த்தவை",
+    "review.row.you": "நீங்கள்",
+    "review.row.voicenote": "குரல்-குறிப்பு",
+    "review.privacy":
+      "உங்கள் பெயர் & எண் தலைமை அலுவலகத்திற்கு மட்டுமே செல்கிறது",
+    "review.submit": "அறிக்கையை சமர்ப்பிக்கவும்",
+    "review.submitting": "சமர்ப்பிக்கிறது…",
+
+    "confirm.eyebrow": "அறிக்கை பெறப்பட்டது",
+    "confirm.title.noid": "நன்றி — உங்கள் அறிக்கை சமர்ப்பிக்கப்பட்டது.",
+    "confirm.body":
+      "கடை மேலாளருக்கு அறிவிக்கப்பட்டுள்ளது, அவர்கள் விரைவில் ஏற்றுக்கொள்வார்கள்.",
+    "confirm.body.withid":
+      "நன்றி. கடை மேலாளருக்கு அறிவிக்கப்பட்டுள்ளது, அவர்கள் விரைவில் ஏற்றுக்கொள்வார்கள்.",
+    "confirm.privacy":
+      "உங்கள் பெயரும் தொலைபேசி எண்ணும் தலைமை அலுவலகத்திற்கு மட்டுமே தெரியும், கடை மேலாளருக்கு ஒருபோதும் தெரியாது.",
+    "confirm.close": "மூடவும்",
+    "confirm.again": "மற்றொன்றை அறிக்கையிடவும்",
+
+    "photo.take": "புகைப்படம் எடுக்கவும்",
+    "photo.from_gallery": "தொகுப்பிலிருந்து",
+    "photo.use_camera": "கேமராவைப் பயன்படுத்தவும்",
+    "photo.pick_existing": "ஏற்கனவே உள்ள புகைப்படத்தைத் தேர்வு செய்யவும்",
+    "photo.gallery_btn": "தொகுப்பு",
+    "photo.retake": "மீண்டும் எடுக்கவும்",
+    "photo.processing": "செயலாக்குகிறது…",
+    "photo.required_hint": "புகைப்படம் தேவை · JPEG அல்லது PNG · 10 MB வரை",
+    "photo.error_compress":
+      "அந்தப் புகைப்படத்தை செயலாக்க முடியவில்லை — தயவு செய்து மீண்டும் முயற்சிக்கவும்.",
+
+    "voice.tap_record": "பதிவைத் தொடங்க தட்டவும்",
+    "voice.requesting": "மைக்ரோஃபோனைக் கேட்கிறது…",
+    "voice.optional_hint":
+      "விருப்பம் · 120 விநாடிகள் வரை · பதிவு தொடங்குவதற்கு முன் 1 விநாடி இடைவெளி",
+    "voice.get_ready": "தயாராக இருங்கள்…",
+    "voice.starts_soon": "பதிவு சீக்கிரத்தில் தொடங்கும்.",
+    "voice.error_mic":
+      "மைக்ரோஃபோனை அணுக முடியவில்லை. உங்கள் உலாவி அனுமதிகளைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
+    "voice.stop_aria": "பதிவை நிறுத்தவும்",
+    "voice.keep_recording": "பதிவைத் தொடரவும் (குறைந்தபட்சம் 3 விநாடி)",
+    "voice.play": "இயக்கவும்",
+    "voice.pause": "இடைநிறுத்து",
+    "voice.discard": "நீக்கி மீண்டும் பதிவு செய்யவும்",
+    "voice.min_label": "குறைந்தபட்சம் 3 விநாடி",
+
+    "pwa.eyebrow": "SafeReport-ஐ அமைக்கவும்",
+    "pwa.title":
+      "அடுத்த முறை விரைவாக அறிக்கையிட இரண்டு குறுகிய படிகள்",
+    "pwa.dismiss_aria": "இந்த அமர்வுக்கு மறைக்கவும்",
+    "pwa.notif.allowed": "அறிவிப்புகள் இயக்கப்பட்டது",
+    "pwa.notif.blocked": "அறிவிப்புகள் தடுக்கப்பட்டுள்ளன",
+    "pwa.notif.blocked_sub":
+      "முகவரிப் பட்டியில் உள்ள பூட்டுச் சின்னத்தைத் தட்டி அறிவிப்புகளை அனுமதிக்கவும்.",
+    "pwa.notif.blocked_ios_sub":
+      "உங்கள் iPhone-இல் Settings → Notifications → SafeReport-ஐத் திறந்து Allow Notifications-ஐ இயக்கவும்.",
+    "pwa.notif.blocked_android_sub":
+      "உங்கள் தொலைபேசியில் Settings → Apps → SafeReport → Notifications-ஐத் திறந்து அவற்றை இயக்கவும்.",
+    "pwa.notif.allow": "அறிவிப்புகளை அனுமதிக்கவும்",
+    "pwa.notif.allowed_sub":
+      "தலைமை அலுவலகம் உங்கள் அறிக்கைக்குப் பதிலளிக்கும்போது உங்களுக்கு அறிவிப்போம்.",
+    "pwa.notif.allow_sub":
+      "தலைமை அலுவலகம் உங்கள் அறிக்கைக்குப் பதிலளிக்கும்போது தெரிந்து கொள்ளுங்கள்.",
+    "pwa.notif.pending_install": "அறிவிப்புகளை அனுமதிக்கவும்",
+    "pwa.notif.pending_install_sub":
+      "நிறுவலுக்குப் பிறகு கிடைக்கும் — முதலில் படி 1-ஐ முடிக்கவும்.",
+    "pwa.cta.allow": "அனுமதிக்கவும்",
+    "pwa.install.installed": "முகப்புத் திரையில் நிறுவப்பட்டது",
+    "pwa.install.installable": "SafeReport-ஐ நிறுவவும்",
+    "pwa.install.installed_sub":
+      "அடுத்த முறை SafeReport சின்னத்தைத் தட்டவும் — QR-ஐ மீண்டும் ஸ்கேன் செய்ய வேண்டாம்.",
+    "pwa.install.installable_sub":
+      "ஒரு முகப்புத்-திரை குறுக்குவழியைச் சேர்க்கிறது — அடுத்த முறை ஒரு தட்டல், ஸ்கேனிங் இல்லை.",
+    "pwa.install.followup":
+      "முடிக்க இப்போது உங்கள் முகப்புத் திரையில் உள்ள SafeReport சின்னத்திலிருந்து திறக்கவும் — அறிவிப்புகள் அங்கிருந்து இயக்கப்படும்.",
+    "pwa.cta.install": "நிறுவு",
+
+    "category.near_miss.label": "சற்றேறக்குறைய தப்பியது",
+    "category.near_miss.blurb":
+      "தீங்கு விளைவிக்கக்கூடிய நிகழ்வு, ஆனால் காயமேதும் இல்லை.",
+    "category.unsafe_act.label": "பாதுகாப்பற்ற செயல்",
+    "category.unsafe_act.blurb":
+      "ஒரு நபர் பாதுகாப்பு விதிமுறைகளிலிருந்து விலகியது.",
+    "category.unsafe_condition.label": "பாதுகாப்பற்ற நிலை",
+    "category.unsafe_condition.blurb":
+      "தீங்கு விளைவிக்கக்கூடிய சுற்றுப்புற ஆபத்து.",
+    "category.first_aid_case.label": "முதலுதவி நிகழ்வு",
+    "category.first_aid_case.blurb":
+      "சிறு காயம், இடத்திலேயே சிகிச்சை அளிக்கப்பட்டது.",
+    "category.medical_treatment_case.label": "மருத்துவ சிகிச்சை",
+    "category.medical_treatment_case.blurb":
+      "தொழில்முறை மருத்துவ பராமரிப்பு தேவை.",
+    "category.restricted_work_case.label": "வரம்புள்ள வேலை",
+    "category.restricted_work_case.blurb":
+      "காயம் வேலைக் கடமைகளை வரம்புபடுத்துகிறது.",
+    "category.lost_time_injury.label": "வேலை-நாள் இழப்புக் காயம்",
+    "category.lost_time_injury.blurb":
+      "வேலையிலிருந்து விலகியிருக்கும் நாட்களுக்கு வழிவகுக்கிறது.",
+    "category.fatality.label": "மரணம்",
+    "category.fatality.blurb": "மரணத்தில் முடிகிறது.",
   },
 }
 
