@@ -121,8 +121,14 @@ export function ReporterLanding({ store }: { store: StoreCard }) {
               type="button"
               onClick={() => pick(loc)}
               className={
+                // Selected tile uses the app's primary accent
+                // (indigo-700) instead of the previous near-black
+                // slate-900. The pick action and the welcome's "Get
+                // started" CTA share the same indigo, so a chosen
+                // language tile reads as "this is the active path"
+                // rather than "this is locked off".
                 selected
-                  ? "flex w-full items-center justify-between rounded-2xl border border-slate-900 bg-slate-900 px-5 py-4 text-left text-white shadow-[0_4px_14px_rgba(15,23,42,0.18)]"
+                  ? "flex w-full items-center justify-between rounded-2xl border border-indigo-700 bg-indigo-700 px-5 py-4 text-left text-white shadow-[0_4px_14px_rgba(67,56,202,0.28)]"
                   : "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-indigo-500 hover:bg-indigo-50/40 focus:outline-none focus:ring-4 focus:ring-indigo-500/40"
               }
               aria-pressed={selected}

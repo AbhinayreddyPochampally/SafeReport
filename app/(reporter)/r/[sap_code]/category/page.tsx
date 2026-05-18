@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, Eye, TriangleAlert } from "lucide-react"
+import { Eye, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
@@ -9,21 +9,27 @@ import { t, useReporterLocale } from "@/lib/reporter-i18n"
 /**
  * Screen 2 — triage.
  *
- * Two cards: "Something looked unsafe" (observation) vs "Someone got hurt"
- * (incident). Each card is built to mockup spec (reporter_flow_v14):
- *   - icon glyph row
- *   - "Observation" / "Incident" kind eyebrow (uppercase, tone-coloured)
- *   - bold tagline ("Could go wrong" / "Did go wrong")
- *   - italic description with the differentiating verb
- *   - examples row (lowercase, comma-separated cues)
+ * Trimmed in May 2026 after user feedback that the previous cards
+ * read "too texty" — five lines per card (icon + kind eyebrow + bold
+ * tagline + italic description with emphasis + examples row) felt
+ * dense for a first-time, low-literacy reporter.
  *
- * The flat horizontal-row style this replaced was visually thin — first
- * pilot tests showed reporters confused which card meant what. The card
- * spec from the mockup gives both cards much more weight and visible
- * differentiation.
+ * Current card shape:
+ *   - Hero icon (larger, top-aligned)
+ *   - Kind eyebrow (Observation / Incident, uppercase)
+ *   - Bold tagline (one line, plain-language)
+ *   - Examples row (italic, comma-separated cues)
  *
- * Palette: Slate 900/600 for observations, Amber 900/700 for incidents
- * — the hard "no green/no red" rule.
+ * Surface is stone-100 + warm border instead of the previous
+ * white-with-slate-border — gives the cards a softer, Claude-design
+ * feel that pairs with the cream intro overlay and the warm Stone-
+ * palette voice plate downstream.
+ *
+ * Palette intent:
+ *   - Observation: navy (#0A1F46) icon, slate-900 tagline, slate-500
+ *     examples. Cool, calm — the "I noticed something" energy.
+ *   - Incident: warm orange (#EA580C) icon, amber-900 tagline,
+ *     amber-700 examples. Warm, alert — the "someone's hurt" energy.
  *
  * Brand-bar, back-link and 7-dot progress all come from
  * <ReporterScreenHeader>. This screen is step 1/7.
@@ -34,9 +40,6 @@ type TriageCardProps = {
   kind: "observation" | "incident"
   kindLabel: string
   tagline: string
-  descriptionPrefix: string
-  descriptionEmphasis: string
-  descriptionSuffix: string
   examples: string
   icon: typeof Eye
 }
@@ -46,56 +49,56 @@ function TriageCard({
   kind,
   kindLabel,
   tagline,
-  descriptionPrefix,
-  descriptionEmphasis,
-  descriptionSuffix,
   examples,
   icon: Icon,
 }: TriageCardProps) {
-  const kindColor =
-    kind === "observation" ? "text-slate-600" : "text-amber-700"
-  const taglineColor =
-    kind === "observation" ? "text-slate-900" : "text-amber-900"
-  const iconColor =
-    kind === "observation" ? "text-slate-700" : "text-amber-700"
-  const focusRing =
+  // Claude Workspace theme tokens. Observation reads as cool-clay —
+  // navy icon + warm-charcoal body, the "I noticed something" energy.
+  // Incident reads as warm-clay — Anthropic's terracotta + amber-900
+  // body, the "someone's hurt" alert energy. Card surface is warm
+  // cream #F5F1EA (deeper than the page's #FAF9F5) with a sand border
+  // — closer to Claude.ai's reading-room aesthetic than the previous
+  // stone-100/slate stack.
+  const tone =
     kind === "observation"
-      ? "focus:ring-slate-500/40"
-      : "focus:ring-amber-500/40"
+      ? {
+          iconColor: "text-[#0A1F46]",
+          kindColor: "text-[#7A736B]",
+          taglineColor: "text-[#2F2D29]",
+          examplesColor: "text-[#9A938A]",
+          ring: "focus:ring-[#C9684C]/30",
+          hoverBorder: "hover:border-[#D9CFBC]",
+        }
+      : {
+          iconColor: "text-[#C9684C]",
+          kindColor: "text-amber-700",
+          taglineColor: "text-amber-900",
+          examplesColor: "text-amber-700/70",
+          ring: "focus:ring-amber-500/40",
+          hoverBorder: "hover:border-amber-300",
+        }
 
   return (
     <Link
       href={href}
-      className={`group relative block rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 focus:outline-none focus:ring-4 ${focusRing}`}
+      className={`group relative block rounded-2xl border border-[#E8E2D5] bg-[#F5F1EA] p-6 text-left transition ${tone.hoverBorder} focus:outline-none focus:ring-4 ${tone.ring}`}
     >
-      <div className={`mb-2.5 ${iconColor}`} aria-hidden>
-        <Icon className="h-8 w-8" strokeWidth={1.5} />
+      <div className={`mb-3 ${tone.iconColor}`} aria-hidden>
+        <Icon className="h-10 w-10" strokeWidth={1.6} />
       </div>
       <p
-        className={`mb-1.5 text-[11px] font-bold uppercase tracking-wider ${kindColor}`}
+        className={`text-[11px] font-bold uppercase tracking-wider ${tone.kindColor}`}
       >
         {kindLabel}
       </p>
       <h3
-        className={`font-display text-[16px] font-medium leading-snug ${taglineColor}`}
+        className={`mt-1 font-display text-[20px] font-bold leading-tight tracking-tight ${tone.taglineColor}`}
       >
         {tagline}
       </h3>
-      <p className="mt-1.5 text-[13px] leading-snug text-slate-600">
-        {descriptionPrefix}
-        <em className="font-medium not-italic text-slate-800">
-          {descriptionEmphasis}
-        </em>
-        {descriptionSuffix}
-      </p>
-      <p className="mt-2.5 text-[12.5px] italic text-slate-500">
+      <p className={`mt-3 text-[12.5px] italic ${tone.examplesColor}`}>
         {examples}
       </p>
-      <ArrowRight
-        className="absolute right-4 top-4 h-4 w-4 text-slate-300 transition group-hover:text-slate-600"
-        strokeWidth={1.8}
-        aria-hidden
-      />
     </Link>
   )
 }
@@ -118,11 +121,11 @@ export default function TriagePage({
     return <main className="min-h-screen bg-slate-50" aria-hidden />
   }
 
-  // Plain-English copy in 5 locales is held in lib/reporter-i18n.ts. The
-  // mockup-spec examples row + italic emphasis is composed here so it
-  // doesn't need new translation keys for the punctuation pieces.
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
+    // Page surface uses the Claude Workspace cream (#FAF9F5) instead
+    // of the global slate-50. Cards sit one shade deeper (#F5F1EA) so
+    // the surface contrast is visible without losing the warmth.
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col bg-[#FAF9F5] px-5 py-7">
       <ReporterScreenHeader
         sap_code={params.sap_code}
         backHref={`/r/${params.sap_code}`}
@@ -142,10 +145,7 @@ export default function TriagePage({
           kind="observation"
           kindLabel={t(locale, "subcat.observation.kind")}
           tagline={t(locale, "triage.observation.title")}
-          descriptionPrefix=""
-          descriptionEmphasis={t(locale, "triage.observation.title")}
-          descriptionSuffix={` — ${t(locale, "triage.observation.subtitle")}`}
-          examples="wet floor · frayed wire · blocked exit · near miss"
+          examples="wet floor · frayed wire · blocked exit"
           icon={Eye}
         />
         <TriageCard
@@ -153,10 +153,7 @@ export default function TriagePage({
           kind="incident"
           kindLabel={t(locale, "subcat.incident.kind")}
           tagline={t(locale, "triage.incident.title")}
-          descriptionPrefix=""
-          descriptionEmphasis={t(locale, "triage.incident.title")}
-          descriptionSuffix={` — ${t(locale, "triage.incident.subtitle")}`}
-          examples="someone hurt · fall · cut · equipment damage"
+          examples="someone hurt · a fall · a cut"
           icon={TriangleAlert}
         />
       </div>

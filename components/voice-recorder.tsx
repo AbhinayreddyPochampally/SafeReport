@@ -27,7 +27,11 @@ import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 const MIN_SECONDS = 3
 const MAX_SECONDS = 120
-const BAR_COUNT = 40
+// 28 bars at 3 px wide + 3 px gap fits a ~340 px max-w-sm card without
+// overflow; the prior 40-bar count caused horizontal overspill on
+// 375 px phones (the waveform pushed past the inner card boundary
+// when the stop button + timer columns claimed their share of width).
+const BAR_COUNT = 28
 const TARGET_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -349,12 +353,19 @@ export function VoiceRecorder({ value, onChange, onStatusChange }: Props) {
           </button>
         )}
 
-        {/* Waveform — animates during recording, sits static otherwise. */}
-        <div className="flex h-8 flex-1 items-center gap-[3px]" aria-hidden>
+        {/* Waveform — animates during recording, sits static otherwise.
+            min-w-0 lets the flex item shrink below its content's
+            intrinsic width on narrow viewports; overflow-hidden clips
+            the trailing bars if they ever exceed the column so the
+            card boundary stays clean. */}
+        <div
+          className="flex h-8 min-w-0 flex-1 items-center gap-[3px] overflow-hidden"
+          aria-hidden
+        >
           {bars.map((h, i) => (
             <span
               key={i}
-              className={`w-[3px] rounded-full ${
+              className={`w-[3px] flex-shrink-0 rounded-full ${
                 status === "recording" ? "bg-indigo-500" : "bg-slate-400"
               }`}
               style={{ height: `${h}px` }}

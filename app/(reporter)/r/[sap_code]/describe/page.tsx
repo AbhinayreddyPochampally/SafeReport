@@ -12,7 +12,12 @@ import {
   setDraftAudio,
   writeDraft,
 } from "@/lib/reporter-state"
-import { t, useReporterLocale } from "@/lib/reporter-i18n"
+import {
+  LOCALE_ENGLISH_NAMES,
+  LOCALE_LABELS,
+  t,
+  useReporterLocale,
+} from "@/lib/reporter-i18n"
 
 /**
  * Screen 7 (Phase 3 facelift) — Describe.
@@ -156,14 +161,85 @@ export default function DescribePage({
 
       {mode === "voice" ? (
         <>
-          {/* Stone-100 plate as documented in docs/VISUAL_LANGUAGE.md (bg-warm) */}
-          <section className="mt-6 rounded-2xl border border-stone-200 bg-stone-100 p-6">
-            <VoiceRecorder
-              value={audio}
-              onChange={setAudio}
-              onStatusChange={setRecStatus}
-            />
-          </section>
+          {/* Voice plate. Wrapped in a relative container so the
+              background-infographic SVG (concentric sound-wave arcs +
+              mic glyph) can layer behind the recorder card without
+              affecting layout. The infographic reads as "listening"
+              and stops the screen feeling sterile — earlier rev had
+              the recorder floating in empty white space, which user
+              feedback flagged.
+
+              The plate now reserves a fixed inner column (max-w-full
+              + overflow-hidden on the bar row inside VoiceRecorder)
+              so the waveform can't overspill on narrow phones — the
+              prior 40-bar count pushed past the card boundary at
+              375 px viewports. */}
+          <div className="relative mt-6">
+            {/* Decorative background — concentric arcs suggesting
+                sound waves, plus a faint mic glyph anchoring the
+                plate. Absolutely positioned + pointer-events-none so
+                it never interferes with the recorder controls. */}
+            <svg
+              className="pointer-events-none absolute inset-x-0 -top-2 mx-auto h-[210px] w-[280px] opacity-[0.07]"
+              viewBox="0 0 280 210"
+              fill="none"
+              aria-hidden
+            >
+              <circle cx="140" cy="100" r="36" stroke="#0A1F46" strokeWidth="2" />
+              <circle cx="140" cy="100" r="60" stroke="#0A1F46" strokeWidth="1.5" />
+              <circle cx="140" cy="100" r="86" stroke="#0A1F46" strokeWidth="1" />
+              <circle cx="140" cy="100" r="112" stroke="#0A1F46" strokeWidth="0.75" />
+              {/* Mic body — tucked into the centre circle */}
+              <rect x="133" y="84" width="14" height="22" rx="7" fill="#0A1F46" />
+              <path
+                d="M124 100 v4 a16 16 0 0 0 32 0 v-4"
+                stroke="#0A1F46"
+                strokeWidth="2"
+                strokeLinecap="round"
+                fill="none"
+              />
+              <line x1="140" y1="120" x2="140" y2="128" stroke="#0A1F46" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+
+            <section className="relative rounded-2xl border border-stone-200 bg-stone-100 p-6">
+              {/* Language indicator — confirms which script will be
+                  transcribed back. Reinforces the "any language"
+                  promise from the intro by naming the actual locale
+                  the reporter picked. */}
+              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300/60 bg-white/70 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                <Mic className="h-3 w-3" strokeWidth={2} aria-hidden />
+                <span>Speak in</span>
+                <span
+                  className="font-semibold text-slate-900"
+                  style={{
+                    fontFamily:
+                      locale === "kn"
+                        ? "'Noto Sans Kannada', 'DM Sans', sans-serif"
+                        : locale === "te"
+                          ? "'Noto Sans Telugu', 'DM Sans', sans-serif"
+                          : locale === "hi"
+                            ? "'Noto Sans Devanagari', 'DM Sans', sans-serif"
+                            : locale === "ta"
+                              ? "'Noto Sans Tamil', 'DM Sans', sans-serif"
+                              : "inherit",
+                  }}
+                >
+                  {LOCALE_LABELS[locale]}
+                </span>
+                {locale !== "en" ? (
+                  <span className="text-slate-400">
+                    · {LOCALE_ENGLISH_NAMES[locale]}
+                  </span>
+                ) : null}
+              </div>
+
+              <VoiceRecorder
+                value={audio}
+                onChange={setAudio}
+                onStatusChange={setRecStatus}
+              />
+            </section>
+          </div>
           <button
             type="button"
             onClick={() => setMode("text")}
