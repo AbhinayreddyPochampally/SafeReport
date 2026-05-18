@@ -477,15 +477,24 @@ const styles = /* css */ `
      scenes. Captions / subs / pills come in after the scene body
      stabilises (0.35-0.55 s in) and exit with the scene as a unit. */
 
-  /* Scene 1: in @ 0.25s, out @ 2.40s → total visible ~2.7s */
+  /* Scene 1: in @ 0.25s, out @ 2.40s → total visible ~2.7s
+     IMPORTANT: the in/out pair uses fill-mode `both` for sr-sceneIn
+     and `forwards` for sr-sceneOut. With both-and-both, the
+     later-listed animation (sr-sceneOut) wins the cascade BEFORE
+     its delay starts and applies its FROM keyframe (opacity 1) —
+     which is exactly wrong for scenes 2 + 3 that aren't supposed to
+     be visible yet at t=0. `forwards` only applies the TO keyframe
+     after the animation ends; pre-start, sr-sceneIn's FROM keyframe
+     (opacity 0) is the only thing applied. This bug stacked all
+     three scenes at opacity 1 on the live page on first load. */
   .sr-scene-1                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 0.25s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 2.40s both; }
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 2.40s forwards; }
   .sr-scene-1 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 0.55s both; }
   .sr-scene-1 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 0.80s both; }
 
   /* Scene 2: in @ 2.65s (overlapping Scene 1 exit by 0.30s) */
   .sr-scene-2                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 2.65s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 5.55s both; }
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 5.55s forwards; }
   .sr-scene-2 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 2.95s both; }
   .sr-lang-en                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.20s both; }
   .sr-lang-kn                  { animation: sr-fadeUp 0.4s cubic-bezier(0.2,0,0,1) 3.35s both; }
@@ -496,7 +505,7 @@ const styles = /* css */ `
 
   /* Scene 3: in @ 5.80s (overlapping Scene 2 exit by 0.30s) */
   .sr-scene-3                  { animation: sr-sceneIn 0.55s cubic-bezier(0.2,0,0,1) 5.80s both,
-                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 8.10s both; }
+                                            sr-sceneOut 0.55s cubic-bezier(0.4,0,1,1) 8.10s forwards; }
   .sr-scene-3 .sr-caption      { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 6.10s both; }
   .sr-scene-3 .sr-sub          { animation: sr-fadeUp 0.5s cubic-bezier(0.2,0,0,1) 6.35s both; }
 
