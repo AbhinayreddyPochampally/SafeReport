@@ -122,10 +122,12 @@ export default function TriagePage({
   }
 
   return (
-    // Page surface uses the Claude Workspace cream (#FAF9F5) instead
-    // of the global slate-50. Cards sit one shade deeper (#F5F1EA) so
-    // the surface contrast is visible without losing the warmth.
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col bg-[#FAF9F5] px-5 py-7">
+    // Page background stays on the global slate-50 — the Claude
+    // Workspace theme applies to the CARDS (warm cream + sand
+    // borders + clay accents) but not the global page surface. An
+    // earlier rev tinted the whole page warm and was reverted per
+    // user feedback.
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col px-5 py-7">
       <ReporterScreenHeader
         sap_code={params.sap_code}
         backHref={`/r/${params.sap_code}`}
@@ -139,15 +141,15 @@ export default function TriagePage({
         {t(locale, "triage.lede")}
       </p>
 
+      {/* Incident first, observation second — severity-descending.
+          A worker who's looking at someone who just got hurt needs
+          the first card they see to be "Someone got hurt", not
+          "Something looked unsafe". The previous order (observation
+          first, mirrored from the original Phase 10 layout) made
+          sense by report-frequency (observations are more common)
+          but not by urgency-of-the-moment, which is what the
+          reporter is actually weighing. */}
       <div className="mt-5 flex flex-col gap-3">
-        <TriageCard
-          href={`/r/${params.sap_code}/category/observation`}
-          kind="observation"
-          kindLabel={t(locale, "subcat.observation.kind")}
-          tagline={t(locale, "triage.observation.title")}
-          examples="wet floor · frayed wire · blocked exit"
-          icon={Eye}
-        />
         <TriageCard
           href={`/r/${params.sap_code}/category/incident`}
           kind="incident"
@@ -155,6 +157,14 @@ export default function TriagePage({
           tagline={t(locale, "triage.incident.title")}
           examples="someone hurt · a fall · a cut"
           icon={TriangleAlert}
+        />
+        <TriageCard
+          href={`/r/${params.sap_code}/category/observation`}
+          kind="observation"
+          kindLabel={t(locale, "subcat.observation.kind")}
+          tagline={t(locale, "triage.observation.title")}
+          examples="wet floor · frayed wire · blocked exit"
+          icon={Eye}
         />
       </div>
 
