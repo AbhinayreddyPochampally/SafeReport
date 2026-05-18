@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, Mic } from "lucide-react"
+import { ArrowRight, Languages, Mic } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { ReporterScreenHeader } from "@/components/reporter-chrome"
@@ -12,12 +12,7 @@ import {
   setDraftAudio,
   writeDraft,
 } from "@/lib/reporter-state"
-import {
-  LOCALE_ENGLISH_NAMES,
-  LOCALE_LABELS,
-  t,
-  useReporterLocale,
-} from "@/lib/reporter-i18n"
+import { t, useReporterLocale } from "@/lib/reporter-i18n"
 
 /**
  * Screen 7 (Phase 3 facelift) — Describe.
@@ -202,35 +197,78 @@ export default function DescribePage({
             </svg>
 
             <section className="relative rounded-2xl border border-stone-200 bg-stone-100 p-6">
-              {/* Language indicator — confirms which script will be
-                  transcribed back. Reinforces the "any language"
-                  promise from the intro by naming the actual locale
-                  the reporter picked. */}
-              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-stone-300/60 bg-white/70 px-2.5 py-1 text-[11px] font-medium text-slate-700">
-                <Mic className="h-3 w-3" strokeWidth={2} aria-hidden />
-                <span>Speak in</span>
-                <span
-                  className="font-semibold text-slate-900"
-                  style={{
-                    fontFamily:
-                      locale === "kn"
-                        ? "'Noto Sans Kannada', 'DM Sans', sans-serif"
-                        : locale === "te"
-                          ? "'Noto Sans Telugu', 'DM Sans', sans-serif"
-                          : locale === "hi"
-                            ? "'Noto Sans Devanagari', 'DM Sans', sans-serif"
-                            : locale === "ta"
-                              ? "'Noto Sans Tamil', 'DM Sans', sans-serif"
-                              : "inherit",
-                  }}
-                >
-                  {LOCALE_LABELS[locale]}
-                </span>
-                {locale !== "en" ? (
-                  <span className="text-slate-400">
-                    · {LOCALE_ENGLISH_NAMES[locale]}
+              {/* Welcome panel — invites the reporter to speak in
+                  whatever language is easiest for them. Crucially,
+                  this is NOT anchored to the UI locale they picked
+                  on the landing: a reporter who chose "English" as
+                  the interface language might still want to record
+                  the actual voice note in Marathi or Gujarati or
+                  any of the other Indian-floor languages the
+                  transcription pipeline handles.
+
+                  The chip row shows native-script labels in a mix
+                  beyond our 5-locale UI picker (Marathi, Bengali,
+                  Gujarati added) so reporters can recognise their
+                  language even if it isn't in the UI list. "Any
+                  language" is the literal promise. */}
+              <div className="mb-5 rounded-xl border border-stone-300/60 bg-white/70 p-3">
+                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-800">
+                  <Languages className="h-3.5 w-3.5 text-indigo-700" strokeWidth={2} aria-hidden />
+                  <span>Speak in any language</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Kannada', 'DM Sans', sans-serif" }}
+                  >
+                    ಕನ್ನಡ
                   </span>
-                ) : null}
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Devanagari', 'DM Sans', sans-serif" }}
+                  >
+                    हिन्दी
+                  </span>
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Devanagari', 'DM Sans', sans-serif" }}
+                  >
+                    मराठी
+                  </span>
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Tamil', 'DM Sans', sans-serif" }}
+                  >
+                    தமிழ்
+                  </span>
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Telugu', 'DM Sans', sans-serif" }}
+                  >
+                    తెలుగు
+                  </span>
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Bengali', 'DM Sans', sans-serif" }}
+                  >
+                    বাংলা
+                  </span>
+                  <span
+                    className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                    style={{ fontFamily: "'Noto Sans Gujarati', 'DM Sans', sans-serif" }}
+                  >
+                    ગુજરાતી
+                  </span>
+                  <span className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                    English
+                  </span>
+                  <span className="rounded-full bg-stone-200/60 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                    + more
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] leading-snug text-slate-500">
+                  Whatever feels natural — we&apos;ll translate it for the safety team.
+                </p>
               </div>
 
               <VoiceRecorder
