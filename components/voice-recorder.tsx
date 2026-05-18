@@ -151,7 +151,41 @@ export function VoiceRecorder({ value, onChange, onStatusChange }: Props) {
     setError(null)
     setStatus("requesting")
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Audio constraints chosen for **voice-note transcription
+      // quality**, which is now load-bearing — the AI classifier reads
+      // the transcript and a noisy / clipped / echoey recording
+      // mis-classifies a non-trivial percentage of pilot reports.
+      //
+      //   echoCancellation     — removes the speaker's own reflections
+      //                          (matters when the reporter holds the
+      //                          phone away from their face on a hard
+      //                          surface)
+      //   noiseSuppression     — knocks down stationary background
+      //                          noise (HVAC, fluorescent buzz, store
+      //                          music). Retail stores are noisy.
+      //   autoGainControl      — normalises volume when the reporter
+      //                          speaks softly (off-roll workers
+      //                          often do) — better dynamic range
+      //                          for the transcriber.
+      //   sampleRate / channelCount — 48 kHz mono is what gpt-4o-
+      //                          transcribe and whisper-1 prefer.
+      //                          Browser may downsample to 16 kHz on
+      //                          some devices regardless; the hint
+      //                          here costs nothing and helps where
+      //                          honoured.
+      //
+      // Browsers ignore unknown / unsupported constraints — no need
+      // to feature-detect. Tested on Chrome (Android + desktop),
+      // Safari iOS 17, Edge.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+      })
       streamRef.current = stream
 
       // Build the analyser graph for the waveform.
@@ -167,11 +201,18 @@ export function VoiceRecorder({ value, onChange, onStatusChange }: Props) {
       const src = ctx.createMediaStreamSource(stream)
       src.connect(analyser)
 
-      // MediaRecorder
+      // MediaRecorder — pin a moderate bitrate so the noise-suppressed
+      // signal isn't re-buried in compression artefacts. 64 kbps Opus
+      // is the sweet spot for speech-only content — Chrome's default
+      // of 32 kbps measurably degrades the transcriber on Indian-
+      // accented English. 64 kbps stays well under the 10 MB upload
+      // cap for the full 120 s recording window.
       const mimeType = pickMimeType()
-      const mr = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream)
+      const recorderOpts: MediaRecorderOptions = {
+        audioBitsPerSecond: 64000,
+      }
+      if (mimeType) recorderOpts.mimeType = mimeType
+      const mr = new MediaRecorder(stream, recorderOpts)
       mediaRef.current = mr
       chunksRef.current = []
       mr.ondataavailable = (e) => {

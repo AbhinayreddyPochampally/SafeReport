@@ -236,7 +236,24 @@ export async function POST(req: Request) {
       const audioPath = new URL(audio_url).pathname.split("/audio/").pop()
       if (audioPath) await admin.storage.from("audio").remove([audioPath]).catch(() => {})
     }
-    return fail("Could not save the report.", 500)
+    // Surface the underlying DB reason to the reporter UI so problems
+    // like "migration 007 hasn't been applied yet" (NOT NULL on
+    // category / type) don't show up as an opaque "Could not save"
+    // toast during a live demo. PostgREST gives us code + message;
+    // the message is human-readable enough to be useful and bounded
+    // enough not to leak schema internals.
+    const dbMsg = insErr?.message ?? ""
+    const dbCode = (insErr as { code?: string } | null)?.code
+    if (dbCode === "23502" || /null value in column/i.test(dbMsg)) {
+      return fail(
+        "Database migration 007 hasn't been applied yet — please run supabase/migrations/007_ai_classification.sql in the Supabase SQL editor and try again.",
+        500,
+      )
+    }
+    return fail(
+      dbMsg ? `Could not save the report: ${dbMsg}` : "Could not save the report.",
+      500,
+    )
   }
 
   // Fire-and-forget: kick off Whisper transcription for the voice note, and

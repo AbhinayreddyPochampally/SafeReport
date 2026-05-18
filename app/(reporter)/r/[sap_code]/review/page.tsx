@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckCircle2, Mic, Pencil, Sparkles } from "lucide-react"
+import { CheckCircle2, Mic, Pencil } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -178,28 +178,11 @@ export default function ReviewPage({
           </Link>
         </div>
 
-        {/* Category — Mig 007: reporter doesn't pick. The AI classifier
-            runs after submission and HO confirms on review. Microcopy
-            here sets that expectation so reporters who used the previous
-            flow don't wonder where the triage screen went. */}
-        <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">
-          <span className="mt-0.5 inline-flex h-7 w-7 flex-none items-center justify-center rounded-full bg-indigo-50">
-            <Sparkles
-              className="h-3.5 w-3.5 text-indigo-700"
-              strokeWidth={1.8}
-              aria-hidden
-            />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-              {t(locale, "review.row.category")}
-            </p>
-            <p className="text-[13px] leading-5 text-slate-700">
-              {t(locale, "review.category_ai_note")}
-            </p>
-          </div>
-        </div>
-
+        {/* Mig 007: no Category row. The reporter never picks a
+            category in the flow; HO confirms it on the report-detail
+            page post-submission. Surfacing a "category will be set
+            by HO" line here adds noise without telling the reporter
+            anything actionable. */}
         <Row
           label={t(locale, "review.row.when")}
           editLabel={t(locale, "common.edit")}

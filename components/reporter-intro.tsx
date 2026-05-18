@@ -103,7 +103,9 @@ export function ReporterIntro(_props: Props = {}) {
             of thing the app exists to capture: concrete unsafe spots
             they can see on the floor. Examples in the sub are the
             three most common pilot-store reports so a first-time
-            reporter can pattern-match what they're looking at. */}
+            reporter can pattern-match what they're looking at.
+            Scanning-eye SVG accent over the illustration draws the
+            viewer's attention to the "spotting" action. */}
         <div className="sr-scene sr-scene-1">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -114,15 +116,31 @@ export function ReporterIntro(_props: Props = {}) {
               height={768}
               draggable={false}
             />
+            <svg
+              className="sr-svg-overlay sr-svg-scan"
+              viewBox="0 0 100 100"
+              aria-hidden
+            >
+              {/* Concentric scanning rings + crosshair — animates a
+                  pulse from the centre outward. */}
+              <circle className="sr-scan-ring sr-scan-ring-1" cx="50" cy="50" r="8" />
+              <circle className="sr-scan-ring sr-scan-ring-2" cx="50" cy="50" r="14" />
+              <circle className="sr-scan-ring sr-scan-ring-3" cx="50" cy="50" r="20" />
+              <line className="sr-scan-cross" x1="38" y1="50" x2="62" y2="50" />
+              <line className="sr-scan-cross" x1="50" y1="38" x2="50" y2="62" />
+            </svg>
           </div>
           <h2 className="sr-caption">Spot something unsafe?</h2>
           <p className="sr-sub">Wet floor, broken shelf, anything risky.</p>
         </div>
 
-        {/* Scene 2 — WHAT TO DO. The action itself: three short verbs
-            that map to the actual flow downstream (tap a category,
-            speak a voice note, submit). Language pills below the
-            caption show "any language" rather than stating it. */}
+        {/* Scene 2 — WHAT TO DO. The flow itself: take a photo
+            (required), record a voice note in any language, send.
+            Language pills below the caption show "any language"
+            rather than stating it. Photo is required — copy was
+            previously "Add a photo if you can" which falsely
+            suggested it was optional and confused testers. The
+            soundwave SVG animates the "speak" beat. */}
         <div className="sr-scene sr-scene-2">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -133,8 +151,21 @@ export function ReporterIntro(_props: Props = {}) {
               height={768}
               draggable={false}
             />
+            <svg
+              className="sr-svg-overlay sr-svg-wave"
+              viewBox="0 0 100 100"
+              aria-hidden
+            >
+              {/* Five vertical bars in a centred row — animates a
+                  speaking-into-mic waveform. */}
+              <rect className="sr-wave-bar sr-wave-bar-1" x="36" y="44" width="3" height="12" rx="1.5" />
+              <rect className="sr-wave-bar sr-wave-bar-2" x="43" y="40" width="3" height="20" rx="1.5" />
+              <rect className="sr-wave-bar sr-wave-bar-3" x="50" y="36" width="3" height="28" rx="1.5" />
+              <rect className="sr-wave-bar sr-wave-bar-4" x="57" y="40" width="3" height="20" rx="1.5" />
+              <rect className="sr-wave-bar sr-wave-bar-5" x="64" y="44" width="3" height="12" rx="1.5" />
+            </svg>
           </div>
-          <h2 className="sr-caption">Tap. Speak. Send.</h2>
+          <h2 className="sr-caption">Photo. Voice. Send.</h2>
           <div className="sr-lang-pills">
             <span className="sr-lang-pill sr-lang-en">English</span>
             <span className="sr-lang-pill sr-lang-kn">ಕನ್ನಡ</span>
@@ -142,17 +173,15 @@ export function ReporterIntro(_props: Props = {}) {
             <span className="sr-lang-pill sr-lang-ta">தமிழ்</span>
             <span className="sr-lang-pill sr-lang-te">తెలుగు</span>
           </div>
-          <p className="sr-sub">Any language. Add a photo if you can.</p>
+          <p className="sr-sub">
+            Take a photo of what you saw. Then speak in any language.
+          </p>
         </div>
 
         {/* Scene 3 — HOW IT HELPS. Closes the loop on the outcome,
-            not the chain of actors (the previous draft led with
-            "Head Office fixes it fast" — but the reporter doesn't
-            care which step of the manager → HO chain does the fix,
-            they care that the unsafe thing they spotted is dealt
-            with). The anonymity line stays because that's the
-            biggest barrier to first-time reports in pilot
-            interviews — naming it here is load-bearing. */}
+            not the chain of actors. Anonymity line stays — biggest
+            barrier to first-time reports in pilot interviews.
+            Check-stroke SVG animates the "resolution" beat. */}
         <div className="sr-scene sr-scene-3">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -163,6 +192,16 @@ export function ReporterIntro(_props: Props = {}) {
               height={768}
               draggable={false}
             />
+            <svg
+              className="sr-svg-overlay sr-svg-check"
+              viewBox="0 0 100 100"
+              aria-hidden
+            >
+              {/* Circle frame draws first, then the check inside it —
+                  the path-length trick lets the stroke "write itself". */}
+              <circle className="sr-check-circle" cx="50" cy="50" r="18" />
+              <path className="sr-check-mark" d="M40 50 l8 8 l14 -16" />
+            </svg>
           </div>
           <h2 className="sr-caption">It gets fixed, fast.</h2>
           <p className="sr-sub">Your store stays safer. You stay anonymous.</p>
@@ -586,6 +625,116 @@ const styles = /* css */ `
   .sr-cta                      { animation: sr-fadeUp 0.55s cubic-bezier(0.2,0,0,1) 10.65s both,
                                             sr-breathe 2.6s ease-in-out 11.35s infinite; }
 
+  /* === Scene SVG overlays ===
+
+     Each scene illustration gets a small SVG accent positioned in the
+     bottom-right corner of the image card. Keeps the illustration as
+     the hero (the SVG never covers it) but adds a small motion beat
+     that maps to the scene's verb: scanning (scene 1), speaking
+     (scene 2), resolution (scene 3). All stroke-based so they read
+     the same against any background. */
+
+  .sr-image { position: relative; }
+  .sr-svg-overlay {
+    position: absolute;
+    /* Bottom-right of the illustration, with a faint white halo so
+       the strokes read against any photographic background. */
+    right: 10px;
+    bottom: 10px;
+    width: 64px;
+    height: 64px;
+    overflow: visible;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(10, 31, 70, 0.16);
+    padding: 8px;
+    box-sizing: border-box;
+  }
+
+  /* --- Scene 1 · scanning rings + crosshair ----------------------- */
+  .sr-scan-ring {
+    fill: none;
+    stroke: #4338CA;
+    stroke-width: 2;
+    opacity: 0;
+    transform-origin: 50% 50%;
+  }
+  .sr-scan-cross {
+    stroke: #4338CA;
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+  /* Three rings stagger out from the centre on a 1.6s loop. The
+     crosshair pulses faintly between ring waves. The animation only
+     kicks in while Scene 1 is the active scene (≈ 0.25s–2.85s). */
+  @keyframes sr-scan-pulse {
+    0%   { opacity: 0; r: 8;  }
+    30%  { opacity: 0.9; }
+    100% { opacity: 0; r: 26; }
+  }
+  @keyframes sr-scan-cross-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.95; }
+  }
+  .sr-scene-1 .sr-scan-ring-1 { animation: sr-scan-pulse 1.6s ease-out 0.65s infinite; }
+  .sr-scene-1 .sr-scan-ring-2 { animation: sr-scan-pulse 1.6s ease-out 1.05s infinite; }
+  .sr-scene-1 .sr-scan-ring-3 { animation: sr-scan-pulse 1.6s ease-out 1.45s infinite; }
+  .sr-scene-1 .sr-scan-cross  { animation: sr-scan-cross-pulse 1.2s ease-in-out 0.65s infinite; }
+
+  /* --- Scene 2 · speaking waveform -------------------------------- */
+  .sr-wave-bar {
+    fill: #4338CA;
+    transform-origin: 50% 50%;
+    transform-box: fill-box;
+    opacity: 0;
+  }
+  @keyframes sr-wave-pulse {
+    0%, 100% { transform: scaleY(0.5); opacity: 0.45; }
+    50%      { transform: scaleY(1.2); opacity: 1; }
+  }
+  /* Stagger the five bars so the wave reads as a person speaking
+     (centre tallest, edges shorter — supported by the base SVG
+     heights too). Animations start when Scene 2 enters (≈ 3.0s) and
+     loop until Scene 2 exits (≈ 6.4s). */
+  .sr-scene-2 .sr-wave-bar-1 { animation: sr-wave-pulse 0.9s ease-in-out 3.30s infinite; }
+  .sr-scene-2 .sr-wave-bar-2 { animation: sr-wave-pulse 0.9s ease-in-out 3.42s infinite; }
+  .sr-scene-2 .sr-wave-bar-3 { animation: sr-wave-pulse 0.9s ease-in-out 3.54s infinite; }
+  .sr-scene-2 .sr-wave-bar-4 { animation: sr-wave-pulse 0.9s ease-in-out 3.66s infinite; }
+  .sr-scene-2 .sr-wave-bar-5 { animation: sr-wave-pulse 0.9s ease-in-out 3.78s infinite; }
+
+  /* --- Scene 3 · circle + check-stroke draw ----------------------- */
+  .sr-check-circle {
+    fill: none;
+    stroke: #0F766E;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    /* Circumference of r=18: 2π·18 ≈ 113. Draw in from full hidden. */
+    stroke-dasharray: 113;
+    stroke-dashoffset: 113;
+  }
+  .sr-check-mark {
+    fill: none;
+    stroke: #0F766E;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    /* Path length of the check is ≈ 32. */
+    stroke-dasharray: 32;
+    stroke-dashoffset: 32;
+  }
+  /* Circle traces first (0.6s), then the check writes itself inside
+     it (0.4s, starting at 6.95s = ~0.4s after Scene 3's enter at
+     6.55s). Both stay drawn for the rest of the scene. */
+  .sr-scene-3 .sr-check-circle {
+    animation: sr-draw-circle 0.6s ease-out 6.95s forwards;
+  }
+  .sr-scene-3 .sr-check-mark {
+    animation: sr-draw-check 0.4s ease-out 7.45s forwards;
+  }
+  @keyframes sr-draw-circle { to { stroke-dashoffset: 0; } }
+  @keyframes sr-draw-check  { to { stroke-dashoffset: 0; } }
+
   /* prefers-reduced-motion — skip the scenes entirely, show the final
      reveal statically. The user has signalled they don't want the
      cinematic; honour it. */
@@ -600,5 +749,13 @@ const styles = /* css */ `
        check at its base stroke-dashoffset: 14 (invisible). Reset
        to 0 so the check is fully visible at rest. */
     .sr-feat-check { stroke-dashoffset: 0 !important; }
+    /* SVG-overlay strokes: ensure they're visible at rest if the
+       cinematic is somehow shown despite the reduced-motion guard. */
+    .sr-scan-ring, .sr-scan-cross, .sr-wave-bar,
+    .sr-check-circle, .sr-check-mark {
+      animation: none !important;
+      opacity: 1 !important;
+      stroke-dashoffset: 0 !important;
+    }
   }
 `
