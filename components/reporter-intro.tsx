@@ -88,7 +88,11 @@ export function ReporterIntro(_props: Props = {}) {
           Skip
         </button>
 
-        {/* Scene 1 — Observation. The worker spotting a wet-floor hazard. */}
+        {/* Scene 1 — WHAT IT'S FOR. Anchors the reporter on the kind
+            of thing the app exists to capture: concrete unsafe spots
+            they can see on the floor. Examples in the sub are the
+            three most common pilot-store reports so a first-time
+            reporter can pattern-match what they're looking at. */}
         <div className="sr-scene sr-scene-1">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -100,13 +104,14 @@ export function ReporterIntro(_props: Props = {}) {
               draggable={false}
             />
           </div>
-          <h2 className="sr-caption">See it.</h2>
-          <p className="sr-sub">Every safety issue starts with someone noticing first.</p>
+          <h2 className="sr-caption">Spot something unsafe?</h2>
+          <p className="sr-sub">Wet floor, broken shelf, anything risky.</p>
         </div>
 
-        {/* Scene 2 — Action. The worker on the SafeReport voice screen.
-            Language pills carry the multilingual feature reveal — the
-            "any language" promise is visible, not just stated. */}
+        {/* Scene 2 — WHAT TO DO. The action itself: three short verbs
+            that map to the actual flow downstream (tap a category,
+            speak a voice note, submit). Language pills below the
+            caption show "any language" rather than stating it. */}
         <div className="sr-scene sr-scene-2">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -118,7 +123,7 @@ export function ReporterIntro(_props: Props = {}) {
               draggable={false}
             />
           </div>
-          <h2 className="sr-caption">Speak any language.</h2>
+          <h2 className="sr-caption">Tap. Speak. Send.</h2>
           <div className="sr-lang-pills">
             <span className="sr-lang-pill sr-lang-en">English</span>
             <span className="sr-lang-pill sr-lang-kn">ಕನ್ನಡ</span>
@@ -126,10 +131,14 @@ export function ReporterIntro(_props: Props = {}) {
             <span className="sr-lang-pill sr-lang-ta">தமிழ்</span>
             <span className="sr-lang-pill sr-lang-te">తెలుగు</span>
           </div>
-          <p className="sr-sub">We translate it for the safety team.</p>
+          <p className="sr-sub">Any language. Add a photo if you can.</p>
         </div>
 
-        {/* Scene 3 — Resolution. Thumbs-up + SAFE banner + Head Office. */}
+        {/* Scene 3 — HOW IT HELPS. Closes the loop: who acts on the
+            report, what the reporter gets out of it, and the privacy
+            promise (the anonymity guarantee is the biggest barrier
+            to first-time reports in pilot interviews — naming it
+            here is load-bearing, not throwaway). */}
         <div className="sr-scene sr-scene-3">
           <div className="sr-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,8 +150,8 @@ export function ReporterIntro(_props: Props = {}) {
               draggable={false}
             />
           </div>
-          <h2 className="sr-caption">Your workplace is safer.</h2>
-          <p className="sr-sub">Fixes go to Head Office. Real action, fast.</p>
+          <h2 className="sr-caption">Head Office fixes it fast.</h2>
+          <p className="sr-sub">Your store stays safer. You stay anonymous.</p>
         </div>
 
         {/* Final reveal. AppIcon centred (per user spec — "App icon in
@@ -154,8 +163,12 @@ export function ReporterIntro(_props: Props = {}) {
             <AppIcon size={88} aria-hidden />
           </div>
           <h1 className="sr-title">SafeReport</h1>
+          {/* Tagline is now the one-line summary of the loop the
+              three scenes just told: report unsafe spots → Head Office
+              acts → you stay anonymous. Mirrors the verbs from the
+              scenes so the end card reads as a recap, not new copy. */}
           <p className="sr-tagline">
-            Tell your safety team. Anonymous to your coworkers.
+            Report unsafe spots. Head Office fixes them. You stay anonymous.
           </p>
           <div className="sr-features">
             <div className="sr-feat sr-feat-1">
