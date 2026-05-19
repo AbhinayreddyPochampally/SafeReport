@@ -12,10 +12,12 @@ import { classify } from "@/lib/classify"
  *
  * Pilot iteration (mig 007, May 2026):
  *   - Text-in-text-out classifier on gpt-4o-mini. NO image input —
- *     just the English transcript produced by /api/transcribe.
- *   - Voice-only: reports without a voice note are not classified by
- *     AI in this iteration. HO picks the category manually via the
- *     dropdown on the report-detail page.
+ *     just text. We accept either source: the English transcript from
+ *     /api/transcribe (voice-note path) OR the reporter's typed
+ *     description (text-only path). The classifier doesn't care which.
+ *   - The only reports that skip AI classification are photo-only ones
+ *     where the reporter neither spoke nor typed — those land on HO
+ *     with no AI suggestion and the dropdown is the only path.
  *   - Live (not batched). The Phase Azure rollout will switch to the
  *     OpenAI Batch API for the 50% discount; the pilot runs live so
  *     HO sees the AI's pick within seconds of the manager submitting
@@ -113,13 +115,18 @@ export async function POST(req: NextRequest) {
       { status: 200 },
     )
   }
-  // Pilot policy: voice-only. Skip if there's no English transcript.
-  // We surface the reason in the response so the transcribe-route caller
-  // can log it. Photo-only / text-only reports take the manual-dropdown
-  // path on the HO report-detail page.
-  if (!report.transcript || report.transcript.trim().length === 0) {
+  // Need *some* text to classify on — either an English transcript from
+  // /api/transcribe or a reporter-typed description. The submit rule
+  // (photo + voice OR description) guarantees at least one of the two
+  // for every report; photo-only is not allowed in the first place.
+  // The only path that lands here with no text is "voice note attached
+  // but transcription failed" — for those we leave suggested_category
+  // null and HO picks via the dropdown.
+  const transcriptText = report.transcript?.trim() ?? ""
+  const descriptionText = report.description?.trim() ?? ""
+  if (transcriptText.length === 0 && descriptionText.length === 0) {
     return NextResponse.json(
-      { skipped: true, reason: "no transcript available" },
+      { skipped: true, reason: "no text content available" },
       { status: 200 },
     )
   }
@@ -129,16 +136,22 @@ export async function POST(req: NextRequest) {
   let result
   try {
     result = await classify(openai, {
-      transcript: report.transcript,
+      // Primary signal: the English transcript when present, otherwise
+      // the typed description. The classifier prompt is generic enough
+      // to handle either source — it just sees English text.
+      transcript: transcriptText || descriptionText,
       // Pass the raw source-language transcript too. When translation
       // sands off nuance (Hinglish idiom, retail-floor slang) the source
       // sometimes carries information the English version doesn't.
       source_transcript: report.transcript_source,
       source_lang: report.transcript_source_lang,
-      // Typed description is rarely populated when there's a voice note
-      // — but if both exist, the description is supplementary context
-      // worth surfacing to the model.
-      description: report.description,
+      // Typed description as a second signal when both exist (e.g. the
+      // reporter spoke AND typed something — rare but possible). When
+      // ONLY description is present we pass it as the primary above; in
+      // that case this field is redundant and the classify helper de-
+      // dupes string-equal inputs.
+      description:
+        transcriptText.length > 0 ? report.description : null,
       // Store grounding. "Allen Solly · Mumbai" tells the model this is
       // a clothing retail store, biasing it toward trial-room /
       // mannequin / billing-counter vocabulary.
@@ -179,9 +192,10 @@ export async function POST(req: NextRequest) {
     category: result.category,
     confidence: result.confidence,
     sourceLang: report.transcript_source_lang ?? null,
-    transcriptChars: report.transcript.length,
+    transcriptChars: transcriptText.length,
+    descriptionChars: descriptionText.length,
+    primarySource: transcriptText.length > 0 ? "transcript" : "description",
     hasSourceTranscript: Boolean(report.transcript_source),
-    hasDescription: Boolean(report.description),
   })
 
   // The HO Reports tab caches an "AI-suggested" filter set via this tag

@@ -167,19 +167,25 @@ function buildUserMessage(input: ClassifyInput): string {
     const where = [input.brand, input.store_name].filter(Boolean).join(" · ")
     lines.push(`Store context: ${where}.`)
   }
-  if (input.transcript && input.transcript.trim().length > 0) {
-    lines.push(`English transcript:\n${input.transcript.trim()}`)
+  const transcriptText = input.transcript?.trim() ?? ""
+  if (transcriptText.length > 0) {
+    lines.push(`English transcript:\n${transcriptText}`)
   }
-  if (
-    input.source_transcript &&
-    input.source_transcript.trim().length > 0 &&
-    input.source_transcript.trim() !== input.transcript?.trim()
-  ) {
+  const sourceText = input.source_transcript?.trim() ?? ""
+  if (sourceText.length > 0 && sourceText !== transcriptText) {
     const langTag = input.source_lang ? ` [${input.source_lang}]` : ""
-    lines.push(`Raw source transcript${langTag}:\n${input.source_transcript.trim()}`)
+    lines.push(`Raw source transcript${langTag}:\n${sourceText}`)
   }
-  if (input.description && input.description.trim().length > 0) {
-    lines.push(`Typed description from reporter:\n${input.description.trim()}`)
+  const descriptionText = input.description?.trim() ?? ""
+  // Skip the description line if it's identical to the transcript we
+  // already showed (text-only reports pass the description AS the
+  // transcript, and we don't want it twice).
+  if (
+    descriptionText.length > 0 &&
+    descriptionText !== transcriptText &&
+    descriptionText !== sourceText
+  ) {
+    lines.push(`Typed description from reporter:\n${descriptionText}`)
   }
   // Hard cap the assembled message so a pathological transcript doesn't
   // blow up the per-call cost. Truncation at the END is fine here — the

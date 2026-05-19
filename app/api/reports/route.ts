@@ -280,6 +280,24 @@ export async function POST(req: Request) {
         err: err instanceof Error ? err.message : String(err),
       })
     })
+  } else if (description.length > 0) {
+    // Mig 007 follow-up: text-only reports (no voice note) need their
+    // own classify trigger because /api/transcribe doesn't run for
+    // them. The classifier accepts the typed description as input when
+    // there's no transcript. Voice-note reports take the transcribe
+    // path, which chains classify on Stage B success — we never want
+    // to fire classify twice (it's idempotent but the second call is
+    // wasted work).
+    void fetch(`${origin}/api/classify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report_id: inserted.id }),
+    }).catch((err) => {
+      console.warn("[api/reports] classify kickoff failed", {
+        id: inserted.id,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   void fetch(`${origin}/api/notifications/dispatch`, {
