@@ -14,8 +14,11 @@ Companion references:
 - `agents.md` (repo root) — coding agent roster and orchestration patterns
 
 The long-form product-design PDF lives at
-`/mnt/user-data/outputs/SafeReport_Design_Document_v6.pdf` — use it when you need
-context on why a decision was made.
+`Design & Architecture/SafeReport_Design_Document_v6.pdf` — use it when you need
+context on why a decision was made. (The `Design & Architecture/` folder also
+holds the production Azure deliverables — `SafeReport_IT_Architecture.docx` and
+`SafeReport_Azure_Consumption_Estimate.docx` — which describe the full-scale
+deployment the running Railway/Supabase build only demos.)
 
 When you ship a change that touches this brief, add a `CHANGELOG.md` entry
 and bump the `STATE.md` row's Verified date.

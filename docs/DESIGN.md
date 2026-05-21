@@ -1,7 +1,7 @@
 # SafeReport — Design Reference v6
 
 Condensed design reference for Claude Code. For the full product design document
-see `/mnt/user-data/outputs/SafeReport_Design_Document_v6.pdf` (49 pages).
+see `Design & Architecture/SafeReport_Design_Document_v6.pdf` (49 pages).
 
 ---
 
