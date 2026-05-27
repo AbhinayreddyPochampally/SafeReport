@@ -1606,13 +1606,17 @@ function CategoryAcr({ category }: { category: ReportCategory }) {
 
 /**
  * Action Hero / Today-strip pill renderer for rows whose `category` may
- * still be null (mig 007 — AI classification is pending or absent). The
- * call site is responsible for resolving the union — we either render
- * a real CategoryAcr (when there's a known or AI-suggested category) or
- * a dedicated "Pending" pill (when neither is set, which only happens
- * for photo-only / text-only reports the classifier skipped). The
- * `isPending` flag drives a small "AI" badge so HO can spot un-sealed
- * rows at a glance.
+ * still be null (mig 007 — AI classification is pending or absent).
+ *
+ * Seamless treatment (2026-05-27): when HO hasn't sealed the category,
+ * fall back to the AI's suggested pick and render it as if it's just
+ * the category. NO visible "AI" indicator — the audit trail
+ * (category_source) still records ai / ho-confirmed / ho-corrected
+ * server-side, but operators see "the category", full stop.
+ *
+ * The only visible distinction is the dashed "—" placeholder, which
+ * only renders for photo-only / text-only reports where the classifier
+ * had no transcript to read.
  */
 function CategoryAcrOrPending({
   category,
@@ -1622,32 +1626,17 @@ function CategoryAcrOrPending({
   suggestedCategory: ReportCategory | null
 }) {
   const displayCategory = category ?? suggestedCategory
-  const isPending = !category && !!suggestedCategory
   if (!displayCategory) {
-    // No sealed category and no AI suggestion. Photo-only / text-only
-    // report waiting on HO to pick from scratch.
     return (
       <span
         className="inline-flex h-[22px] items-center justify-center px-1.5 rounded font-mono text-[10px] font-semibold border bg-slate-50 text-slate-500 border-slate-200 border-dashed"
-        title="Awaiting HO classification"
+        title="Pending classification"
       >
         —
       </span>
     )
   }
-  return (
-    <span className="inline-flex items-center gap-1">
-      <CategoryAcr category={displayCategory} />
-      {isPending ? (
-        <span
-          className="inline-flex h-[22px] items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 text-[9px] font-bold uppercase tracking-wide text-indigo-700"
-          title="AI suggested — needs HO confirmation"
-        >
-          AI
-        </span>
-      ) : null}
-    </span>
-  )
+  return <CategoryAcr category={displayCategory} />
 }
 
 function hoursSinceIso(iso: string): number {

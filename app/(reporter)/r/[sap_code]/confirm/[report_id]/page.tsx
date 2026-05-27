@@ -6,6 +6,7 @@ import { useEffect } from "react"
 import { clearDraft } from "@/lib/reporter-state"
 import { t, useReporterLocale } from "@/lib/reporter-i18n"
 import { ReporterConfirmAsks } from "@/components/reporter-confirm-asks"
+import { ReporterIosInstallMount } from "./install-mount"
 
 /**
  * Screen 7 — Confirmation.
@@ -90,6 +91,10 @@ export default function ConfirmPage({
       <div className="w-full max-w-sm">
         <ReporterConfirmAsks reportId={prettyId} />
       </div>
+
+      {/* iOS Add-to-Home-Screen walkthrough — self-gated; renders only on
+          iOS, non-standalone, non-dismissed sessions. */}
+      <ReporterIosInstallMount />
 
       <div className="mt-8 flex w-full flex-col gap-3">
         <Link

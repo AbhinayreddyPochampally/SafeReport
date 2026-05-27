@@ -164,14 +164,14 @@ function QueueRowItem({
   variant: Variant
   dotClass: string
 }) {
-  // Mig 007: fall back to AI's pending pick when HO hasn't confirmed.
-  // `isPending` drives a small AI badge so HO can scan for the
-  // unconfirmed ones at a glance.
+  // Mig 007 (seamless): when HO hasn't confirmed yet, fall back to the
+  // AI's suggested pick and render it as if it's just the category. No
+  // visible "AI" indicator anywhere — the audit trail (category_source)
+  // still distinguishes ai / ho-confirmed / ho-corrected server-side.
   const displayKey = (row.category ?? row.suggested_category) ?? null
   const cat = displayKey
     ? CATEGORIES.find((c) => c.key === displayKey)
     : undefined
-  const isPending = !row.category && !!row.suggested_category
   const isUnknown = !displayKey
   const isIncident = cat?.kind === "incident"
   const catBadgeClass = isUnknown
@@ -207,10 +207,8 @@ function QueueRowItem({
           className={`inline-flex h-9 w-11 items-center justify-center rounded-md border text-[11px] font-bold tracking-wide ${catBadgeClass}`}
           title={
             isUnknown
-              ? "Awaiting AI / HO classification"
-              : isPending
-                ? `AI suggestion (pending HO confirm): ${cat?.label ?? displayKey}`
-                : cat?.label ?? displayKey ?? ""
+              ? "Pending classification"
+              : cat?.label ?? displayKey ?? ""
           }
         >
           {abbrev}
@@ -228,14 +226,6 @@ function QueueRowItem({
                 displayKey ||
                 "Awaiting classification"}
             </span>
-            {isPending ? (
-              <span
-                className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700"
-                title="AI suggested — needs HO confirmation"
-              >
-                AI
-              </span>
-            ) : null}
             {variant === "pipeline" && <StatusPill status={row.status} />}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-slate-500 truncate">

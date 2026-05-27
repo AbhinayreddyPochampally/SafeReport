@@ -9,6 +9,7 @@ import {
   Ban,
   Bell,
   Check,
+  ChevronDown,
   ImageOff,
   Inbox,
   Loader2,
@@ -18,6 +19,8 @@ import {
   User,
 } from "lucide-react"
 import { CATEGORIES } from "@/lib/categories"
+import { isSeverityFloor } from "@/lib/category-derive"
+import type { ReportCategory } from "@/lib/reporter-state"
 
 /**
  * Action Required — master-detail UI for HO's open queue.
@@ -53,6 +56,11 @@ export type ActionListItem = {
   // Mig 007: nullable until HO confirms.
   type: "observation" | "incident" | null
   category: string | null
+  // Mig 007 seamless (2026-05-27): AI's pre-classified pick. The tile
+  // falls back to this when `category` is null so HO sees a category
+  // instead of "Pending classification" — no visible AI indicator.
+  suggested_category: string | null
+  category_source: "ai" | "ho-confirmed" | "ho-corrected" | null
   status: "new" | "in_progress" | "awaiting_ho" | "returned" | "closed" | "voided"
   reported_at: string
   acknowledged_at: string | null
@@ -91,6 +99,9 @@ export type ActionDetail = {
   // Mig 007: nullable until HO confirms.
   type: "observation" | "incident" | null
   category: string | null
+  // Mig 007 seamless (2026-05-27): see ActionListItem comments above.
+  suggested_category: string | null
+  category_source: "ai" | "ho-confirmed" | "ho-corrected" | null
   status: ActionListItem["status"]
   description: string | null
   transcript: string | null
@@ -138,6 +149,16 @@ export function ActionClient({
   const [toast, setToast] = useState<string | null>(null)
   const [returnOpen, setReturnOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
+  // Mig 007 seamless (2026-05-27): when HO opens a report whose
+  // category hasn't been sealed, the detail pane surfaces an inline
+  // override dropdown. The user's pick (if any) lives here so the
+  // approve action can bundle category + via in one POST. Reset on
+  // every selection change so the override doesn't carry between rows.
+  const [categoryOverride, setCategoryOverride] =
+    useState<ReportCategory | null>(null)
+  useEffect(() => {
+    setCategoryOverride(null)
+  }, [selectedId])
 
   const visible = useMemo(() => {
     if (filter === "all") return list
@@ -261,6 +282,47 @@ export function ActionClient({
     comment?: string,
   ) {
     if (!detail) return
+    // Mig 007 seamless (2026-05-27): approving an un-sealed report
+    // bundles category + via in the same POST so HO seals + closes
+    // in a single click. Logic mirrors the server-side rules in
+    // /api/ho-actions:
+    //   - finalCategory = manual override (if any) or AI's suggestion.
+    //   - via = 'corrected' whenever HO picked from the dropdown OR the
+    //     final category is severity-floor; otherwise 'confirmed'.
+    //   - Severity floor (LTI / Fatality) without an explicit dropdown
+    //     pick is blocked client-side so the user gets immediate
+    //     feedback rather than a server 400. The audit-trail rule
+    //     ("must be 'corrected' to record an explicit click") is the
+    //     reason for the dropdown-only gate; see CLAUDE.md §"Severity
+    //     floor — hard rule".
+    let categoryPatch:
+      | { category: ReportCategory; category_via: "confirmed" | "corrected" }
+      | null = null
+    if (action === "approve" && !detail.category) {
+      const suggested = (detail.suggested_category ?? null) as
+        | ReportCategory
+        | null
+      const finalCategory: ReportCategory | null =
+        categoryOverride ?? suggested
+      if (!finalCategory) {
+        setError("Pick a category from the dropdown before approving.")
+        return
+      }
+      const floor = isSeverityFloor(finalCategory)
+      if (floor && !categoryOverride) {
+        setError(
+          "High-severity categories must be confirmed via the dropdown so the audit trail records an explicit click.",
+        )
+        return
+      }
+      const matchesSuggested =
+        categoryOverride === null
+          ? true
+          : suggested !== null && categoryOverride === suggested
+      const via: "confirmed" | "corrected" =
+        floor || !matchesSuggested ? "corrected" : "confirmed"
+      categoryPatch = { category: finalCategory, category_via: via }
+    }
     setBusy(action)
     setError(null)
     try {
@@ -271,6 +333,7 @@ export function ActionClient({
           report_id: detail.id,
           action,
           comment: comment ?? undefined,
+          ...(categoryPatch ?? {}),
         }),
       })
       const body = (await res.json().catch(() => null)) as {
@@ -398,6 +461,8 @@ export function ActionClient({
                 onReturnRequested={() => setReturnOpen(true)}
                 onVoidRequested={() => setVoidOpen(true)}
                 listItem={list.find((l) => l.id === detail.id) ?? null}
+                categoryOverride={categoryOverride}
+                onCategoryOverride={setCategoryOverride}
               />
             ) : (
               <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-500">
@@ -550,7 +615,7 @@ function ActionList({
                   </div>
                   <div className="mt-1 flex items-center gap-1 flex-wrap">
                     <span className="text-[12.5px] font-medium text-slate-900 truncate">
-                      {categoryLabel(row.category)}
+                      {categoryLabel(row.category, row.suggested_category)}
                     </span>
                     {row.resubmitted && (
                       <span className="inline-flex items-center gap-0.5 rounded px-1 py-0 text-[9.5px] font-semibold uppercase bg-orange-100 text-orange-800 border border-orange-200">
@@ -593,6 +658,8 @@ function DetailPane({
   onReturnRequested,
   onVoidRequested,
   listItem,
+  categoryOverride,
+  onCategoryOverride,
 }: {
   detail: ActionDetail
   viewer: { display_name: string }
@@ -602,8 +669,42 @@ function DetailPane({
   onReturnRequested: () => void
   onVoidRequested: () => void
   listItem: ListItemWithBucket | null
+  // Mig 007 seamless: HO can override the AI's suggested category
+  // inline. Parent owns the state (resets across selection changes
+  // via the useEffect on selectedId).
+  categoryOverride: ReportCategory | null
+  onCategoryOverride: (key: ReportCategory | null) => void
 }) {
-  const cat = CATEGORIES.find((c) => c.key === detail.category)
+  // Mig 007 seamless: fall back to the AI's suggested pick when HO
+  // hasn't sealed the category, and apply HO's override when set. The
+  // UI surfaces a single "category" throughout — no AI indicator.
+  const sealedCategory = detail.category as ReportCategory | null
+  const suggestedCategory = (detail.suggested_category ?? null) as
+    | ReportCategory
+    | null
+  const effectiveCategory: ReportCategory | null =
+    sealedCategory ?? categoryOverride ?? suggestedCategory
+  const cat = CATEGORIES.find((c) => c.key === effectiveCategory)
+  const categoryNeedsHo = !sealedCategory
+  // Treat the row as observation vs incident based on the effective
+  // category (sealed, override, or AI's suggestion). When nothing
+  // resolves we fall back to slate styling — observation is the
+  // safer default while HO is still picking.
+  const effectiveIsIncident = cat?.kind === "incident"
+  // Severity floor (LTI / Fatality). When the effective category is
+  // severity-floor AND the override hasn't been picked, the
+  // single-click approve is blocked — HO must use the dropdown so
+  // the audit trail records an explicit click.
+  const effectiveIsFloor = effectiveCategory
+    ? isSeverityFloor(effectiveCategory)
+    : false
+  const approveBlockedReason: string | null = categoryNeedsHo
+    ? !effectiveCategory
+      ? "Pick a category from the dropdown before approving."
+      : effectiveIsFloor && !categoryOverride
+        ? "High-severity — confirm via the dropdown so the audit trail records an explicit click."
+        : null
+    : null
   const latestRes = detail.resolutions[detail.resolutions.length - 1] ?? null
   // "Pending" wording is only honest while transcription is still in flight.
   // Once `transcript_error` is set, the job is dead — letting the row keep
@@ -666,8 +767,9 @@ function DetailPane({
               <button
                 type="button"
                 onClick={onApprove}
-                disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[12.5px] font-semibold px-3 py-1.5 disabled:opacity-60"
+                disabled={busy !== null || approveBlockedReason !== null}
+                title={approveBlockedReason ?? undefined}
+                className="inline-flex items-center gap-1.5 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[12.5px] font-semibold px-3 py-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {busy === "approve" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -711,17 +813,52 @@ function DetailPane({
 
       {/* Body ---------------------------------------------------------- */}
       <div className="p-4 space-y-4">
-        {/* Category + store + jump-to-full-detail */}
+        {/* Category + store + jump-to-full-detail. Mig 007 seamless:
+            renders the effective category (sealed → override → AI's
+            suggestion), no "AI" indicator. When the category isn't
+            sealed yet, an inline dropdown lets HO override before the
+            single approve action seals + closes in one click. */}
         <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`inline-flex items-center px-2 h-6 rounded-md text-[11.5px] font-medium border ${
-              detail.type === "incident"
+              effectiveIsIncident
                 ? "bg-amber-50 text-amber-800 border-amber-200"
-                : "bg-slate-100 text-slate-700 border-slate-200"
+                : effectiveCategory
+                  ? "bg-slate-100 text-slate-700 border-slate-200"
+                  : "bg-slate-50 text-slate-500 border-slate-200 border-dashed"
             }`}
           >
-            {cat?.label ?? detail.category ?? "Category pending"}
+            {cat?.label ?? "Category pending"}
           </span>
+          {categoryNeedsHo ? (
+            <div className="relative">
+              <select
+                value={categoryOverride ?? ""}
+                onChange={(e) =>
+                  onCategoryOverride(
+                    e.target.value
+                      ? (e.target.value as ReportCategory)
+                      : null,
+                  )
+                }
+                disabled={busy !== null}
+                aria-label="Override category"
+                className="appearance-none rounded-md border border-slate-300 bg-white pl-2.5 pr-7 h-6 text-[11.5px] text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-60"
+              >
+                <option value="">Change…</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                    {c.acronym ? ` (${c.acronym})` : ""}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+            </div>
+          ) : null}
           <span className="text-[12.5px] text-slate-600">
             {detail.store.sap_code} · {detail.store.name} · {detail.store.city}
           </span>
@@ -1105,12 +1242,18 @@ function ReasonModal({
 
 /* ----------------------------- Helpers ------------------------------------ */
 
-function categoryLabel(key: string | null | undefined): string {
-  // Mig 007: a report can sit in the Action queue with a NULL category
-  // (AI hasn't classified yet, or HO hasn't confirmed). Show a stable
-  // "Pending" label rather than the raw word "null".
-  if (!key) return "Pending classification"
-  return CATEGORIES.find((c) => c.key === key)?.label ?? key
+function categoryLabel(
+  key: string | null | undefined,
+  suggestedKey?: string | null | undefined,
+): string {
+  // Mig 007 seamless (2026-05-27): when HO hasn't sealed a category,
+  // fall back to the AI's suggestion and render it as the category —
+  // no visible "AI" indicator. Only when there's neither a sealed
+  // category NOR a suggestion (photo-only / classifier-skipped rows)
+  // do we surface the "Pending classification" placeholder.
+  const effective = key ?? suggestedKey
+  if (!effective) return "Pending classification"
+  return CATEGORIES.find((c) => c.key === effective)?.label ?? effective
 }
 
 function formatAge(hours: number): string {

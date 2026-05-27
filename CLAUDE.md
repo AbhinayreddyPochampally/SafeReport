@@ -15,10 +15,32 @@ Companion references:
 
 The long-form product-design PDF lives at
 `Design & Architecture/SafeReport_Design_Document_v6.pdf` — use it when you need
-context on why a decision was made. (The `Design & Architecture/` folder also
-holds the production Azure deliverables — `SafeReport_IT_Architecture.docx` and
-`SafeReport_Azure_Consumption_Estimate.docx` — which describe the full-scale
-deployment the running Railway/Supabase build only demos.)
+context on why a decision was made. (The `Design & Architecture/` folder holds the **full-scale (Azure)** deliverables —
+`SafeReport_IT_Architecture.docx`, `SafeReport_Azure_Cost_Estimate.docx`,
+`SafeReport_Design_Document.docx`, `SafeReport_UI_Screens.docx`, `SafeReport_PRD.docx`,
+and `SafeReport_Design_Document_v6.pdf` — which describe the full-scale
+deployment the running Railway/Supabase build only demos. The earlier
+`SafeReport_Azure_Consumption_Estimate.docx` was consumption-only and is now
+folded into IT Architecture §9–§10; it lives in `archive/superseded-docs/`.)
+
+---
+
+## Pilot mode vs Full-scale mode — do not mix
+
+SafeReport is documented in two distinct modes. Keep them segregated **by folder**,
+never as "pilot vs Azure" sections inside one document.
+
+- **Pilot mode** — what actually runs. The ENTIRE repo is the pilot: Next.js 14 +
+  Supabase + Railway + OpenAI direct + web-push + Resend + MSG91, 20 live Bangalore
+  stores. This is the source of truth for shipped behaviour.
+- **Full-scale mode** — the planned Azure production deployment for the ~4,420-store
+  ABFRL estate. Lives ONLY in `Design & Architecture/`. Azure terms (single VNet, not
+  VPC), App Service/FastAPI, PostgreSQL Flexible Server, Blob, Azure OpenAI,
+  Notification Hubs, Static Web Apps. Classification is a **batch** job; transcription
+  is **instant** per report; the manager never sees the category (HO confirms it).
+
+Rule: `Design & Architecture/` = full-scale only; everything else = pilot. When editing
+a doc there, frame everything full-scale; when touching code, that's pilot.
 
 When you ship a change that touches this brief, add a `CHANGELOG.md` entry
 and bump the `STATE.md` row's Verified date.
@@ -460,13 +482,88 @@ inherit the runtime font.
 
 ---
 
+## iOS install carousel (added 2026-05-27)
+
+iOS Safari never fires `beforeinstallprompt`, so the one-line manual
+hint in `pwa-install-prompt.tsx` was getting missed by pilot reporters.
+A new component `components/ios-install-carousel.tsx` runs the
+walkthrough — three numbered frames (tap Share → Add to Home Screen →
+reopen from icon) with faux-Safari chrome and an inline SVG callout on
+frame 1. iOS-only + non-standalone-gated; non-iOS or already-installed
+users render nothing.
+
+Mount points:
+- **Reporter:** auto-appears as a modal overlay on the confirmation
+  screen (`app/(reporter)/r/[sap_code]/confirm/[report_id]/page.tsx`
+  via a tiny client wrapper `install-mount.tsx`). Suppressed for the
+  rest of the tab via `sessionStorage["sr_ios_install_dismissed_session"]`
+  so a hard reload brings it back if the user still hasn't installed.
+- **Manager:** appears pre-login on `/m/[sap_code]` only when rendering
+  `<ManagerLogin />` (the post-login `<ManagerInbox />` branch never
+  mounts it). Suppressed across sessions via
+  `localStorage["sr_mgr_ios_install_dismissed"]` because managers are
+  repeat users and nagging every login would be hostile.
+
+Strings live in `lib/reporter-i18n.ts` under the `ios.install.*` keys
+for the reporter surface (bilingual across all 5 locales). The manager
+surface uses a hardcoded English table per the §"Reporter localisation"
+rule that manager + HO are English-only.
+
+This is purely additive — `pwa-install-prompt.tsx` (the two-gate notif
++ install card on the reporter landing) is unchanged, and the carousel
+narrates the Share-menu mechanic the existing card can't trigger
+programmatically on iOS.
+
 ## AI category classification (mig 007)
 
 The reporter no longer picks a category. After every submission with a voice
 note, `/api/classify` (text-only `gpt-4o-mini`) reads the English transcript
 produced by `/api/transcribe` Stage B and writes a `suggested_category` +
-`confidence` (0..100) back to the row. HO confirms or overrides on the
-report-detail page; the row's `category` column stays NULL until HO seals it.
+`confidence` (0..100) back to the row. HO seals the category inline as part
+of approving the report; the row's `category` column stays NULL until HO
+confirms or overrides it.
+
+### Seamless treatment (revised 2026-05-27)
+
+The original mig 007 spec mandated a visible "AI" pill on every queue row
+whose category was AI-suggested, plus a dedicated "Category — needs your
+confirmation" block on the report-detail page. **That UX has been
+deprecated.** Operators were double-checking AI suggestions out of suspicion
+rather than because the suggestion was off, and folding two clicks (confirm
+category + approve resolution) into one was the bigger win. The new rule:
+
+- The category renders inline in every HO tile / row / detail surface,
+  treating `category ?? suggested_category` as just-the-category. NO "AI"
+  pill, NO "needs confirmation" badge, NO source indicator. The audit
+  trail in `category_source` still records `ai` vs `ho-confirmed` vs
+  `ho-corrected` server-side — but the UI never surfaces it.
+- HO approves the category as part of approving the whole report. One
+  action, not two. The Approve button bundles `category + category_via`
+  into the POST when the row's category is still un-sealed; the API
+  contract in `/api/ho-actions` already supports this on the `approve`
+  action.
+- When the report has no resolution yet (status = `new` | `in_progress` |
+  `returned`), only the category-approve affordance is exposed
+  (`CategoryBlock` on the report-detail page). For these states the
+  manager owns the resolution; HO can still seal the category early so
+  downstream rollups are accurate.
+- Override = inline dropdown next to the category, persistent on the
+  action-tab detail surface, present on the report-detail action bar
+  when un-sealed.
+
+Surfaces this applies to:
+- Overview Approval Queue tile rows (`app/(ho)/ho/queue-list.tsx`,
+  `CategoryAcrOrPending` in `app/(ho)/ho/page.tsx`)
+- Action tab (`app/(ho)/ho/action/action-client.tsx`) — list tile,
+  detail pane category badge, inline override dropdown, severity-floor
+  gate on the Approve button (client + server-side)
+- Reports table (`app/(ho)/ho/all-reports/all-reports-client.tsx`) —
+  both `ReportRowImpl` (full table) and `CompactRowImpl` (split-pane)
+- Report detail (`app/(ho)/ho/reports/[report_id]/report-detail.tsx`)
+  — header H1 renders the effective category; action bar embeds the
+  inline picker for `awaiting_ho` rows; `CategoryBlock` survives but
+  only for non-awaiting_ho states, with all "AI suggested" framing
+  stripped (no Sparkles icon, no confidence display, no AI eyebrow)
 
 ### Pilot scope
 
@@ -491,26 +588,43 @@ insert and get filled by HO via `/api/ho-actions` (either via the new
 `confirm_category` action or as a side-effect of approve when the row
 is still un-sealed).
 
-### HO confirmation flow
+### HO confirmation flow (revised 2026-05-27)
 
-On `/ho/reports/[report_id]`, when the row is still un-sealed (`category_source`
-is null or `'ai'`), a "Category — needs your confirmation" block renders:
+On `awaiting_ho` rows (a resolution has been filed and is waiting for
+HO's decision), the report-detail page and the Action-tab detail pane
+both fold the category picker INTO the action bar:
 
-- AI's suggestion + confidence
-- "Confirm AI suggestion" single-button (turquoise) → writes
-  `category_source='ho-confirmed'`
-- Dropdown of all 8 categories → writes `category_source='ho-corrected'`
-  (or `'ho-confirmed'` if the user happened to land on the AI's pick)
+- An inline strip shows the effective category (`category ??
+  suggested_category`) with a "Change category…" dropdown beside it.
+  The label is just "Category" — no "AI suggested" eyebrow, no
+  confidence number, no Sparkles glyph.
+- The Approve button bundles `category + category_via` in the same
+  `/api/ho-actions` POST that flips the status:
+  - HO didn't touch the dropdown → `category_via='confirmed'` (HO
+    implicitly accepted what was shown).
+  - HO picked from the dropdown:
+    - If the pick equals the AI's suggestion → `'confirmed'`.
+    - If the pick differs from the AI's suggestion → `'corrected'`.
+  - Severity-floor pick (LTI / Fatality) → always `'corrected'`,
+    regardless of whether it matches the AI's suggestion.
+- The Approve button disables with an inline amber note when the row
+  is severity-floor and HO hasn't touched the dropdown
+  (`approveBlockedReason` covers both this and "no category at all"
+  for photo-only / text-only reports).
 
-Approve & close on `awaiting_ho` is **gated** on a confirmed category —
-disabled with an amber explanatory strip until HO seals it.
+On `new` / `in_progress` / `returned` rows (no resolution yet),
+the standalone `CategoryBlock` survives — but reframed without the AI
+language. Header reads "Confirm the category", the single-click button
+is labelled "Confirm category" (was "Confirm AI suggestion"), no
+confidence display, no Sparkles. Same `confirm_category` API call.
 
 ### Severity floor — hard rule
 
-When the AI's pick is `lost_time_injury` or `fatality`, the single-button
-"Confirm AI suggestion" is **disabled**. An inline note explains:
-"High-severity category — confirm via the dropdown so the audit trail
-records an explicit click." The dropdown is the only path for those two.
+When the effective category is `lost_time_injury` or `fatality`, the
+single-click Approve path is **blocked** until HO explicitly picks
+from the dropdown. The blocked button surfaces an inline amber note:
+"High-severity — confirm via the dropdown so the audit trail records
+an explicit click."
 
 The rule is enforced server-side too: `/api/ho-actions` rejects any
 `confirm_category` (or bundled `approve`) where the final category is
@@ -521,11 +635,13 @@ dropdown click.
 
 Rationale and the full numbers live in `SafeReport_AI_Classification.md`.
 
-### Downstream surface contract
+### Downstream surface contract (revised 2026-05-27)
 
 Every HO queue / table that renders a category falls back to
-`suggested_category` for display when `category` is null, and surfaces a
-small "AI" pill so HO can spot the un-sealed rows at a glance. Overview
+`suggested_category` for display when `category` is null, rendered
+as just-the-category. **No "AI" pill anywhere.** Photo-only /
+text-only rows (no suggestion either) still show the dashed
+"—" placeholder with title "Pending classification". Overview
 velocity / coverage / category-mix rollups skip null-category rows.
 
 Manager surface is unaffected — the manager never sees the category

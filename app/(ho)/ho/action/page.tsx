@@ -40,6 +40,12 @@ type ReportRow = {
   // Mig 007: nullable until HO confirms.
   type: "observation" | "incident" | null
   category: string | null
+  // Mig 007 seamless (2026-05-27): the AI's pre-classified pick + the
+  // audit trail of who/what filled `category`. Both are surfaced to the
+  // action tile so HO can see + override + approve in a single click,
+  // without the UI announcing "this is an AI suggestion".
+  suggested_category: string | null
+  category_source: "ai" | "ho-confirmed" | "ho-corrected" | null
   status: "new" | "in_progress" | "awaiting_ho" | "returned" | "closed" | "voided"
   description: string | null
   transcript: string | null
@@ -88,7 +94,7 @@ export default async function HoActionPage({
   const { data: reportRows, error: repErr } = await admin
     .from("reports")
     .select(
-      "id, store_code, type, category, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
+      "id, store_code, type, category, suggested_category, category_source, status, description, transcript, transcript_error, photo_url, audio_url, incident_datetime, reported_at, acknowledged_at, reporter_name, reporter_phone, stores!inner(sap_code, name, brand, city, state)",
     )
     .in("status", ["awaiting_ho", "new"])
     .order("reported_at", { ascending: true })
@@ -180,6 +186,8 @@ export default async function HoActionPage({
       brand: r.stores.brand,
       type: r.type,
       category: r.category,
+      suggested_category: r.suggested_category,
+      category_source: r.category_source,
       status: r.status,
       reported_at: r.reported_at,
       acknowledged_at: r.acknowledged_at,
@@ -245,6 +253,8 @@ export default async function HoActionPage({
       },
       type: r.type,
       category: r.category,
+      suggested_category: r.suggested_category,
+      category_source: r.category_source,
       status: r.status,
       description: r.description,
       transcript: r.transcript,

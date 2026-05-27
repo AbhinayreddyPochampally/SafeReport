@@ -1155,11 +1155,12 @@ function ReportRowImpl({
   // a per-row closure) is what makes React.memo actually save renders here.
   onSelect: (id: string) => void
 }) {
-  // Mig 007: fall back to AI's pending pick when HO hasn't sealed
-  // category. The "AI" pill renders next to the acronym.
+  // Mig 007 (seamless): fall back to AI's suggestion when HO hasn't
+  // sealed the category, rendered as if it's just the category — no
+  // visible AI indicator. The audit trail in `category_source` still
+  // records ai / ho-confirmed / ho-corrected.
   const displayKey = (row.category ?? row.suggested_category) ?? null
   const cat = displayKey ? CATEGORY_BY_KEY.get(displayKey) : undefined
-  const isPending = !row.category && !!row.suggested_category
   const isIncident = cat?.kind === "incident"
   const catTone = !displayKey
     ? "bg-slate-50 text-slate-500 border-slate-200 border-dashed"
@@ -1189,22 +1190,12 @@ function ReportRowImpl({
           className={`inline-flex items-center justify-center w-9 h-7 rounded-md border text-[10.5px] font-bold ${catTone}`}
           title={
             !displayKey
-              ? "Awaiting AI / HO classification"
-              : isPending
-                ? `AI suggestion (pending HO confirm): ${cat?.label ?? displayKey}`
-                : cat?.label ?? displayKey
+              ? "Pending classification"
+              : cat?.label ?? displayKey
           }
         >
           {cat?.acronym ?? (displayKey ? displayKey.slice(0, 3).toUpperCase() : "—")}
         </span>
-        {isPending ? (
-          <span
-            className="ml-1 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-indigo-700 align-middle"
-            title="AI suggested — needs HO confirmation"
-          >
-            AI
-          </span>
-        ) : null}
       </td>
       <td className="py-3">
         <div className="font-mono text-[12px] text-slate-600">
@@ -1254,7 +1245,6 @@ function CompactRowImpl({
 }) {
   const displayKey = (row.category ?? row.suggested_category) ?? null
   const cat = displayKey ? CATEGORY_BY_KEY.get(displayKey) : undefined
-  const isPending = !row.category && !!row.suggested_category
   const isIncident = cat?.kind === "incident"
   return (
     <button
@@ -1286,14 +1276,6 @@ function CompactRowImpl({
         >
           {cat?.acronym ?? (displayKey ? displayKey.slice(0, 3).toUpperCase() : "—")}
         </span>
-        {isPending ? (
-          <span
-            className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1 h-4 text-[9px] font-bold uppercase tracking-wide text-indigo-700"
-            title="AI suggested — needs HO confirmation"
-          >
-            AI
-          </span>
-        ) : null}
         <span
           className={`inline-flex items-center rounded-full border px-1.5 h-4 text-[9.5px] font-bold uppercase tracking-wide ${STATUS_PILL_CLASSES[row.status]}`}
         >

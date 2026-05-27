@@ -184,6 +184,45 @@ export type StringKey =
   | "pwa.install.installable_sub"
   | "pwa.install.followup"
   | "pwa.cta.install"
+  // iOS install carousel (modal walkthrough on the reporter confirm screen).
+  // The walkthrough is iOS-only — Chromium gets the one-tap install via
+  // beforeinstallprompt in pwa-install-prompt. {n} in the step key is
+  // replaced at render time with the current step number.
+  | "ios.carousel.skip"
+  | "ios.carousel.next"
+  | "ios.carousel.back"
+  | "ios.carousel.done"
+  | "ios.carousel.step"
+  | "ios.carousel.title"
+  | "ios.carousel.frame1.title"
+  | "ios.carousel.frame1.body"
+  | "ios.carousel.frame2.title"
+  | "ios.carousel.frame2.body"
+  | "ios.carousel.frame3.title"
+  | "ios.carousel.frame3.body"
+  // iOS install carousel — utility-mockup rev (May 2026).
+  // These keys are used by `components/ios-install-carousel.tsx`, the
+  // diagrammatic three-frame walkthrough rendered on the reporter confirm
+  // screen and the manager pre-login screen. They sit alongside the older
+  // `ios.carousel.*` keys (above) which still drive the in-flow Add-to-
+  // Home prompt; the two key groups intentionally do not share strings so
+  // either prompt can be retuned without dragging the other along.
+  // The {n} token in ios.install.step.indicator is replaced at render
+  // time with the current step number (1..3).
+  | "ios.install.title"
+  | "ios.install.subtitle"
+  | "ios.install.step.1.title"
+  | "ios.install.step.1.body"
+  | "ios.install.step.2.title"
+  | "ios.install.step.2.body"
+  | "ios.install.step.3.title"
+  | "ios.install.step.3.body"
+  | "ios.install.cta.next"
+  | "ios.install.cta.back"
+  | "ios.install.cta.done"
+  | "ios.install.cta.skip"
+  | "ios.install.dismiss.aria"
+  | "ios.install.step.indicator"
   // Category labels + blurbs
   | "category.near_miss.label"
   | "category.near_miss.blurb"
@@ -367,6 +406,41 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
       "Now open SafeReport from your home screen icon to finish — that's where notifications get switched on.",
     "pwa.cta.install": "Install",
 
+    "ios.carousel.skip": "Skip",
+    "ios.carousel.next": "Next",
+    "ios.carousel.back": "Back",
+    "ios.carousel.done": "Got it",
+    "ios.carousel.step": "Step {n} of 3",
+    "ios.carousel.title": "Keep SafeReport one tap away",
+    "ios.carousel.frame1.title": "Tap the Share button",
+    "ios.carousel.frame1.body":
+      "Look for the Share button at the bottom of Safari.",
+    "ios.carousel.frame2.title": "Tap ‘Add to Home Screen’",
+    "ios.carousel.frame2.body":
+      "Scroll down in the Share menu if you don’t see it.",
+    "ios.carousel.frame3.title": "Open from your Home Screen",
+    "ios.carousel.frame3.body":
+      "Next time, tap the SafeReport icon. Notifications work better and your report opens instantly.",
+
+    "ios.install.title": "Keep SafeReport on your home screen",
+    "ios.install.subtitle":
+      "Two taps and you're done — works offline, sends instant alerts",
+    "ios.install.step.1.title": "Tap the Share button",
+    "ios.install.step.1.body":
+      "It's the square with an up-arrow in Safari's bottom toolbar",
+    "ios.install.step.2.title": "Add to Home Screen",
+    "ios.install.step.2.body":
+      "Scroll the share sheet and tap the row with the plus icon",
+    "ios.install.step.3.title": "Open from your home screen",
+    "ios.install.step.3.body":
+      "Tap the SafeReport icon next time you need to file a report",
+    "ios.install.cta.next": "Next",
+    "ios.install.cta.back": "Back",
+    "ios.install.cta.done": "Got it",
+    "ios.install.cta.skip": "Not now",
+    "ios.install.dismiss.aria": "Dismiss install guide",
+    "ios.install.step.indicator": "Step {n} of 3",
+
     // PLAIN-LANGUAGE CATEGORY LABELS (May 2026 facelift).
     // The internal codes (near_miss / unsafe_act / etc.) stay unchanged in
     // lib/categories.ts so HO analytics aren't affected — only the reporter-
@@ -549,6 +623,41 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
       "ಮುಗಿಸಲು ಈಗ ನಿಮ್ಮ ಮುಖಪುಟದ SafeReport ಚಿಹ್ನೆಯಿಂದ ತೆರೆಯಿರಿ – ಸೂಚನೆಗಳನ್ನು ಅಲ್ಲಿಂದಲೇ ಆನ್ ಮಾಡಬಹುದು.",
     "pwa.cta.install": "ಇನ್‌ಸ್ಟಾಲ್",
 
+    "ios.carousel.skip": "ಬಿಟ್ಟುಬಿಡಿ",
+    "ios.carousel.next": "ಮುಂದೆ",
+    "ios.carousel.back": "ಹಿಂದೆ",
+    "ios.carousel.done": "ಸರಿ",
+    "ios.carousel.step": "3 ರಲ್ಲಿ {n}ನೇ ಹಂತ",
+    "ios.carousel.title": "SafeReport ಅನ್ನು ಒಂದು ಟ್ಯಾಪ್‌ನಲ್ಲಿ ಇರಿಸಿ",
+    "ios.carousel.frame1.title": "Share ಬಟನ್ ಒತ್ತಿರಿ",
+    "ios.carousel.frame1.body":
+      "ಸಫಾರಿಯ ಕೆಳಭಾಗದಲ್ಲಿರುವ Share ಬಟನ್‌ಗಾಗಿ ನೋಡಿ.",
+    "ios.carousel.frame2.title": "‘Add to Home Screen’ ಒತ್ತಿರಿ",
+    "ios.carousel.frame2.body":
+      "ಕಾಣದಿದ್ದರೆ Share ಮೆನುವಿನಲ್ಲಿ ಕೆಳಕ್ಕೆ ಸ್ಕ್ರಾಲ್ ಮಾಡಿ.",
+    "ios.carousel.frame3.title": "ಮುಖಪುಟದಿಂದ ತೆರೆಯಿರಿ",
+    "ios.carousel.frame3.body":
+      "ಮುಂದಿನ ಬಾರಿ SafeReport ಚಿಹ್ನೆಯನ್ನು ಒತ್ತಿ. ಸೂಚನೆಗಳು ಉತ್ತಮವಾಗಿ ಕೆಲಸ ಮಾಡುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ವರದಿ ತಕ್ಷಣವೇ ತೆರೆಯುತ್ತದೆ.",
+
+    "ios.install.title": "SafeReport ಅನ್ನು ಮುಖಪುಟದಲ್ಲಿ ಇರಿಸಿಕೊಳ್ಳಿ",
+    "ios.install.subtitle":
+      "ಎರಡು ಟ್ಯಾಪ್ ಸಾಕು — ಆಫ್‌ಲೈನ್‌ನಲ್ಲೂ ಕೆಲಸ ಮಾಡುತ್ತದೆ, ತಕ್ಷಣದ ಸೂಚನೆಗಳನ್ನು ಕಳುಹಿಸುತ್ತದೆ",
+    "ios.install.step.1.title": "Share ಬಟನ್ ಒತ್ತಿ",
+    "ios.install.step.1.body":
+      "ಸಫಾರಿಯ ಕೆಳಗಿನ ಪಟ್ಟಿಯಲ್ಲಿ ಮೇಲ್ಮುಖ ಬಾಣದ ಚೌಕ ಚಿಹ್ನೆಯನ್ನು ಗುರುತಿಸಿ",
+    "ios.install.step.2.title": "Add to Home Screen",
+    "ios.install.step.2.body":
+      "Share ಪಟ್ಟಿಯನ್ನು ಸ್ಕ್ರಾಲ್ ಮಾಡಿ, ಪ್ಲಸ್ ಚಿಹ್ನೆಯಿರುವ ಸಾಲನ್ನು ಒತ್ತಿ",
+    "ios.install.step.3.title": "ಮುಖಪುಟದಿಂದಲೇ ತೆರೆಯಿರಿ",
+    "ios.install.step.3.body":
+      "ಮುಂದಿನ ಬಾರಿ ವರದಿ ಸಲ್ಲಿಸಲು SafeReport ಚಿಹ್ನೆಯನ್ನು ಒತ್ತಿ",
+    "ios.install.cta.next": "ಮುಂದೆ",
+    "ios.install.cta.back": "ಹಿಂದೆ",
+    "ios.install.cta.done": "ಆಯಿತು",
+    "ios.install.cta.skip": "ಈಗ ಬೇಡ",
+    "ios.install.dismiss.aria": "ಸ್ಥಾಪನೆ ಮಾರ್ಗದರ್ಶಿಯನ್ನು ಮುಚ್ಚಿ",
+    "ios.install.step.indicator": "3 ರಲ್ಲಿ {n}ನೇ ಹಂತ",
+
     "category.near_miss.label": "ಸಮೀಪದ ತಪ್ಪಿಸಿಕೊಳ್ಳುವಿಕೆ",
     "category.near_miss.blurb":
       "ಹಾನಿಯಾಗುವ ಸಾಧ್ಯತೆಯಿದ್ದ ಸಂಗತಿ, ಆದರೆ ಯಾವುದೇ ಗಾಯವಾಗಲಿಲ್ಲ.",
@@ -727,6 +836,41 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
       "अब अपने होम स्क्रीन के SafeReport आइकन से खोलें — सूचनाएँ वहीं से चालू होती हैं।",
     "pwa.cta.install": "इंस्टॉल",
 
+    "ios.carousel.skip": "छोड़ें",
+    "ios.carousel.next": "आगे",
+    "ios.carousel.back": "पीछे",
+    "ios.carousel.done": "समझ गया",
+    "ios.carousel.step": "3 में से {n}",
+    "ios.carousel.title": "SafeReport को एक टैप पर रखें",
+    "ios.carousel.frame1.title": "Share बटन पर टैप करें",
+    "ios.carousel.frame1.body":
+      "Safari के नीचे Share बटन ढूँढिए।",
+    "ios.carousel.frame2.title": "‘Add to Home Screen’ पर टैप करें",
+    "ios.carousel.frame2.body":
+      "अगर न दिखे तो Share मेन्यू में नीचे स्क्रॉल कीजिए।",
+    "ios.carousel.frame3.title": "होम स्क्रीन से खोलें",
+    "ios.carousel.frame3.body":
+      "अगली बार SafeReport आइकन पर टैप करें। सूचनाएँ बेहतर काम करती हैं और आपकी रिपोर्ट तुरंत खुलती है।",
+
+    "ios.install.title": "SafeReport को होम स्क्रीन पर रखें",
+    "ios.install.subtitle":
+      "बस दो टैप — ऑफ़लाइन भी चलेगा, तुरंत सूचनाएँ भेजेगा",
+    "ios.install.step.1.title": "Share बटन पर टैप करें",
+    "ios.install.step.1.body":
+      "Safari की निचली पट्टी में ऊपर तीर वाला चौकोर देखिए",
+    "ios.install.step.2.title": "Add to Home Screen चुनें",
+    "ios.install.step.2.body":
+      "Share शीट में स्क्रॉल करें और प्लस आइकन वाली पंक्ति पर टैप करें",
+    "ios.install.step.3.title": "होम स्क्रीन से खोलिए",
+    "ios.install.step.3.body":
+      "अगली बार रिपोर्ट दर्ज करते समय SafeReport आइकन पर टैप करें",
+    "ios.install.cta.next": "आगे",
+    "ios.install.cta.back": "पीछे",
+    "ios.install.cta.done": "समझ गया",
+    "ios.install.cta.skip": "अभी नहीं",
+    "ios.install.dismiss.aria": "इंस्टॉल गाइड बंद करें",
+    "ios.install.step.indicator": "3 में से {n}",
+
     "category.near_miss.label": "करीबी बचाव",
     "category.near_miss.blurb":
       "नुकसान की संभावना थी, पर कोई चोट नहीं लगी।",
@@ -902,6 +1046,41 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "pwa.install.followup":
       "ఇప్పుడు మీ హోమ్ స్క్రీన్ SafeReport ఐకాన్ నుండి తెరవండి — నోటిఫికేషన్‌లు అక్కడే ఆన్ చేయబడతాయి.",
     "pwa.cta.install": "ఇన్‌స్టాల్",
+
+    "ios.carousel.skip": "విడిచిపెట్టండి",
+    "ios.carousel.next": "తదుపరి",
+    "ios.carousel.back": "వెనుకకు",
+    "ios.carousel.done": "అర్థమైంది",
+    "ios.carousel.step": "3లో {n}వ దశ",
+    "ios.carousel.title": "SafeReport ఒక్క ట్యాప్ దూరంలోనే ఉంచుకోండి",
+    "ios.carousel.frame1.title": "Share బటన్‌ను ట్యాప్ చేయండి",
+    "ios.carousel.frame1.body":
+      "Safari దిగువన Share బటన్ కోసం చూడండి.",
+    "ios.carousel.frame2.title": "‘Add to Home Screen’ ట్యాప్ చేయండి",
+    "ios.carousel.frame2.body":
+      "కనిపించకపోతే Share మెనూలో కిందికి స్క్రోల్ చేయండి.",
+    "ios.carousel.frame3.title": "హోమ్ స్క్రీన్ నుండి తెరవండి",
+    "ios.carousel.frame3.body":
+      "తదుపరిసారి SafeReport ఐకాన్‌పై ట్యాప్ చేయండి. నోటిఫికేషన్‌లు మెరుగ్గా పనిచేస్తాయి మరియు మీ నివేదిక తక్షణమే తెరుచుకుంటుంది.",
+
+    "ios.install.title": "SafeReport-ను మీ హోమ్ స్క్రీన్‌లో ఉంచుకోండి",
+    "ios.install.subtitle":
+      "రెండు ట్యాప్‌లతో పూర్తవుతుంది — ఆఫ్‌లైన్‌లో పనిచేస్తుంది, తక్షణ సూచనలు పంపుతుంది",
+    "ios.install.step.1.title": "Share బటన్‌ను ట్యాప్ చేయండి",
+    "ios.install.step.1.body":
+      "Safari దిగువ టూల్‌బార్‌లో పైకి బాణం ఉన్న చతురస్ర చిహ్నాన్ని గుర్తించండి",
+    "ios.install.step.2.title": "Add to Home Screen ఎంచుకోండి",
+    "ios.install.step.2.body":
+      "Share షీట్‌ను స్క్రోల్ చేసి, ప్లస్ ఐకాన్ ఉన్న వరుసను ట్యాప్ చేయండి",
+    "ios.install.step.3.title": "హోమ్ స్క్రీన్ నుండి తెరవండి",
+    "ios.install.step.3.body":
+      "తర్వాతిసారి నివేదిక సమర్పించాలనుకున్నప్పుడు SafeReport ఐకాన్‌ను ట్యాప్ చేయండి",
+    "ios.install.cta.next": "తదుపరి",
+    "ios.install.cta.back": "వెనుకకు",
+    "ios.install.cta.done": "అర్థమైంది",
+    "ios.install.cta.skip": "ఇప్పుడు కాదు",
+    "ios.install.dismiss.aria": "ఇన్‌స్టాల్ గైడ్‌ను మూసివేయండి",
+    "ios.install.step.indicator": "3లో {n}వ దశ",
 
     "category.near_miss.label": "దగ్గరి తప్పించుకోత",
     "category.near_miss.blurb":
@@ -1085,6 +1264,41 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = {
     "pwa.install.followup":
       "முடிக்க இப்போது உங்கள் முகப்புத் திரையில் உள்ள SafeReport சின்னத்திலிருந்து திறக்கவும் — அறிவிப்புகள் அங்கிருந்து இயக்கப்படும்.",
     "pwa.cta.install": "நிறுவு",
+
+    "ios.carousel.skip": "தவிர்க்கவும்",
+    "ios.carousel.next": "அடுத்து",
+    "ios.carousel.back": "பின்செல்",
+    "ios.carousel.done": "புரிந்தது",
+    "ios.carousel.step": "3-இல் படி {n}",
+    "ios.carousel.title": "SafeReport-ஐ ஒரு தட்டலில் வைத்திருங்கள்",
+    "ios.carousel.frame1.title": "Share பொத்தானைத் தட்டவும்",
+    "ios.carousel.frame1.body":
+      "Safari-இன் கீழ்ப்பகுதியில் Share பொத்தானைப் பார்க்கவும்.",
+    "ios.carousel.frame2.title": "‘Add to Home Screen’-ஐத் தட்டவும்",
+    "ios.carousel.frame2.body":
+      "தெரியவில்லை எனில் Share மெனுவில் கீழே சுருட்டவும்.",
+    "ios.carousel.frame3.title": "முகப்புத் திரையிலிருந்து திறக்கவும்",
+    "ios.carousel.frame3.body":
+      "அடுத்த முறை SafeReport சின்னத்தைத் தட்டவும். அறிவிப்புகள் சிறப்பாக வேலை செய்யும், உங்கள் அறிக்கை உடனடியாகத் திறக்கும்.",
+
+    "ios.install.title": "SafeReport-ஐ உங்கள் முகப்புத் திரையில் வையுங்கள்",
+    "ios.install.subtitle":
+      "இரண்டே தட்டல்கள் போதும் — ஆஃப்லைனிலும் செயல்படும், உடனடி அறிவிப்புகள் வரும்",
+    "ios.install.step.1.title": "Share பொத்தானைத் தட்டவும்",
+    "ios.install.step.1.body":
+      "Safari-இன் கீழ்ப்பகுதியில் மேல்நோக்கிய அம்புடன் கூடிய சதுர சின்னத்தைப் பாருங்கள்",
+    "ios.install.step.2.title": "Add to Home Screen-ஐத் தேர்ந்தெடுக்கவும்",
+    "ios.install.step.2.body":
+      "Share தாளை சுருட்டி, கூட்டல் சின்னம் உள்ள வரிசையைத் தட்டவும்",
+    "ios.install.step.3.title": "முகப்புத் திரையிலிருந்து திறக்கவும்",
+    "ios.install.step.3.body":
+      "அடுத்த முறை அறிக்கை பதிவு செய்ய SafeReport சின்னத்தைத் தட்டவும்",
+    "ios.install.cta.next": "அடுத்து",
+    "ios.install.cta.back": "பின்செல்",
+    "ios.install.cta.done": "புரிந்தது",
+    "ios.install.cta.skip": "இப்போது வேண்டாம்",
+    "ios.install.dismiss.aria": "நிறுவல் வழிகாட்டியை மூடவும்",
+    "ios.install.step.indicator": "3-இல் படி {n}",
 
     "category.near_miss.label": "சற்றேறக்குறைய தப்பியது",
     "category.near_miss.blurb":

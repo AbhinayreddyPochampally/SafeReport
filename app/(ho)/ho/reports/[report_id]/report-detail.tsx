@@ -16,7 +16,6 @@ import {
   Play,
   Phone,
   RotateCcw,
-  Sparkles,
   User,
   X,
 } from "lucide-react"
@@ -155,19 +154,48 @@ export function HoReportDetail({
   const [photoOpen, setPhotoOpen] = useState<string | null>(null)
   const [returnOpen, setReturnOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
+  // Mig 007 seamless (2026-05-27): HO can override the AI's suggested
+  // category inline while approving. State lives here so submitAction
+  // can bundle category+via into the same POST as the status flip.
+  const [categoryOverride, setCategoryOverride] =
+    useState<ReportCategory | null>(null)
 
   const cat = CATEGORIES.find((c) => c.key === report.category)
   const suggestedCat = CATEGORIES.find(
     (c) => c.key === report.suggested_category,
   )
-  // Tone defaults to slate when there's no category yet (observation
-  // styling — the safer default until HO confirms incident).
-  const tone: "slate" | "amber" = report.type === "incident" ? "amber" : "slate"
   // The category section is interactive whenever HO hasn't sealed a
   // category yet (category_source is null or 'ai'). Once it's
   // ho-confirmed / ho-corrected the row reads as final.
   const categoryNeedsHo =
     !report.category || report.category_source === "ai"
+  // Effective category for the in-flight approve: the override HO
+  // picked, else the AI's suggestion, else null (must pick).
+  const sealedCategory = (report.category ?? null) as ReportCategory | null
+  const suggestedCategory = (report.suggested_category ?? null) as
+    | ReportCategory
+    | null
+  const effectiveCategory: ReportCategory | null =
+    sealedCategory ?? categoryOverride ?? suggestedCategory
+  const effectiveCat = CATEGORIES.find((c) => c.key === effectiveCategory)
+  const effectiveFloor = effectiveCategory
+    ? isSeverityFloor(effectiveCategory)
+    : false
+  // Tone follows the effective category's kind so the header reads
+  // amber-for-incident even before HO seals the category. Defaults to
+  // slate (observation) until anything resolves.
+  const effectiveIsIncident = effectiveCat?.kind === "incident"
+  const tone: "slate" | "amber" = effectiveIsIncident ? "amber" : "slate"
+  // Why approve is blocked, when it is. Surfaces inline + on the
+  // disabled button's title so HO sees the reason without hover.
+  const approveBlockedReason: string | null =
+    report.status === "awaiting_ho" && categoryNeedsHo
+      ? !effectiveCategory
+        ? "Pick a category from the dropdown before approving."
+        : effectiveFloor && !categoryOverride
+          ? "High-severity — confirm via the dropdown so the audit trail records an explicit click."
+          : null
+      : null
 
   // Keyboard shortcuts on the full-page view.
   //   J / ArrowUp   → previous report in the sibling list (if ?sibs= present)
@@ -219,7 +247,7 @@ export function HoReportDetail({
       if (
         key === "a" &&
         report.status === "awaiting_ho" &&
-        !categoryNeedsHo
+        approveBlockedReason === null
       ) {
         e.preventDefault()
         void submitAction("approve")
@@ -253,12 +281,48 @@ export function HoReportDetail({
     currentSiblingIndex,
     searchParams,
     categoryNeedsHo,
+    approveBlockedReason,
   ])
 
   async function submitAction(
     action: "approve" | "return" | "void",
     comment?: string,
   ) {
+    // Mig 007 seamless (2026-05-27): approving an un-sealed report
+    // bundles category + via in the same POST so HO seals + closes
+    // in one click. Mirrors the rules in /api/ho-actions:
+    //   - finalCategory = manual override (if any) or AI's suggestion.
+    //   - via = 'corrected' whenever HO picked from the dropdown OR
+    //     the final category is severity-floor; otherwise 'confirmed'.
+    //   - Severity floor (LTI / Fatality) without an explicit
+    //     dropdown pick is blocked client-side via approveBlockedReason,
+    //     so this defensive branch should never fire in practice.
+    let categoryPatch:
+      | { category: ReportCategory; category_via: "confirmed" | "corrected" }
+      | null = null
+    if (action === "approve" && !report.category) {
+      const final: ReportCategory | null =
+        categoryOverride ?? suggestedCategory
+      if (!final) {
+        setError("Pick a category from the dropdown before approving.")
+        return
+      }
+      const floor = isSeverityFloor(final)
+      if (floor && !categoryOverride) {
+        setError(
+          "High-severity categories must be confirmed via the dropdown so the audit trail records an explicit click.",
+        )
+        return
+      }
+      const matchesSuggested =
+        categoryOverride === null
+          ? true
+          : suggestedCategory !== null &&
+            categoryOverride === suggestedCategory
+      const via: "confirmed" | "corrected" =
+        floor || !matchesSuggested ? "corrected" : "confirmed"
+      categoryPatch = { category: final, category_via: via }
+    }
     setBusy(action)
     setError(null)
     try {
@@ -269,6 +333,7 @@ export function HoReportDetail({
           report_id: report.id,
           action,
           comment: comment ?? undefined,
+          ...(categoryPatch ?? {}),
         }),
       })
       const body = (await res.json().catch(() => null)) as {
@@ -332,15 +397,19 @@ export function HoReportDetail({
         </div>
         <h1
           className={`mt-2 font-display text-2xl font-bold leading-8 ${
-            cat ? (tone === "slate" ? "text-slate-900" : "text-amber-900") : "text-slate-900"
+            effectiveCat
+              ? tone === "slate"
+                ? "text-slate-900"
+                : "text-amber-900"
+              : "text-slate-900"
           }`}
         >
-          {cat ? (
+          {effectiveCat ? (
             <>
-              {cat.label}
-              {cat.acronym ? (
+              {effectiveCat.label}
+              {effectiveCat.acronym ? (
                 <span className="ml-1 text-base font-semibold text-slate-400">
-                  ({cat.acronym})
+                  ({effectiveCat.acronym})
                 </span>
               ) : null}
             </>
@@ -348,20 +417,23 @@ export function HoReportDetail({
             <span className="text-slate-700">Category pending review</span>
           )}
         </h1>
-        {cat?.blurb ? (
-          <p className="mt-1 text-sm leading-5 text-slate-600">{cat.blurb}</p>
+        {effectiveCat?.blurb ? (
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            {effectiveCat.blurb}
+          </p>
         ) : (
           <p className="mt-1 text-sm leading-5 text-slate-600">
-            Confirm the category below before approving the resolution.
+            No transcript yet — pick a category before approving.
           </p>
         )}
       </div>
 
-      {/* Category block — Mig 007. Shows whenever HO still owes a
-          confirmation. Once the category is sealed (ho-confirmed /
-          ho-corrected) it disappears and the page header carries the
-          final label. */}
-      {categoryNeedsHo ? (
+      {/* Mig 007 seamless: the standalone Category block only renders
+          when there's NO resolution to approve yet (status = new /
+          in_progress / returned). For awaiting_ho rows, the category
+          picker is folded into the action bar at the bottom so HO
+          can confirm category + approve in a single click. */}
+      {categoryNeedsHo && report.status !== "awaiting_ho" ? (
         <CategoryBlock
           report={report}
           suggestedCat={suggestedCat}
@@ -565,17 +637,68 @@ export function HoReportDetail({
               </span>
               . Your decision is recorded in the audit trail.
             </p>
+            {/* Mig 007 seamless: inline category picker. Renders only
+                when the row is awaiting HO and the category hasn't been
+                sealed yet. The picker preselects the AI's suggestion
+                so HO can hit Approve directly; overriding writes to
+                local state and submitAction bundles the right via on
+                the POST. Severity floor (LTI/Fatality) blocks the
+                single-click path until HO picks from the dropdown. */}
             {categoryNeedsHo ? (
-              <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                Confirm the category above before approving — every closed
-                report needs a final category for the audit trail.
-              </p>
+              <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    Category
+                  </span>
+                  <span className="text-sm font-medium text-slate-900">
+                    {effectiveCat?.label ?? "—"}
+                    {effectiveCat?.acronym ? (
+                      <span className="ml-1 text-slate-500">
+                        ({effectiveCat.acronym})
+                      </span>
+                    ) : null}
+                  </span>
+                  <div className="relative ml-auto">
+                    <select
+                      value={categoryOverride ?? ""}
+                      onChange={(e) =>
+                        setCategoryOverride(
+                          e.target.value
+                            ? (e.target.value as ReportCategory)
+                            : null,
+                        )
+                      }
+                      disabled={busy !== null}
+                      aria-label="Override category"
+                      className="appearance-none rounded-md border border-slate-300 bg-white pl-2.5 pr-8 h-8 text-[12.5px] text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-60"
+                    >
+                      <option value="">Change category…</option>
+                      {CATEGORIES.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
+                          {c.acronym ? ` (${c.acronym})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                      aria-hidden
+                    />
+                  </div>
+                </div>
+                {approveBlockedReason ? (
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-900">
+                    {approveBlockedReason}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => submitAction("approve")}
-                disabled={busy !== null || categoryNeedsHo}
+                disabled={busy !== null || approveBlockedReason !== null}
+                title={approveBlockedReason ?? undefined}
                 className="inline-flex items-center gap-2 rounded-md bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-medium px-4 py-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {busy === "approve" ? (
@@ -1424,41 +1547,38 @@ function CategoryBlock({
 
   return (
     <section
-      className="mt-5 overflow-hidden rounded-xl border border-indigo-200 bg-indigo-50/40"
+      className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white"
       aria-label="Confirm report category"
     >
-      <header className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50/70 px-4 py-2.5">
-        <Sparkles className="h-3.5 w-3.5 text-indigo-700" aria-hidden />
-        <h2 className="text-[11px] font-bold uppercase tracking-wide text-indigo-800">
-          Category — needs your confirmation
+      <header className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          Confirm the category
         </h2>
       </header>
 
       <div className="space-y-3 px-4 py-3">
-        {/* AI suggestion line */}
+        {/* Mig 007 seamless (2026-05-27): the category renders as just
+            "the category" — no "AI suggested" eyebrow, no confidence
+            score, no Sparkles icon. The audit trail in category_source
+            still records ai vs ho-confirmed vs ho-corrected. This
+            block only renders when the report has no resolution to
+            approve yet (status = new / in_progress / returned); the
+            awaiting_ho path folds the picker into the action bar. */}
         {suggestedCat ? (
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-indigo-200">
+            <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200">
               <suggestedCat.icon
-                className="h-3.5 w-3.5 text-indigo-700"
+                className="h-3.5 w-3.5 text-slate-700"
                 strokeWidth={1.8}
                 aria-hidden
               />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
-                AI suggested
-              </p>
-              <p className="mt-0.5 text-sm font-medium text-slate-900">
+              <p className="text-sm font-medium text-slate-900">
                 {suggestedCat.label}
                 {suggestedCat.acronym ? (
                   <span className="ml-1 text-slate-500">
                     ({suggestedCat.acronym})
-                  </span>
-                ) : null}
-                {report.confidence !== null ? (
-                  <span className="ml-2 text-xs font-normal text-slate-500">
-                    · {report.confidence}% confidence
                   </span>
                 ) : null}
               </p>
@@ -1471,14 +1591,13 @@ function CategoryBlock({
           </div>
         ) : (
           <p className="text-sm text-slate-700">
-            No AI suggestion available for this report — pick the
-            category from the dropdown below.
+            No category set yet — pick one from the dropdown below.
           </p>
         )}
 
-        {/* Severity floor inline note (only when AI's pick is LTI /
-            Fatality — the case where the single-button confirm is
-            disabled). */}
+        {/* Severity floor inline note (only when the suggestion is
+            LTI / Fatality — the case where the single-button confirm
+            is disabled). */}
         {suggestedCat && aiBlocked ? (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             High-severity category — confirm via the dropdown so the audit
@@ -1486,8 +1605,9 @@ function CategoryBlock({
           </p>
         ) : null}
 
-        {/* Single-button confirm — only available when there's an AI
-            suggestion and the suggestion is not severity-floor. */}
+        {/* Single-click confirm — only when there IS a suggestion
+            and it isn't severity-floor. Reads as "agree with what's
+            shown"; the audit trail records the via=confirmed click. */}
         {suggestedCat && !aiBlocked ? (
           <button
             type="button"
@@ -1500,12 +1620,12 @@ function CategoryBlock({
             ) : (
               <Check className="h-4 w-4" />
             )}
-            Confirm AI suggestion
+            Confirm category
           </button>
         ) : null}
 
         {/* Dropdown override. Always visible — the only path for
-            severity-floor cases or when there's no AI suggestion. */}
+            severity-floor cases or when there's no pre-classification. */}
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Or pick a different category

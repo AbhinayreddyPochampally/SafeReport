@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getManagerSession } from "@/lib/manager-auth"
 import { ManagerLogin } from "./manager-login"
 import { ManagerInbox } from "./manager-inbox"
+import { ManagerIosInstallMount } from "./install-mount"
 
 /**
  * Manager landing — /m/[sap_code].
@@ -76,7 +77,12 @@ export default async function ManagerLandingPage({
 
   const session = await getManagerSession(store.sap_code)
   if (!session) {
-    return <ManagerLogin store={store} />
+    return (
+      <>
+        <ManagerIosInstallMount />
+        <ManagerLogin store={store} />
+      </>
+    )
   }
   return <ManagerInbox store={store} />
 }
