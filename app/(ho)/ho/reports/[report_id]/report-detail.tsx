@@ -160,7 +160,6 @@ export function HoReportDetail({
   const [categoryOverride, setCategoryOverride] =
     useState<ReportCategory | null>(null)
 
-  const cat = CATEGORIES.find((c) => c.key === report.category)
   const suggestedCat = CATEGORIES.find(
     (c) => c.key === report.suggested_category,
   )
